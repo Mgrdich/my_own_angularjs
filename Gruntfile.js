@@ -1,6 +1,5 @@
 module.exports = function (grunt) {
     grunt["initConfig"]({
-
         jshint: {
             all: ['src/**/*.js', 'test/**/*.js'],
             options: {
@@ -19,6 +18,13 @@ module.exports = function (grunt) {
                 devel: true
             }
         },
+        run : {
+            yarn_test_jest: {
+                exec: 'yarn test' // <-- use the exec key.
+            }
+        }
     });
     grunt.loadNpmTasks('grunt-contrib-jshint');
+    grunt.loadNpmTasks('grunt-run');
+    grunt.registerTask('default', [ 'run:yarn_test_jest']);
 };
