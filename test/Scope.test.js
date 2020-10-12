@@ -1,4 +1,5 @@
 let Scope = require("../src/Scope");
+
 describe("Scope", function () {
 
     it("can be constructed using an object", function () {

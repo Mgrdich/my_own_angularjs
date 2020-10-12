@@ -11,7 +11,7 @@
   "dependencies": {
     "grunt": "^1.0.4",
     "jquery": "^3.4.1",
-    "lodash": "^4.17.19"
+    "lodash": "^4.17.20"
   },
   "devDependencies": {
     "grunt-contrib-jshint": "^2.1.0",
