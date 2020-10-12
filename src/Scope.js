@@ -1,5 +1,5 @@
 const _ = require('lodash');
-
+//test
 function Scope() {
     this.$$watchers = [];
 }
