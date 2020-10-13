@@ -7,8 +7,8 @@ function Scope() {
 Scope.prototype.$watch = function (watchFn, listenerFn) {
 
     let watcher = {
-        watchFn: watchFn,
-        listenerFn: listenerFn
+        watchFn: watchFn, //A watch function, which specifies the piece of data you’re interested in.
+        listenerFn: listenerFn //A listener function which will be called whenever that data changes
     };
 
     this.$$watchers.push(watcher);

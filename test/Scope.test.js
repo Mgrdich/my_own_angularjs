@@ -1,4 +1,7 @@
 let Scope = require("../src/Scope");
+let Function = require("../src/util/functions");
+
+let def = new Function();
 
 describe("Scope", function () {
     let scope;
@@ -19,7 +22,7 @@ describe("Scope", function () {
         let watchFn  = function () {
             return 'wat';
         };
-        let listenerFn = jest.fn();
+        let listenerFn = jest.fn(def.noop);
 
         scope.$watch(watchFn,listenerFn);
 
