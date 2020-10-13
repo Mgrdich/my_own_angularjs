@@ -1,7 +1,7 @@
-let Scope = require("../src/Scope");
-let Function = require("../src/util/functions");
+const Scope = require("../src/Scope");
+const Function = require("../src/util/functions");
 
-let def = new Function();
+const def = new Function();
 
 describe("Scope", function () {
     let scope;
@@ -33,6 +33,32 @@ describe("Scope", function () {
     });
 
 
+    it('calls the listener function when the watch value changes',function () {
+        scope.someValue = 'a';
+        scope.counter = 0;
+
+        scope.$watch(function (scope) {
+            return scope.someValue; //the expression
+        }, function (newValue,oldValue,scope) {
+            scope.counter++;
+        });
+
+        expect(scope.counter).toBe(0);
+
+        scope.$digest();
+
+        expect(scope.counter).toBe(1);
+
+        scope.$digest();
+
+        expect(scope.counter).toBe(1);
+
+    });
+
+
+    it("calls listener with new value as old value the first time", function() {
+
+    });
 
 });
 

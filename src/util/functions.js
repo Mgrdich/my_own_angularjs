@@ -1,8 +1,10 @@
 /**
  * @description a list pf utility pure functions with no side effects
  * */
-export function Function() {
+function Function() {
 
 }
 
 Function.prototype.noop = function () {};
+
+module.exports = Function;
