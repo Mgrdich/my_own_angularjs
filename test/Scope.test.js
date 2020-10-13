@@ -19,15 +19,13 @@ describe("Scope", function () {
         let watchFn  = function () {
             return 'wat';
         };
-        /*let listenerFn = jest.fn(); //error
-
-        jest.spyOn(watchFn,'listenerFn');
+        let listenerFn = jest.fn();
 
         scope.$watch(watchFn,listenerFn);
 
         scope.$digest();
 
-        expect(listenerFn).toHaveBeenCalled();*/
+        expect(listenerFn).toHaveBeenCalled();
 
     });
 
