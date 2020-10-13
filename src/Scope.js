@@ -1,23 +1,19 @@
 const _ = require('lodash');
-const Function = require("../src/util/functions");
-
-
-const def = new Function();
-
-
 
 function Scope() {
     this.$$watchers = [];
 }
+
 /**
  * @description public functions
  * */
+
 Scope.prototype.$watch = function (watchFn, listenerFn) {
 
     let watcher = {
         watchFn: watchFn, // A watch function, which specifies the piece of data you’re interested in.
         listenerFn: listenerFn, // A listener function which will be called whenever that data changes
-        last:def.noop // reference function equal only to itself
+        last:initWatchVal // reference function equal only to itself
     };
 
     this.$$watchers.push(watcher);
@@ -32,7 +28,7 @@ Scope.prototype.$digest = function () {
         oldValue = watcher.last;
         if (oldValue !== newValue) {
             watcher.last = newValue;
-            watcher.listenerFn(newValue,oldValue,self);
+            watcher.listenerFn(newValue, (oldValue === initWatchVal) ? newValue : oldValue, self);
         }
     });
 };
@@ -43,6 +39,11 @@ Scope.prototype.$digest = function () {
 /**
  * @description private functions
  * */
+
+/**
+ * @description first time undefined equality not to be satisfied
+ * */
+function initWatchVal () {}
 
 
 module.exports = Scope;
