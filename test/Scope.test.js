@@ -57,6 +57,34 @@ describe("Scope", function () {
 
 
     it("calls listener with new value as old value the first time", function() {
+        scope.someValue = 123;
+        let testFirstTimeWatch = undefined;
+
+        scope.$watch(function (scope) {
+            return scope.someValue;
+        },function (newValue,oldValue) {
+            //oldValue === initWatchVal --> newVal
+            testFirstTimeWatch = oldValue;
+        });
+
+        expect(testFirstTimeWatch).toBeUndefined();
+        scope.$digest();
+        expect(testFirstTimeWatch).toBe(123);
+
+        scope.someValue = 124;
+        scope.$digest();
+        expect(testFirstTimeWatch).toBe(123); //oldValue
+
+    });
+
+
+    it("watch function without any listener function",function () {
+        let watchFn = jest.fn().mockReturnValue('hello');
+        scope.$watch(watchFn);
+
+        scope.$digest();
+        expect(watchFn).toHaveBeenCalled();
+        expect(watchFn).toHaveReturnedWith('hello');
 
     });
 

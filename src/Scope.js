@@ -12,7 +12,7 @@ Scope.prototype.$watch = function (watchFn, listenerFn) {
 
     let watcher = {
         watchFn: watchFn, // A watch function, which specifies the piece of data you’re interested in.
-        listenerFn: listenerFn, // A listener function which will be called whenever that data changes
+        listenerFn: listenerFn || function () {}, // A listener function which will be called whenever that data changes no from lib reference thingy
         last:initWatchVal // reference function equal only to itself
     };
 
