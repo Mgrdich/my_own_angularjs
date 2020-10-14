@@ -10,7 +10,7 @@ function Scope() {
  * @description angular scope functions private functions in angular somewhat not used by functions but with $$ prefix
  * */
 
-Scope.prototype.$watch = function (watchFn, listenerFn,valueEq) {
+Scope.prototype.$watch = function (watchFn, listenerFn, valueEq) {
 
     let watcher = {
         watchFn: watchFn, // A watch function, which specifies the piece of data you’re interested in.
@@ -20,6 +20,7 @@ Scope.prototype.$watch = function (watchFn, listenerFn,valueEq) {
     };
 
     this.$$watchers.push(watcher);
+    this.$$lastDirtyWatch = null; //nested watch :)
 
 };
 
@@ -57,6 +58,10 @@ Scope.prototype.$$digestOnce = function () {
     return dirty;
 };
 
+
+Scope.prototype.$eval = function (expr, locals) {
+    return expr(this, locals);
+};
 
 
 /**

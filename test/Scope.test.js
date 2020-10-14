@@ -163,7 +163,78 @@ describe("Scope", function () {
 
 
     it("does not end digest so that new watches are not run Watch inside a Watch",function () {
+        scope.someValue = 'a';
+        scope.counter = 0;
 
+        //second watch without reset on every watch will never run because were ending the digest before new watch would run
+        //bcz we're ending the digest detecting the first watch as dirty
+
+        scope.$watch(function (scope) {
+            return scope.someValue;
+        }, function (newValue, oldValue, scope) {
+            scope.$watch(function (scope) { //on first it will put the watcher but it will be lost since it will be terminated
+                return scope.someValue;
+            }, function (newValue, oldValue, scope) {
+                scope.counter++;
+            });
+        });
+
+        scope.$digest();
+        expect(scope.counter).toBe(1);
+
+    });
+
+
+    it("watching an array or an object",function () {
+        scope.aValue = [1, 2, 3];
+        scope.counter = 0;
+
+        scope.$watch(function (scope) {
+            return scope.aValue;
+        },function (newValue,oldValue,scope) {
+            scope.counter++;
+        },true);
+
+        scope.$digest();
+        expect(scope.counter).toBe(1);
+
+        scope.aValue.push(4);
+        scope.$digest();
+        expect(scope.counter).toBe(2);
+    });
+
+
+    it("correct handle NAN", function () {
+        scope.number = 0 / 0; //NaN
+        scope.counter = 0;
+
+        scope.$watch(function (scope) {
+            return scope.number;
+        }, function (n, o, scope) {
+            scope.counter++;
+        });
+
+        scope.$digest();
+        expect(scope.counter).toBe(1);
+        scope.$digest();
+        expect(scope.counter).toBe(1);
+
+    });
+
+    it("$eval creating and return of the result with one parameter and with two parameter",function () {
+        scope.aValue = 42;
+
+        let result = scope.$eval(function (scope) {
+           return scope.aValue;
+        });
+
+        expect(result).toBe(42);
+
+        let result2 = scope.$eval(function (scope,arg) {
+            return scope.aValue + arg;
+        },2);
+
+        expect(result2).toBe(44);
     });
 
 });
