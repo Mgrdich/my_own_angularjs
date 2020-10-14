@@ -221,6 +221,7 @@ describe("Scope", function () {
 
     });
 
+
     it("$eval creating and return of the result with one parameter and with two parameter",function () {
         scope.aValue = 42;
 
@@ -235,6 +236,83 @@ describe("Scope", function () {
         },2);
 
         expect(result2).toBe(44);
+    });
+
+
+    it("apply function which will take and expr or not and trigger a digest cycle",function () {
+        scope.aValue = 'someThingShouldBeHere';
+        scope.counter = 0;
+
+        scope.$watch(function () {
+            return scope.aValue;
+        }, function (newValue, oldValue, scope) {
+            scope.counter++;
+        });
+
+        scope.$digest();
+        expect(scope.counter).toBe(1);
+
+        scope.$apply(function (scope) {
+           scope.aValue = "ApplyChangedMe";
+        });
+        expect(scope.counter).toBe(2);
+        expect(scope.aValue).toBe("ApplyChangedMe");
+
+    });
+
+
+    it("executes evalAsync in function later in the same cycle",function () {
+        scope.aValue = [1, 2, 3];
+        scope.asyncEvaluated = false;
+        scope.asyncEvaluatedImmediately = false;
+
+        scope.$watch(function (scope) {
+            return scope.aValue;
+        },function (newValue,oldValue,scope) {
+            scope.$evalAsync(function (scope) {
+                scope.asyncEvaluated = true;
+            });
+            scope.asyncEvaluatedImmediately = scope.asyncEvaluated; //won't pick up the new Value here but after the main digest is over
+        });
+
+        scope.$digest();
+        expect(scope.asyncEvaluatedImmediately).toBeFalsy(); //means it will be evaluated before the evalAsync digest in progress
+        expect(scope.asyncEvaluated).toBeTruthy();
+
+    });
+
+
+    it("executes evalAsync in the watch functions when not dirty!!",function () {
+        scope.aValueWorking = 'WorkingCaseEvalAsyncNotDirty';
+        scope.asyncEvaluatedTimesWorking = 0;
+        scope.aValue = [1, 2, 3];
+        scope.asyncEvaluatedTimes = 0;
+
+        scope.$watch(function (scope) {
+            if (!scope.asyncEvaluatedTimesWorking) {
+                scope.$evalAsync(function (scope) { //this one will get scheduled when a watch is dirty
+                    scope.asyncEvaluatedTimesWorking++;
+                });
+            }
+            return scope.aValueWorking;
+        },function (newValue,oldValue,scope) {});
+
+
+
+
+        //what if we schedule an evalAsync when no watch is dirty
+        scope.$watch(function (scope) {
+            if (scope.asyncEvaluatedTimes < 2) { //second time watch wont be dirty and it will be a problem
+                scope.$evalAsync(function (scope) {
+                   scope.asyncEvaluatedTimes++;
+                });
+            }
+            return scope.aValue;
+        },function (newValue,oldValue,scope) {});
+
+        scope.$digest();
+        expect(scope.asyncEvaluatedTimesWorking).toBeTruthy();
+        expect(scope.asyncEvaluatedTimes).toBe(2);
     });
 
 });

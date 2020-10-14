@@ -4,6 +4,7 @@ const def = new Lib();
 function Scope() {
     this.$$watchers = [];
     this.$$lastDirtyWatch = null;
+    this.$$asyncQueue = [];
 }
 
 /**
@@ -29,11 +30,15 @@ Scope.prototype.$digest = function () {
     let ttl = 10;
     this.$$lastDirtyWatch = null;
     do { //at least to do once
+        while (this.$$asyncQueue.length) { //first async queue to be consumed then after the digest is over its digest will get working
+            let asyncTask = this.$$asyncQueue.shift();
+            asyncTask.scope.$eval(asyncTask.expression);
+        }
         dirty = this.$$digestOnce();
-        if(dirty && !(ttl--)) {
+        if ((dirty || this.$$asyncQueue.length) && !(ttl--)) { //if the watch keeps scheduling and eval async
             throw "10 digest iterations reached";
         }
-    } while (dirty)
+    } while (dirty || this.$$asyncQueue.length);
 };
 
 /**
@@ -44,7 +49,7 @@ Scope.prototype.$$digestOnce = function () {
     let dirty = false;
     let self = this;
     def.Lo.forEach(this.$$watchers, function(watcher) {
-        newValue = watcher.watchFn(self); //passing the scope itself
+        newValue = watcher.watchFn(self); //passing the scope itself and getting the return Value
         oldValue = watcher.last;
         if (!def.areEqual(newValue,oldValue,watcher.valueEq)) {
             self.$$lastDirtyWatch = watcher;
@@ -58,9 +63,20 @@ Scope.prototype.$$digestOnce = function () {
     return dirty;
 };
 
-
 Scope.prototype.$eval = function (expr, locals) {
-    return expr(this, locals);
+    return expr(this, locals);//passing in the Scope with this
+};
+
+Scope.prototype.$apply = function (expr) {
+    try {
+        return this.$eval(expr);
+    } finally {
+        this.$digest();
+    }
+};
+
+Scope.prototype.$evalAsync = function (expr) {
+    this.$$asyncQueue.push({scope: this, expression: expr});//Scope related to inheritance
 };
 
 
