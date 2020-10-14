@@ -1,8 +1,6 @@
 const Scope = require("../src/Scope");
-const Function = require("../src/util/functions");
-const _ = require('lodash');
-
-const def = new Function();
+const Lib = require("../src/util/functions");
+const def = new Lib();
 
 describe("Scope", function () {
     let scope;
@@ -142,10 +140,10 @@ describe("Scope", function () {
 
 
     it("watcher unstable and inefficient digest cycle",function () {
-        scope.array = _.range(100);
+        scope.array = def.Lo.range(100);
         let watchExecution = 0;
 
-        _.times(100,function (i) {
+        def.Lo.times(100,function (i) {
             scope.$watch(function (scope) { //setting up 100 watchers
                watchExecution++;
                return scope.array[i]; //setting return value on each value of the array

@@ -1,4 +1,5 @@
-const _ = require('lodash');
+const Lib = require("../src/util/functions");
+const def = new Lib();
 
 function Scope() {
     this.$$watchers = [];
@@ -9,11 +10,12 @@ function Scope() {
  * @description angular scope functions private functions in angular somewhat not used by functions but with $$ prefix
  * */
 
-Scope.prototype.$watch = function (watchFn, listenerFn) {
+Scope.prototype.$watch = function (watchFn, listenerFn,valueEq) {
 
     let watcher = {
         watchFn: watchFn, // A watch function, which specifies the piece of data you’re interested in.
-        listenerFn: listenerFn || function () {}, // A listener function which will be called whenever that data changes no from lib reference thingy
+        listenerFn: listenerFn || function () {}, // A listener function which will be called whenever that data changes no from lib reference thingy,
+        valueEq:!!valueEq, //array object watcher
         last:initWatchVal // reference function equal only to itself
     };
 
@@ -40,12 +42,12 @@ Scope.prototype.$$digestOnce = function () {
     let newValue,oldValue;
     let dirty = false;
     let self = this;
-    _.forEach(this.$$watchers, function(watcher) {
+    def.Lo.forEach(this.$$watchers, function(watcher) {
         newValue = watcher.watchFn(self); //passing the scope itself
         oldValue = watcher.last;
-        if (oldValue !== newValue) {
+        if (!def.areEqual(newValue,oldValue,watcher.valueEq)) {
             self.$$lastDirtyWatch = watcher;
-            watcher.last = newValue;
+            watcher.last = watcher.valueEq ? def.Lo.cloneDeep(newValue) : newValue;//object case
             watcher.listenerFn(newValue, (oldValue === initWatchVal) ? newValue : oldValue, self);
             dirty = true;
         } else if (self.$$lastDirtyWatch === watcher){

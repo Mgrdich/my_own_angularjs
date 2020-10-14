@@ -1,15 +1,17 @@
 /**
- * @description a list pf utility pure functions with no side effects
+ * @description a list pf utility pure functions with no side effects and Lodash Library
  * */
 const _ = require('lodash');
 
-function Function() {
+function Lib() {
 
 }
 
-Function.prototype.noop = function () {};
+Lib.prototype.Lo = _; //extending Lodash Mgo Style :)
 
-Function.prototype.areEqual = function (newValue, oldValue, valueEq) {
+Lib.prototype.noop = function () {};
+
+Lib.prototype.areEqual = function (newValue, oldValue, valueEq) {
     if (valueEq) {
         return _.isEqual(newValue, oldValue);//recursive
     } else {
@@ -17,4 +19,4 @@ Function.prototype.areEqual = function (newValue, oldValue, valueEq) {
     }
 };
 
-module.exports = Function;
+module.exports = Lib;
