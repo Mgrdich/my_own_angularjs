@@ -5,6 +5,8 @@ function Scope() {
     this.$$watchers = [];
     this.$$lastDirtyWatch = null;
     this.$$asyncQueue = [];
+    this.$$applyAsyncQueue = [];
+    this.$$applyAsyncId = null;
     this.$$phase = null;
 }
 
@@ -79,6 +81,28 @@ Scope.prototype.$apply = function (expr) {
         this.$clearPhase(); //apply phase
         this.$digest();
     }
+};
+
+Scope.prototype.$applyAsync = function(expr) {
+    //for handling HTTP responses
+    //optimize things that happen in quick succession so they need single digest
+    let self = this;
+    self.$$applyAsyncQueue.push(function () {
+        self.$eval(expr)
+    });
+
+    if(self.$$applyAsyncId === null) {
+        //Point is we schedule it only once
+        self.$$applyAsyncId = setTimeout(function () {
+            self.apply(function () {
+                while (self.$$applyAsyncQueue.length) {
+                    self.$$applyAsyncQueue.shift()();
+                }
+            });
+            self.$$applyAsyncId = null;
+        });
+    }
+
 };
 
 Scope.prototype.$evalAsync = function (expr) {

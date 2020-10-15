@@ -359,5 +359,32 @@ describe("Scope", function () {
 
     });
 
+
+    it("allows async $apply with $applyAsync",function (done) {
+       scope.counter = 0;
+       scope.aValue = 88;
+
+       scope.$watch(function () {
+           return scope.aValue
+       },function (newValue,oldValue,scope) {
+           scope.counter++;
+       });
+
+       scope.$digest();
+       expect(scope.counter).toBe(1);
+
+       scope.$applyAsync(function (scope) {
+          scope.aValue = 'somethingHere';
+       });
+
+       expect(scope.counter).toBe(1);
+
+       setTimeout(function () {
+           expect(scope.counter).toBe(2);
+           done();
+       },50);
+
+    });
+
 });
 
