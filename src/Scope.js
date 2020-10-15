@@ -82,6 +82,16 @@ Scope.prototype.$apply = function (expr) {
 };
 
 Scope.prototype.$evalAsync = function (expr) {
+    //If you call $evalAsync when a digest is already running, your function will be evaluated
+    //during that digest. If there is no digest running, one is started.
+    let self = this;
+    if(!self.$$phase && !self.$$asyncQueue.length) { //second for two evalAsync only work once :)
+        setTimeout(function () {
+           if(self.$$asyncQueue.length) {
+            self.$digest();
+           }
+        });
+    }
     this.$$asyncQueue.push({scope: this, expression: expr});//Scope related to inheritance
 };
 

@@ -342,7 +342,21 @@ describe("Scope", function () {
        scope.aValue = "abc";
        scope.counter = 0;
 
-       
+       scope.$watch(function (scope) {
+           return scope.aValue;
+       },function () {
+            scope.counter++;
+       });
+
+       scope.$evalAsync(function (scope) {}); //trigger a digest if none is running
+
+       expect(scope.counter).toBe(0);
+
+       setTimeout(function () {
+           expect(scope.counter).toBe(1);
+           done();
+       },50);
+
     });
 
 });
