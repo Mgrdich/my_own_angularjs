@@ -30,6 +30,7 @@ Scope.prototype.$digest = function () {
     let dirty = false;
     let ttl = 10;
     this.$$lastDirtyWatch = null;
+    this.$beginPhase("$digest");
     do { //at least to do once
         while (this.$$asyncQueue.length) { //first async queue to be consumed then after the digest is over its digest will get working
             let asyncTask = this.$$asyncQueue.shift();
@@ -37,9 +38,11 @@ Scope.prototype.$digest = function () {
         }
         dirty = this.$$digestOnce();
         if ((dirty || this.$$asyncQueue.length) && !(ttl--)) { //if the watch keeps scheduling and eval async
+            this.$clearPhase();
             throw "10 digest iterations reached";
         }
     } while (dirty || this.$$asyncQueue.length);
+    this.$clearPhase();
 };
 
 /**
@@ -70,8 +73,10 @@ Scope.prototype.$eval = function (expr, locals) {
 
 Scope.prototype.$apply = function (expr) {
     try {
+        this.$beginPhase('$apply');
         return this.$eval(expr);
     } finally {
+        this.$clearPhase(); //apply phase
         this.$digest();
     }
 };

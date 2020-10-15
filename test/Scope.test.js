@@ -337,5 +337,13 @@ describe("Scope", function () {
 
     });
 
+
+    it("schedules a digest in $evalAsync",function (done) {
+       scope.aValue = "abc";
+       scope.counter = 0;
+
+       
+    });
+
 });
 
