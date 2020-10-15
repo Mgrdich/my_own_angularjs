@@ -5,6 +5,7 @@ function Scope() {
     this.$$watchers = [];
     this.$$lastDirtyWatch = null;
     this.$$asyncQueue = [];
+    this.$$phase = null;
 }
 
 /**
@@ -77,6 +78,17 @@ Scope.prototype.$apply = function (expr) {
 
 Scope.prototype.$evalAsync = function (expr) {
     this.$$asyncQueue.push({scope: this, expression: expr});//Scope related to inheritance
+};
+
+Scope.prototype.$beginPhase = function (phase) {
+  if(this.$$phase) {
+      throw  this.$$phase + ' already in progress';
+  }
+  this.$$phase = phase;
+};
+
+Scope.prototype.$clearPhase = function () {
+  this.$$phase = null;
 };
 
 

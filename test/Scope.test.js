@@ -297,9 +297,6 @@ describe("Scope", function () {
             return scope.aValueWorking;
         },function (newValue,oldValue,scope) {});
 
-
-
-
         //what if we schedule an evalAsync when no watch is dirty
         scope.$watch(function (scope) {
             if (scope.asyncEvaluatedTimes < 2) { //second time watch wont be dirty and it will be a problem
@@ -313,6 +310,31 @@ describe("Scope", function () {
         scope.$digest();
         expect(scope.asyncEvaluatedTimesWorking).toBeTruthy();
         expect(scope.asyncEvaluatedTimes).toBe(2);
+    });
+
+
+    it("has a $$phase field whose value is the current digest phase",function () {
+        scope.aValue = [1, 2, 3];
+        scope.phaseInWatch = undefined;
+        scope.phaseInListener = undefined;
+        scope.phaseInApply = undefined;
+
+
+        scope.$watch(function () {
+            scope.phaseInWatch = scope.$$phase;
+            return scope.aValue;
+        },function (newValue,oldValue,scope) {
+            scope.phaseInListener = scope.$$phase;
+        });
+
+        scope.$apply(function () {
+            scope.phaseInApply = scope.$$phase;
+        });
+
+        expect(scope.phaseInWatch).toBe('$digest');
+        expect(scope.phaseInListener).toBe('$digest');
+        expect(scope.phaseInApply).toBe('$apply');
+
     });
 
 });
