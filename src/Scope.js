@@ -33,6 +33,12 @@ Scope.prototype.$digest = function () {
     let ttl = 10;
     this.$$lastDirtyWatch = null;
     this.$beginPhase("$digest");
+
+    if(this.$$applyAsyncId) { //calling from digest we will cancel pending and flush immediately
+        clearTimeout(this.$$applyAsyncId);
+        this.$$flushApplyAsync();//draining
+    }
+
     do { //at least to do once
         while (this.$$asyncQueue.length) { //first async queue to be consumed then after the digest is over its digest will get working
             let asyncTask = this.$$asyncQueue.shift();
@@ -94,12 +100,9 @@ Scope.prototype.$applyAsync = function(expr) {
     if(self.$$applyAsyncId === null) {
         //Point is we schedule it only once
         self.$$applyAsyncId = setTimeout(function () {
-            self.apply(function () {
-                while (self.$$applyAsyncQueue.length) {
-                    self.$$applyAsyncQueue.shift()();
-                }
+            self.$apply(function () {
+                self.$$flushApplyAsync.bind(self);
             });
-            self.$$applyAsyncId = null;
         });
     }
 
@@ -119,15 +122,22 @@ Scope.prototype.$evalAsync = function (expr) {
     this.$$asyncQueue.push({scope: this, expression: expr});//Scope related to inheritance
 };
 
+Scope.prototype.$$flushApplyAsync = function () {
+    while (this.$$applyAsyncQueue.length) {
+        this.$$applyAsyncQueue.shift()();
+    }
+    this.$$applyAsyncId = null;
+};
+
 Scope.prototype.$beginPhase = function (phase) {
-  if(this.$$phase) {
-      throw  this.$$phase + ' already in progress';
-  }
-  this.$$phase = phase;
+    if (this.$$phase) {
+        throw  this.$$phase + ' already in progress';
+    }
+    this.$$phase = phase;
 };
 
 Scope.prototype.$clearPhase = function () {
-  this.$$phase = null;
+    this.$$phase = null;
 };
 
 
