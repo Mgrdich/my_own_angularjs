@@ -32,6 +32,7 @@ Scope.prototype.$watch = function (watchFn, listenerFn, valueEq) {
         let index = self.$$watchers.indexOf(watcher);
         if (index >= 0) {
             self.$$watchers.splice(index, 1);
+            self.$$lastDirtyWatch = null; //cause the rearrangement will change everything
         }
     }
 
@@ -81,17 +82,19 @@ Scope.prototype.$$digestOnce = function () {
     let newValue, oldValue;
     let dirty = false;
     let self = this;
-    def.Lo.forEachRight(this.$$watchers, function (watcher) {
+    def.Lo.forEachRight(this.$$watchers, function (watcher) { //so it can keep iterating over the new watchers
         try {
-            newValue = watcher.watchFn(self); //passing the scope itself and getting the return Value
-            oldValue = watcher.last;
-            if (!def.areEqual(newValue, oldValue, watcher.valueEq)) {
-                self.$$lastDirtyWatch = watcher;
-                watcher.last = watcher.valueEq ? def.Lo.cloneDeep(newValue) : newValue;//object case
-                watcher.listenerFn(newValue, (oldValue === initWatchVal) ? newValue : oldValue, self);
-                dirty = true;
-            } else if (self.$$lastDirtyWatch === watcher) {
-                return false; // breaking the loop after the lastDirtyWatcher
+            if (watcher) { //is it iterating over an undefined because Lodash forEachRight checks the lenght of the array during the start
+                newValue = watcher.watchFn(self); //passing the scope itself and getting the return Value
+                oldValue = watcher.last;
+                if (!def.areEqual(newValue, oldValue, watcher.valueEq)) {
+                    self.$$lastDirtyWatch = watcher;
+                    watcher.last = watcher.valueEq ? def.Lo.cloneDeep(newValue) : newValue;//object case
+                    watcher.listenerFn(newValue, (oldValue === initWatchVal) ? newValue : oldValue, self);
+                    dirty = true;
+                } else if (self.$$lastDirtyWatch === watcher) {
+                    return false; // breaking the loop after the lastDirtyWatcher
+                }
             }
         } catch (e) {
             console.error(e);

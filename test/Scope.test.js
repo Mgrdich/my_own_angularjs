@@ -624,5 +624,53 @@ describe("Scope", function () {
        expect(watchCalls).toEqual(['first','second','third','first','third'])
     });
 
+
+    it("allows the $watch to destroy another during digest",function () {
+        scope.aValue = 'abc';
+        scope.counter = 0;
+
+        scope.$watch(function () {
+            return scope.aValue;
+        },function (newValue,oldValue,scope) {
+            destroyWatch();
+        });
+
+        let destroyWatch = scope.$watch(
+            function(scope) { },
+            function(newValue, oldValue, scope) { }
+        );
+
+        scope.$watch(
+            function(scope) { return scope.aValue; },
+            function(newValue, oldValue, scope) {
+                scope.counter++;
+            }
+        );
+
+        scope.$digest();
+        expect(scope.counter).toBe(1)
+
+    });
+
+
+    it("allows in the $watch to destroy multiple watches in te digest",function () {
+        scope.aValue = 'abc';
+        scope.counter = 0;
+        
+        let destroyWatch1= scope.$watch(function () {
+            destroyWatch1();
+            destroyWatch2(); //why it makes it undefined rather than deleting it from the array
+        });
+
+        let destroyWatch2 = scope.$watch(function () {
+            return scope.aValue;
+        },function (newValue,oldValue,scope) {
+            scope.counter++;
+        });
+
+        scope.$digest();
+        expect(scope.counter).toBe(0);
+    });
+
 });
 
