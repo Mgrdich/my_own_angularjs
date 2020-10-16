@@ -6,6 +6,7 @@ function Scope() {
     this.$$lastDirtyWatch = null;
     this.$$asyncQueue = [];
     this.$$applyAsyncQueue = [];
+    this.$$postDigestQueue = [];
     this.$$applyAsyncId = null;
     this.$$phase = null;
 }
@@ -51,6 +52,10 @@ Scope.prototype.$digest = function () {
         }
     } while (dirty || this.$$asyncQueue.length);
     this.$clearPhase();
+
+    while (this.$$postDigestQueue.length) {
+        this.$$postDigestQueue.shift()(); //no parameter
+    }
 };
 
 /**
@@ -138,6 +143,10 @@ Scope.prototype.$beginPhase = function (phase) {
 
 Scope.prototype.$clearPhase = function () {
     this.$$phase = null;
+};
+
+Scope.prototype.$$postDigest = function (fn) {
+    this.$$postDigestQueue.push(fn);
 };
 
 

@@ -430,5 +430,44 @@ describe("Scope", function () {
 
     });
 
+
+    it("runs a $$postDigest function after each digest",function () {
+        scope.counter = 0;
+
+        scope.$$postDigest(function () {
+            scope.counter++;
+        });
+
+        expect(scope.counter).toBeFalsy();
+
+        scope.$digest();
+        expect(scope.counter).toBe(1);
+
+        scope.$digest(); //here the Queue is already consumed
+        expect(scope.counter).toBe(1);
+    });
+
+
+    it("does not include $postDigest in the the digest cycle",function () {
+        scope.aValue = "someOriginalValue";
+        scope.listenerChangedValue = '';
+
+        scope.$$postDigest(function () {
+            scope.aValue = "someChangedValue"; //won't immediately check out by dirty checking mechanism
+        });
+
+        scope.$watch(function () {
+            return scope.aValue;
+        },function (newValue,oldValue,scope) {
+             scope.listenerChangedValue = newValue;
+        });
+
+        scope.$digest();
+        expect(scope.listenerChangedValue).toBe('someOriginalValue');
+
+        scope.$digest();
+        expect(scope.listenerChangedValue).toBe('someChangedValue');
+    });
+
 });
 
