@@ -178,9 +178,23 @@ Scope.prototype.$$postDigest = function (fn) {
 
 Scope.prototype.$watchGroup = function (watchFns, listenerFn) {
     //to defer the listener call to a moment when all watches will have been checked
-
+    let self = this;
+    let newValues = new Array(watchFns.length);
+    let oldValues = new Array(watchFns.length);
     let changedReactionScheduled = false;
     let firstRun = true;
+
+    if(!watchFns.length) {
+        let shouldCall = true;
+        self.$evalAsync(function () {
+            if(shouldCall) {
+                listenerFn(newValues,newValues,self);
+            }
+        });
+        return function () { //if this invoked it will prevent the listener of the eval async to work
+            shouldCall = false;
+        };
+    }
 
     function watchGroupListener() {
         if (firstRun) {
@@ -193,19 +207,23 @@ Scope.prototype.$watchGroup = function (watchFns, listenerFn) {
         changedReactionScheduled = false;
     }
 
-    let self = this;
-    let newValues = new Array(watchFns.length);
-    let oldValues = new Array(watchFns.length);
-    def.Lo._.forEach(watchFns,function (watchFn, i) {
-        self.$watch(watchFn, function (newValue, oldValue) {
+
+    let destroyFunctions = watchFns.map(function (watchFn, i) {
+        return self.$watch(watchFn, function (newValue, oldValue) {
             newValues[i] = newValue;
             oldValues[i] = oldValue;
             if(!changedReactionScheduled){
                 changedReactionScheduled = true;
-                self.$evalAsync(watchGroupListener);
+                self.$evalAsync(watchGroupListener); //all the watch listen to work together and once cause of evalAsync edge
             }
         });
     });
+
+    return function () {
+      def.Lo._.forEach(destroyFunctions,function (destroyFunction) {
+          destroyFunction();
+      })
+    };
 };
 
 
