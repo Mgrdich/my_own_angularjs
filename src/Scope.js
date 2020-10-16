@@ -17,8 +17,7 @@ function Scope() {
 
 Scope.prototype.$watch = function (watchFn, listenerFn, valueEq) {
 
-    let self = this;
-    let watcher = {
+     let watcher = {
         watchFn: watchFn, // A watch function, which specifies the piece of data you’re interested in.
         listenerFn: listenerFn || function () {
         }, // A listener function which will be called whenever that data changes no from lib reference thingy,
@@ -28,11 +27,11 @@ Scope.prototype.$watch = function (watchFn, listenerFn, valueEq) {
 
     this.$$watchers.unshift(watcher); //new watchers are added to the beginning
     this.$$lastDirtyWatch = null; //nested watch :)
-    return function () {
-        let index = self.$$watchers.indexOf(watcher);
+    return  () => {
+        let index = this.$$watchers.indexOf(watcher);
         if (index >= 0) {
-            self.$$watchers.splice(index, 1);
-            self.$$lastDirtyWatch = null; //cause the rearrangement will change everything
+            this.$$watchers.splice(index, 1);
+            this.$$lastDirtyWatch = null; //cause the rearrangement will change everything
         }
     }
 
@@ -81,18 +80,18 @@ Scope.prototype.$digest = function () {
 Scope.prototype.$$digestOnce = function () {
     let newValue, oldValue;
     let dirty = false;
-    let self = this;
-    def.Lo.forEachRight(this.$$watchers, function (watcher) { //so it can keep iterating over the new watchers
+
+     def.Lo.forEachRight(this.$$watchers,  (watcher) => { //so it can keep iterating over the new watchers
         try {
             if (watcher) { //is it iterating over an undefined because Lodash forEachRight checks the lenght of the array during the start
-                newValue = watcher.watchFn(self); //passing the scope itself and getting the return Value
+                newValue = watcher.watchFn(this); //passing the scope itself and getting the return Value
                 oldValue = watcher.last;
                 if (!def.areEqual(newValue, oldValue, watcher.valueEq)) {
-                    self.$$lastDirtyWatch = watcher;
+                    this.$$lastDirtyWatch = watcher;
                     watcher.last = watcher.valueEq ? def.Lo.cloneDeep(newValue) : newValue;//object case
-                    watcher.listenerFn(newValue, (oldValue === initWatchVal) ? newValue : oldValue, self);
+                    watcher.listenerFn(newValue, (oldValue === initWatchVal) ? newValue : oldValue, this);
                     dirty = true;
-                } else if (self.$$lastDirtyWatch === watcher) {
+                } else if (this.$$lastDirtyWatch === watcher) {
                     return false; // breaking the loop after the lastDirtyWatcher
                 }
             }
@@ -120,16 +119,15 @@ Scope.prototype.$apply = function (expr) {
 Scope.prototype.$applyAsync = function (expr) {
     //for handling HTTP responses
     //optimize things that happen in quick succession so they need single digest
-    let self = this;
-    self.$$applyAsyncQueue.push(function () {
-        self.$eval(expr)
+    this.$$applyAsyncQueue.push(() =>{
+        this.$eval(expr)
     });
 
-    if (self.$$applyAsyncId === null) {
+    if (this.$$applyAsyncId === null) {
         //Point is we schedule it only once
-        self.$$applyAsyncId = setTimeout(function () {
-            self.$apply(function () {
-                self.$$flushApplyAsync.bind(self);
+        this.$$applyAsyncId = setTimeout(() => {
+            this.$apply(() => {
+                this.$$flushApplyAsync.bind(this);
             });
         });
     }
@@ -139,11 +137,10 @@ Scope.prototype.$applyAsync = function (expr) {
 Scope.prototype.$evalAsync = function (expr) {
     //If you call $evalAsync when a digest is already running, your function will be evaluated
     //during that digest. If there is no digest running, one is started.
-    let self = this;
-    if (!self.$$phase && !self.$$asyncQueue.length) { //second for two evalAsync only work once :)
-        setTimeout(function () {
-            if (self.$$asyncQueue.length) {
-                self.$digest();
+    if (!this.$$phase && !this.$$asyncQueue.length) { //second for two evalAsync only work once :)
+        setTimeout(() =>{
+            if (this.$$asyncQueue.length) {
+                this.$digest();
             }
         });
     }
@@ -178,7 +175,6 @@ Scope.prototype.$$postDigest = function (fn) {
 
 Scope.prototype.$watchGroup = function (watchFns, listenerFn) {
     //to defer the listener call to a moment when all watches will have been checked
-    let self = this;
     let newValues = new Array(watchFns.length);
     let oldValues = new Array(watchFns.length);
     let changedReactionScheduled = false;
@@ -186,9 +182,9 @@ Scope.prototype.$watchGroup = function (watchFns, listenerFn) {
 
     if(!watchFns.length) {
         let shouldCall = true;
-        self.$evalAsync(function () {
+        this.$evalAsync(() => {
             if(shouldCall) {
-                listenerFn(newValues,newValues,self);
+                listenerFn(newValues,newValues,this);
             }
         });
         return function () { //if this invoked it will prevent the listener of the eval async to work
@@ -208,13 +204,13 @@ Scope.prototype.$watchGroup = function (watchFns, listenerFn) {
     }
 
 
-    let destroyFunctions = watchFns.map(function (watchFn, i) {
-        return self.$watch(watchFn, function (newValue, oldValue) {
+    let destroyFunctions = watchFns.map((watchFn, i) => {
+        return this.$watch(watchFn, (newValue, oldValue) => {
             newValues[i] = newValue;
             oldValues[i] = oldValue;
             if(!changedReactionScheduled){
                 changedReactionScheduled = true;
-                self.$evalAsync(watchGroupListener); //all the watch listen to work together and once cause of evalAsync edge
+                this.$evalAsync(watchGroupListener); //all the watch listen to work together and once cause of evalAsync edge
             }
         });
     });
