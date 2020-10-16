@@ -19,9 +19,10 @@ Scope.prototype.$watch = function (watchFn, listenerFn, valueEq) {
 
     let watcher = {
         watchFn: watchFn, // A watch function, which specifies the piece of data you’re interested in.
-        listenerFn: listenerFn || function () {}, // A listener function which will be called whenever that data changes no from lib reference thingy,
-        valueEq:!!valueEq, //array object watcher
-        last:initWatchVal // reference function equal only to itself
+        listenerFn: listenerFn || function () {
+        }, // A listener function which will be called whenever that data changes no from lib reference thingy,
+        valueEq: !!valueEq, //array object watcher
+        last: initWatchVal // reference function equal only to itself
     };
 
     this.$$watchers.push(watcher);
@@ -35,15 +36,19 @@ Scope.prototype.$digest = function () {
     this.$$lastDirtyWatch = null;
     this.$beginPhase("$digest");
 
-    if(this.$$applyAsyncId) { //calling from digest we will cancel pending and flush immediately
+    if (this.$$applyAsyncId) { //calling from digest we will cancel pending and flush immediately
         clearTimeout(this.$$applyAsyncId);
         this.$$flushApplyAsync();//draining
     }
 
     do { //at least to do once
-        while (this.$$asyncQueue.length) { //first async queue to be consumed then after the digest is over its digest will get working
-            let asyncTask = this.$$asyncQueue.shift();
-            asyncTask.scope.$eval(asyncTask.expression);
+        while (this.$$asyncQueue.length) {//first async queue to be consumed then after the digest is over its digest will get working
+            try {
+                let asyncTask = this.$$asyncQueue.shift();
+                asyncTask.scope.$eval(asyncTask.expression);
+            } catch (e) {
+                console.error(e);
+            }
         }
         dirty = this.$$digestOnce();
         if ((dirty || this.$$asyncQueue.length) && !(ttl--)) { //if the watch keeps scheduling and eval async
@@ -54,7 +59,11 @@ Scope.prototype.$digest = function () {
     this.$clearPhase();
 
     while (this.$$postDigestQueue.length) {
-        this.$$postDigestQueue.shift()(); //no parameter
+        try {
+            this.$$postDigestQueue.shift()(); //no parameter
+        } catch (e) {
+            console.error(e);
+        }
     }
 };
 
@@ -62,20 +71,25 @@ Scope.prototype.$digest = function () {
  * @return {Boolean}
  * */
 Scope.prototype.$$digestOnce = function () {
-    let newValue,oldValue;
+    let newValue, oldValue;
     let dirty = false;
     let self = this;
-    def.Lo.forEach(this.$$watchers, function(watcher) {
-        newValue = watcher.watchFn(self); //passing the scope itself and getting the return Value
-        oldValue = watcher.last;
-        if (!def.areEqual(newValue,oldValue,watcher.valueEq)) {
-            self.$$lastDirtyWatch = watcher;
-            watcher.last = watcher.valueEq ? def.Lo.cloneDeep(newValue) : newValue;//object case
-            watcher.listenerFn(newValue, (oldValue === initWatchVal) ? newValue : oldValue, self);
-            dirty = true;
-        } else if (self.$$lastDirtyWatch === watcher){
-            return false; // breaking the loop after the lastDirtyWatcher
+    def.Lo.forEach(this.$$watchers, function (watcher) {
+        try {
+            newValue = watcher.watchFn(self); //passing the scope itself and getting the return Value
+            oldValue = watcher.last;
+            if (!def.areEqual(newValue, oldValue, watcher.valueEq)) {
+                self.$$lastDirtyWatch = watcher;
+                watcher.last = watcher.valueEq ? def.Lo.cloneDeep(newValue) : newValue;//object case
+                watcher.listenerFn(newValue, (oldValue === initWatchVal) ? newValue : oldValue, self);
+                dirty = true;
+            } else if (self.$$lastDirtyWatch === watcher) {
+                return false; // breaking the loop after the lastDirtyWatcher
+            }
+        } catch (e) {
+            console.error(e);
         }
+
     });
     return dirty;
 };
@@ -94,7 +108,7 @@ Scope.prototype.$apply = function (expr) {
     }
 };
 
-Scope.prototype.$applyAsync = function(expr) {
+Scope.prototype.$applyAsync = function (expr) {
     //for handling HTTP responses
     //optimize things that happen in quick succession so they need single digest
     let self = this;
@@ -102,7 +116,7 @@ Scope.prototype.$applyAsync = function(expr) {
         self.$eval(expr)
     });
 
-    if(self.$$applyAsyncId === null) {
+    if (self.$$applyAsyncId === null) {
         //Point is we schedule it only once
         self.$$applyAsyncId = setTimeout(function () {
             self.$apply(function () {
@@ -117,11 +131,11 @@ Scope.prototype.$evalAsync = function (expr) {
     //If you call $evalAsync when a digest is already running, your function will be evaluated
     //during that digest. If there is no digest running, one is started.
     let self = this;
-    if(!self.$$phase && !self.$$asyncQueue.length) { //second for two evalAsync only work once :)
+    if (!self.$$phase && !self.$$asyncQueue.length) { //second for two evalAsync only work once :)
         setTimeout(function () {
-           if(self.$$asyncQueue.length) {
-            self.$digest();
-           }
+            if (self.$$asyncQueue.length) {
+                self.$digest();
+            }
         });
     }
     this.$$asyncQueue.push({scope: this, expression: expr});//Scope related to inheritance
@@ -129,7 +143,11 @@ Scope.prototype.$evalAsync = function (expr) {
 
 Scope.prototype.$$flushApplyAsync = function () {
     while (this.$$applyAsyncQueue.length) {
-        this.$$applyAsyncQueue.shift()();
+        try {
+            this.$$applyAsyncQueue.shift()();
+        } catch (e) {
+            console.error(e);
+        }
     }
     this.$$applyAsyncId = null;
 };
@@ -157,7 +175,8 @@ Scope.prototype.$$postDigest = function (fn) {
 /**
  * @description first time undefined equality not to be satisfied
  * */
-function initWatchVal () {}
+function initWatchVal() {
+}
 
 
 module.exports = Scope;

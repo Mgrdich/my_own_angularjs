@@ -459,7 +459,7 @@ describe("Scope", function () {
         scope.$watch(function () {
             return scope.aValue;
         },function (newValue,oldValue,scope) {
-             scope.listenerChangedValue = newValue;
+             scope.listenerChangedValue = newValue; //pick up the old Digested then after the listener
         });
 
         scope.$digest();
@@ -467,6 +467,110 @@ describe("Scope", function () {
 
         scope.$digest();
         expect(scope.listenerChangedValue).toBe('someChangedValue');
+    });
+
+
+    it("catches the exceptions in watch functions and continues",function () {
+        scope.aValue = 'abc';
+        scope.counter = 0;
+
+        scope.$watch(function () {
+            throw "error";
+        });
+
+        scope.$watch(function (scope) {
+            return scope.aValue;
+        },function (newValue,oldValue,scope) {
+            scope.counter++;
+        });
+
+        scope.$digest();
+        expect(scope.counter).toBe(1);
+    });
+
+
+    it("catches the exceptions in Listener functions and continues",function () {
+        scope.aValue = 'abc';
+        scope.counter = 0;
+
+        scope.$watch(function () {
+            return scope.aValue;
+        },function (newValue,oldValue,scope) {
+            throw "error";
+        });
+
+        scope.$watch(function (scope) {
+            return scope.aValue;
+        },function (newValue,oldValue,scope) {
+            scope.counter++;
+        });
+
+        scope.$digest();
+        expect(scope.counter).toBe(1);
+    });
+
+
+    it("catches exceptions in evalAsync", function (done) {
+        scope.aValue = 'abc';
+        scope.counter = 0;
+
+        scope.$watch(function (scope) {
+            return scope.aValue;
+        }, function (newValue, oldValue, scope) {
+            scope.counter++;
+        });
+
+        scope.$evalAsync(function (scope) {
+            throw "Error";
+        });
+
+        setTimeout(function () {
+            expect(scope.counter).toBe(1);
+            done();
+        },50);
+
+    });
+
+
+    it("catches exceptions in asyncApply", function (done) {
+
+        scope.$applyAsync(function () {
+           throw "Error";
+        });
+
+        scope.$applyAsync(function () {
+           throw "Error2";
+        });
+
+        scope.$applyAsync(function () {
+           scope.applied = true;
+        });
+
+        setTimeout(function () {
+            expect(scope.applied).toBeTruthy();
+            done();
+        },50);
+
+    });
+
+
+    it("catches exceptions in postDigest", function (done) {
+
+        scope.$$postDigest(function () {
+            throw "Error";
+        });
+
+        scope.$$postDigest(function () {
+            throw "Error2";
+        });
+
+        scope.$$postDigest(function () {
+            scope.run = true;
+        });
+
+        scope.$digest();
+        expect(scope.run).toBeTruthy();
+
     });
 
 });
