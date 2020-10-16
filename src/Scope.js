@@ -177,6 +177,22 @@ Scope.prototype.$$postDigest = function (fn) {
 };
 
 Scope.prototype.$watchGroup = function (watchFns, listenerFn) {
+    //to defer the listener call to a moment when all watches will have been checked
+
+    let changedReactionScheduled = false;
+    let firstRun = true;
+
+    function watchGroupListener() {
+        if (firstRun) {
+            firstRun = false;
+            listenerFn(newValues, newValues, self);
+        } else {
+            listenerFn(newValues, oldValues, self);
+        }
+
+        changedReactionScheduled = false;
+    }
+
     let self = this;
     let newValues = new Array(watchFns.length);
     let oldValues = new Array(watchFns.length);
@@ -184,7 +200,10 @@ Scope.prototype.$watchGroup = function (watchFns, listenerFn) {
         self.$watch(watchFn, function (newValue, oldValue) {
             newValues[i] = newValue;
             oldValues[i] = oldValue;
-            listenerFn(newValues, oldValues, self);
+            if(!changedReactionScheduled){
+                changedReactionScheduled = true;
+                self.$evalAsync(watchGroupListener);
+            }
         });
     });
 };

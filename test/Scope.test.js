@@ -679,7 +679,7 @@ describe("Scope", function () {
             scope = new Scope();
         });
 
-        it('takes watches as an arra cna calls the listener with arrays',function () {
+        it("takes watches as an arra cna calls the listener with arrays",function () {
            let gotNewValue = null;
            let gotOldValue = null;
            scope.aValue = 1;
@@ -700,6 +700,49 @@ describe("Scope", function () {
            scope.$digest();
            expect(gotNewValue).toEqual([1,2]);
            expect(gotOldValue).toEqual([1,2]);
+
+        });
+        
+        
+        it("only calls listener once per digest",function () {
+            let counter = 0;
+            scope.aValue = 1;
+            scope.anotherValue = 2;
+
+            scope.$watchGroup([
+                function (scope) {
+                    return scope.aValue;
+                },
+                function (scope) {
+                    return scope.anotherValue;
+                }
+            ], function (newValue, oldValue, scope) {
+                counter++;
+            });
+            scope.$digest();
+            expect(counter).toEqual(1);
+            
+        });
+
+
+        it("uses different arrays for old and new Values on subsequent runs",function () {
+           let gotNewValues = null;
+           let gotOldValues = null;
+
+            scope.aValue = 1;
+            scope.anotherValue = 2;
+
+            scope.$watchGroup([
+                function (scope) {
+                    return scope.aValue;
+                }
+            ], function (newValues, oldValues, scope) {
+               gotNewValues = newValues;
+               gotOldValues = oldValues;
+            });
+
+            expect(gotOldValues).toEqual([1, 2]);
+            expect(gotNewValues).toEqual([1, 3]);
 
         });
     });
