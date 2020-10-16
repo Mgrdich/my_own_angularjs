@@ -17,6 +17,7 @@ function Scope() {
 
 Scope.prototype.$watch = function (watchFn, listenerFn, valueEq) {
 
+    let self = this;
     let watcher = {
         watchFn: watchFn, // A watch function, which specifies the piece of data you’re interested in.
         listenerFn: listenerFn || function () {
@@ -25,8 +26,14 @@ Scope.prototype.$watch = function (watchFn, listenerFn, valueEq) {
         last: initWatchVal // reference function equal only to itself
     };
 
-    this.$$watchers.push(watcher);
+    this.$$watchers.unshift(watcher); //new watchers are added to the beginning
     this.$$lastDirtyWatch = null; //nested watch :)
+    return function () {
+        let index = self.$$watchers.indexOf(watcher);
+        if (index >= 0) {
+            self.$$watchers.splice(index, 1);
+        }
+    }
 
 };
 
@@ -74,7 +81,7 @@ Scope.prototype.$$digestOnce = function () {
     let newValue, oldValue;
     let dirty = false;
     let self = this;
-    def.Lo.forEach(this.$$watchers, function (watcher) {
+    def.Lo.forEachRight(this.$$watchers, function (watcher) {
         try {
             newValue = watcher.watchFn(self); //passing the scope itself and getting the return Value
             oldValue = watcher.last;
@@ -89,7 +96,6 @@ Scope.prototype.$$digestOnce = function () {
         } catch (e) {
             console.error(e);
         }
-
     });
     return dirty;
 };

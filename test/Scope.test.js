@@ -554,7 +554,7 @@ describe("Scope", function () {
     });
 
 
-    it("catches exceptions in postDigest", function (done) {
+    it("catches exceptions in postDigest", function () {
 
         scope.$$postDigest(function () {
             throw "Error";
@@ -571,6 +571,57 @@ describe("Scope", function () {
         scope.$digest();
         expect(scope.run).toBeTruthy();
 
+    });
+
+
+    it("allows a particular watch to be destroyed",function () {
+        scope.aValue = "abcv";
+        scope.counter = 0;
+
+        let destroyedWatch = scope.$watch(function () {
+            return scope.aValue;
+        }, function (newValue, oldValue, scope) {
+            scope.counter++;
+        });
+
+        scope.$digest();
+        expect(scope.counter).toBe(1);
+
+        scope.aValue = 'bcd';
+        scope.$digest();
+        expect(scope.counter).toBe(2);
+
+        scope.aValue = 'efg';
+
+        destroyedWatch();
+        scope.$digest();
+        expect(scope.counter).toBe(2);
+
+    });
+
+
+    it("allows destroying a watching during a digest",function () {
+       scope.aValue = 'abc';
+
+       let watchCalls = [];
+
+       scope.$watch(function (scope) {
+           watchCalls.push('first');
+           return scope.aValue;
+       });
+
+       let destroyWatch = scope.$watch(function (scope) {
+           watchCalls.push('second');
+           destroyWatch(); //this should not trick the order and the shifting order of the watcher so they won't budge
+       });
+
+       scope.$watch(function (scope) {
+            watchCalls.push('third');
+            return scope.aValue;
+        });
+
+       scope.$digest();
+       expect(watchCalls).toEqual(['first','second','third','first','third'])
     });
 
 });
