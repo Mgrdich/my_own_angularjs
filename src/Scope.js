@@ -42,7 +42,7 @@ Scope.prototype.$watch = function (watchFn, listenerFn, valueEq) {
 Scope.prototype.$digest = function () {
     let dirty = false;
     let ttl = 10;
-    this.$$lastDirtyWatch = null;
+    this.$root.$$lastDirtyWatch = null;
     this.$beginPhase("$digest");
 
     if (this.$$applyAsyncId) { //calling from digest we will cancel pending and flush immediately
@@ -90,7 +90,7 @@ Scope.prototype.$new = function () {
  * @return {Boolean}
  * */
 Scope.prototype.$$digestOnce = function () {
-    let dirty;
+    let dirty = false;
     let continueLooping = true;
     this.$$everyScope((scope) => { //check the use case of this arrow function
         let newValue, oldValue;
@@ -100,12 +100,12 @@ Scope.prototype.$$digestOnce = function () {
                     newValue = watcher.watchFn(scope); //passing the scope itself and getting the return Value
                     oldValue = watcher.last;
                     if (!def.areEqual(newValue, oldValue, watcher.valueEq)) {
-                        this.$$lastDirtyWatch = watcher;
+                        this.$root.$$lastDirtyWatch = watcher;
                         watcher.last = watcher.valueEq ? def.Lo.cloneDeep(newValue) : newValue;//object case
                         watcher.listenerFn(newValue, (oldValue === initWatchVal) ? newValue : oldValue, scope);
                         dirty = true;
-                    } else if (this.$$lastDirtyWatch === watcher) {
-                        continueLooping = false;
+                    } else if (this.$root.$$lastDirtyWatch === watcher) { //reference  from the rootscope
+                        continueLooping = false; //keeps track of the short circuit optimization in all the hierarchy
                         return false; // breaking the loop after the lastDirtyWatcher
                     }
                 }
@@ -115,7 +115,7 @@ Scope.prototype.$$digestOnce = function () {
         });
         return continueLooping;
     });
-    return dirty; //TODO check this out
+    return dirty;
 };
 
 Scope.prototype.$eval = function (expr, locals) {
@@ -128,7 +128,7 @@ Scope.prototype.$apply = function (expr) {
         return this.$eval(expr);
     } finally {
         this.$clearPhase(); //apply phase
-        this.$digest();
+        this.$root.$digest();
     }
 };
 
@@ -156,7 +156,7 @@ Scope.prototype.$evalAsync = function (expr) {
     if (!this.$$phase && !this.$$asyncQueue.length) { //second for two evalAsync only work once :)
         setTimeout(() =>{
             if (this.$$asyncQueue.length) {
-                this.$digest();
+                this.$root.$digest();
             }
         });
     }
@@ -239,6 +239,7 @@ Scope.prototype.$watchGroup = function (watchFns, listenerFn) {
 };
 
 Scope.prototype.$$everyScope = function (fn) {
+    //it keeps calling itself until no children is empty recursively
     if (fn(this)) { //here it invokes the fn once for current scope
         return this.$$children.every(function (child) {
             return child.$$everyScope(fn); //recursively calling the children and the fn on them

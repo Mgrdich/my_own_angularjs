@@ -965,6 +965,51 @@ describe("Scope", function () {
            expect(child.aValueWas).toBe('abc');
 
         });
+
+
+        it("digest from root on $apply",function () {
+           //since digest works from current scope and down
+           let parent = new Scope();
+           let child = parent.$new();
+           let child2 = child.$new();
+
+           parent.aValue = 'abc';
+           parent.counter = 0;
+
+           parent.$watch(function (scope) {
+               return scope.aValue;
+           },function (newValue,oldValue,scope) {
+              scope.counter++;
+           });
+
+           child2.$apply(function (scope) {});
+
+           expect(parent.counter).toBe(1);
+
+        });
+
+
+        it("digest from root on $evalAsync",function (done) {
+            let parent = new Scope();
+            let child = parent.$new();
+            let child2 = child.$new();
+
+            parent.aValue = 'abc';
+            parent.counter = 0;
+
+            parent.$watch(function (scope) {
+                return scope.aValue;
+            },function (newValue,oldValue,scope) {
+                scope.counter++;
+            });
+
+            child2.$evalAsync(function (scope) {});
+
+            setTimeout(function () {
+                expect(parent.counter).toBe(1);
+                done();
+            },50);
+        });
     });
 });
 
