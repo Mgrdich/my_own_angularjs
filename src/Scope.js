@@ -92,21 +92,19 @@ Scope.prototype.$new = function () {
 Scope.prototype.$$digestOnce = function () {
     let dirty;
     let continueLooping = true;
-    let self = this;
-
-    this.$$everyScope(function(scope) { //check the use case of this arrow function
+    this.$$everyScope((scope) => { //check the use case of this arrow function
         let newValue, oldValue;
-        def.Lo.forEachRight(scope.$$watchers,  function(watcher) { //so it can keep iterating over the new watchers
+        def.Lo.forEachRight(scope.$$watchers,  (watcher) => { //so it can keep iterating over the new watchers
             try {
                 if (watcher) { //is it iterating over an undefined because Lodash forEachRight checks the lenght of the array during the start
                     newValue = watcher.watchFn(scope); //passing the scope itself and getting the return Value
                     oldValue = watcher.last;
                     if (!def.areEqual(newValue, oldValue, watcher.valueEq)) {
-                        self.$$lastDirtyWatch = watcher;
+                        this.$$lastDirtyWatch = watcher;
                         watcher.last = watcher.valueEq ? def.Lo.cloneDeep(newValue) : newValue;//object case
                         watcher.listenerFn(newValue, (oldValue === initWatchVal) ? newValue : oldValue, scope);
                         dirty = true;
-                    } else if (self.$$lastDirtyWatch === watcher) {
+                    } else if (this.$$lastDirtyWatch === watcher) {
                         continueLooping = false;
                         return false; // breaking the loop after the lastDirtyWatcher
                     }
@@ -117,7 +115,7 @@ Scope.prototype.$$digestOnce = function () {
         });
         return continueLooping;
     });
-    return dirty;
+    return dirty; //TODO check this out
 };
 
 Scope.prototype.$eval = function (expr, locals) {
