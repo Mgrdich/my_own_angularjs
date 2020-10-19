@@ -7,8 +7,10 @@ function Scope() {
     this.$$asyncQueue = [];
     this.$$applyAsyncQueue = [];
     this.$$postDigestQueue = [];
+    this.$$children = [];
     this.$$applyAsyncId = null;
     this.$$phase = null;
+    this.$root = this;
 }
 
 /**
@@ -78,7 +80,9 @@ Scope.prototype.$new = function () {
     let ChildScope = function () {};
     ChildScope.prototype = this;
     let child = new ChildScope();
+    this.$$children.push(child);
     child.$$watchers = []; //attribute shadowing each has its watchers and shadows the parent
+    child.$$children = []; //attribute shadowing
     return child;
 };
 
@@ -86,26 +90,32 @@ Scope.prototype.$new = function () {
  * @return {Boolean}
  * */
 Scope.prototype.$$digestOnce = function () {
-    let newValue, oldValue;
-    let dirty = false;
+    let dirty;
+    let continueLooping = true;
+    let self = this;
 
-     def.Lo.forEachRight(this.$$watchers,  (watcher) => { //so it can keep iterating over the new watchers
-        try {
-            if (watcher) { //is it iterating over an undefined because Lodash forEachRight checks the lenght of the array during the start
-                newValue = watcher.watchFn(this); //passing the scope itself and getting the return Value
-                oldValue = watcher.last;
-                if (!def.areEqual(newValue, oldValue, watcher.valueEq)) {
-                    this.$$lastDirtyWatch = watcher;
-                    watcher.last = watcher.valueEq ? def.Lo.cloneDeep(newValue) : newValue;//object case
-                    watcher.listenerFn(newValue, (oldValue === initWatchVal) ? newValue : oldValue, this);
-                    dirty = true;
-                } else if (this.$$lastDirtyWatch === watcher) {
-                    return false; // breaking the loop after the lastDirtyWatcher
+    this.$$everyScope(function(scope) { //check the use case of this arrow function
+        let newValue, oldValue;
+        def.Lo.forEachRight(scope.$$watchers,  function(watcher) { //so it can keep iterating over the new watchers
+            try {
+                if (watcher) { //is it iterating over an undefined because Lodash forEachRight checks the lenght of the array during the start
+                    newValue = watcher.watchFn(scope); //passing the scope itself and getting the return Value
+                    oldValue = watcher.last;
+                    if (!def.areEqual(newValue, oldValue, watcher.valueEq)) {
+                        self.$$lastDirtyWatch = watcher;
+                        watcher.last = watcher.valueEq ? def.Lo.cloneDeep(newValue) : newValue;//object case
+                        watcher.listenerFn(newValue, (oldValue === initWatchVal) ? newValue : oldValue, scope);
+                        dirty = true;
+                    } else if (self.$$lastDirtyWatch === watcher) {
+                        continueLooping = false;
+                        return false; // breaking the loop after the lastDirtyWatcher
+                    }
                 }
+            } catch (e) {
+                console.error(e);
             }
-        } catch (e) {
-            console.error(e);
-        }
+        });
+        return continueLooping;
     });
     return dirty;
 };
@@ -228,6 +238,16 @@ Scope.prototype.$watchGroup = function (watchFns, listenerFn) {
           destroyFunction();
       })
     };
+};
+
+Scope.prototype.$$everyScope = function (fn) {
+    if (fn(this)) { //here it invokes the fn once for current scope
+        return this.$$children.every(function (child) {
+            return child.$$everyScope(fn); //recursively calling the children and the fn on them
+        });
+    } else {
+        return false;
+    }
 };
 
 

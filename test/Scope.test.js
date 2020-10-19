@@ -931,6 +931,40 @@ describe("Scope", function () {
             child.$digest(); // should not trigger the watch of the parent
             expect(child.aValueWas).toBeUndefined();
         });
+
+
+        it("keeps the record of its Children Scopes",function () {
+           let parent = new Scope();
+           let child1 = parent.$new();
+           let child2 = parent.$new();
+           let child2_1 = child2.$new();
+
+           expect(parent.$$children.length).toBe(2);
+           expect(parent.$$children[0]).toBe(child1);
+           expect(parent.$$children[1]).toBe(child2);
+
+           expect(child1.$$children.length).toBe(0);
+           expect(child2.$$children.length).toBe(1);
+
+           expect(child2.$$children[0]).toBe(child2_1);
+        });
+
+
+        it("digest its children",function () {
+           let parent = new Scope();
+           let child = parent.$new();
+
+           parent.aValue = 'abc';
+           child.$watch(function (scope) {
+               return scope.aValue;
+           },function (newValue,oldValue,scope) {
+                scope.aValueWas = newValue;
+           });
+
+           parent.$digest();
+           expect(child.aValueWas).toBe('abc');
+
+        });
     });
 });
 
