@@ -77,7 +77,9 @@ Scope.prototype.$digest = function () {
 Scope.prototype.$new = function () {
     let ChildScope = function () {};
     ChildScope.prototype = this;
-    return new ChildScope();
+    let child = new ChildScope();
+    child.$$watchers = []; //attribute shadowing each has its watchers and shadows the parent
+    return child;
 };
 
 /**

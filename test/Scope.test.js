@@ -890,6 +890,47 @@ describe("Scope", function () {
            expect(aa1.anoterValue).toBeUndefined();
 
         });
+
+
+        it("shadows a parent's property with the same name",function () {
+           let parent = new Scope();
+           let child = parent.$new();
+
+           parent.name = 'Joe';
+           child.name = 'Joey'; // this is called attribute shadowing it will not change the parent
+
+           expect(parent.name).toBe('Joe');
+           expect(child.name).toBe('Joey');
+
+        });
+
+
+        it("it does not shadow members of the parent scope attributes",function () {
+           let parent = new Scope();
+           let child = parent.$new();
+
+           parent.user = {name: 'Joe'};
+           child.user.name = 'Jill'; // since in the prototype it holds the reference
+
+           expect(child.user.name).toBe('Jill');
+           expect(parent.user.name).toBe('Jill');
+        });
+
+
+        it("does not digest its parent(s)",function () {
+            let parent = new Scope();
+            let child = parent.$new();
+
+            parent.aValue = 'abc';
+            parent.$watch(function (scope) {
+                return scope.aValue;
+            }, function (newValue, oldValue, scope) {
+                scope.aValueWas = newValue;
+            });
+
+            child.$digest(); // should not trigger the watch of the parent
+            expect(child.aValueWas).toBeUndefined();
+        });
     });
 });
 
