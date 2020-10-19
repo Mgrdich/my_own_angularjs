@@ -673,6 +673,7 @@ describe("Scope", function () {
         });
     });
 
+
     describe("$watchGroup",function () {
         let scope;
         beforeEach(function () {
@@ -812,6 +813,83 @@ describe("Scope", function () {
             expect(scope.counter).toBe(0);
         });
 
+    });
+
+
+    describe("inheritance",function () {
+
+        it("inherits the parent's properties",function () {
+           let parent = new Scope();
+           parent.aValue = [1, 2, 3];
+
+           let child = parent.$new();
+           expect(child.aValue).toEqual([1, 2, 3]);
+        });
+
+
+        it("does not cause a parent to inherit its properties",function () {
+           let parent = new Scope();
+
+           let child = parent.$new();
+           child.aValue = [1, 2, 3];
+
+           expect(parent.aValue).toBeUndefined();
+        });
+
+
+        it("inherits the parent's properties whenever they are defined",function () {
+           let parent = new Scope();
+           let child = parent.$new();
+
+           parent.aValue = [1, 2, 3];
+           expect(child.aValue).toEqual([1, 2, 3]);
+
+        });
+
+
+        it("can watch the property of the parent",function () {
+           let parent = new Scope();
+           let child = parent.$new();
+           parent.aValue = [1, 2, 3];
+           child.counter = 0;
+
+           child.$watch(function (scope) {
+               return scope.aValue;
+           },function (newValue,oldValue,scope) {
+               scope.counter++;
+           },true);
+
+           child.$digest();
+           expect(child.counter).toBe(1);
+
+           parent.aValue.push(4);
+           child.$digest();
+           expect(child.counter).toBe(2);
+        });
+
+
+        it("can be nested at any depth",function () {
+           let a = new Scope();
+           let aa = a.$new();
+           let aa1 = aa.$new();
+           let aa2 = aa1.$new();
+           let aa3 = aa2.$new();
+           let aa4 = aa3.$new();
+
+           a.value = 1;
+
+           expect(aa.value).toBe(1);
+           expect(aa1.value).toBe(1);
+           expect(aa2.value).toBe(1);
+           expect(aa3.value).toBe(1);
+           expect(aa4.value).toBe(1);
+
+           aa3.anoterValue = 4;
+           expect(aa4.anoterValue).toBe(4);
+           expect(aa2.anoterValue).toBeUndefined();
+           expect(aa1.anoterValue).toBeUndefined();
+
+        });
     });
 });
 

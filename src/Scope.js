@@ -49,7 +49,7 @@ Scope.prototype.$digest = function () {
     }
 
     do { //at least to do once
-        while (this.$$asyncQueue.length) {//first async queue to be consumed then after the digest is over its digest will get working
+        while (this.$$asyncQueue.length) { //first async queue to be consumed then after the digest is over its digest will get working
             try {
                 let asyncTask = this.$$asyncQueue.shift();
                 asyncTask.scope.$eval(asyncTask.expression);
@@ -72,6 +72,12 @@ Scope.prototype.$digest = function () {
             console.error(e);
         }
     }
+};
+
+Scope.prototype.$new = function () {
+    let ChildScope = function () {};
+    ChildScope.prototype = this;
+    return new ChildScope();
 };
 
 /**
