@@ -1010,6 +1010,129 @@ describe("Scope", function () {
                 done();
             },50);
         });
+
+
+        it("isolated scope does not have access to the parent",function () {
+            let parent = new Scope();
+            let child = parent.$new(true);
+
+            parent.aValue = 'abc';
+            expect(child.aValue).toBeUndefined();
+        });
+
+
+        it("cannot watch parent attribute when isolated",function () {
+            let parent = new Scope();
+            let child = parent.$new(true);
+
+            parent.aValue = 'abc';
+            child.aSomeValue = 'abc';
+
+            child.$watch(function (scope) {
+                return scope.aValue;
+            },function (newValue,oldValue,scope) {
+                scope.aValueWas = newValue;
+            });
+
+            child.$watch(function (scope) {
+                return scope.aSomeValue;
+            },function (newValue,oldValue,scope) {
+                scope.aSomeValueWas = newValue;
+            });
+
+
+
+            child.$digest();
+            expect(child.aValueWas).toBeUndefined();
+            expect(child.aSomeValueWas).toBe('abc');
+        });
+
+
+        it("digest its isolated children's",function () {
+            let parent = new Scope();
+            let child = parent.$new(true);
+
+            child.aValue = 'abc';
+            child.$watch(function (scope) {
+                return scope.aValue;
+            }, function (newValue, oldValue, scope) {
+                scope.aValueWas = newValue;
+            });
+
+            parent.$digest(); //works since the everScope function
+            expect(child.aValueWas).toBe('abc');
+        });
+
+
+        it("digest from root $apply when isolated",function () {
+            //without the root reference in the isolated it won't work
+            let parent = new Scope();
+            let child = parent.$new(true);
+            let child2 = child.$new();
+            parent.aValue = 'abc';
+            parent.counter = 0;
+            parent.$watch(function (scope) {
+                    return scope.aValue;
+                },
+                function (newValue, oldValue, scope) {
+                    scope.counter++;
+                }
+            );
+            child2.$apply(function(scope) { });
+            expect(parent.counter).toBe(1);
+        });
+
+
+        it("digest from root $evalAsync when isolated",function (done) {
+            //without the root reference in the isolated it won't work
+            let parent = new Scope();
+            let child = parent.$new(true);
+            let child2 = child.$new();
+            parent.aValue = 'abc';
+            parent.counter = 0;
+            parent.$watch(function (scope) {
+                    return scope.aValue;
+                },
+                function (newValue, oldValue, scope) {
+                    scope.counter++;
+                }
+            );
+            child2.$evalAsync(function(scope) { });
+            setTimeout(function () {
+                expect(parent.counter).toBe(1);
+                done();
+            },50);
+
+        });
+
+
+        it("executes $evalAsync on the isolated scope",function (done) {
+            let parent  = new Scope();
+            let child = parent.$new(true);
+
+            child.$evalAsync(function (scope) {
+                scope.didEvalAsync = true;
+            });
+
+            setTimeout(function () {
+                expect(child.didEvalAsync).toBeTruthy();
+                done();
+            },50);
+        });
+
+
+        it("executes $$postDigest functions on isolated scope",function () {
+           let parent = new Scope();
+           let child = parent.$new(true);
+
+           child.$$postDigest(function () {
+               child.didPostDigest = true;
+           });
+
+            parent.$digest();
+            expect(child.didPostDigest).toBeTruthy();
+
+        });
     });
 });
 

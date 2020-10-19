@@ -28,12 +28,12 @@ Scope.prototype.$watch = function (watchFn, listenerFn, valueEq) {
     };
 
     this.$$watchers.unshift(watcher); //new watchers are added to the beginning
-    this.$$lastDirtyWatch = null; //nested watch :)
+    this.$root.$$lastDirtyWatch = null; //nested watch :)
     return  () => {
         let index = this.$$watchers.indexOf(watcher);
         if (index >= 0) {
             this.$$watchers.splice(index, 1);
-            this.$$lastDirtyWatch = null; //cause the rearrangement will change everything
+            this.$root.$$lastDirtyWatch = null; //cause the rearrangement will change everything
         }
     }
 
@@ -45,8 +45,8 @@ Scope.prototype.$digest = function () {
     this.$root.$$lastDirtyWatch = null;
     this.$beginPhase("$digest");
 
-    if (this.$$applyAsyncId) { //calling from digest we will cancel pending and flush immediately
-        clearTimeout(this.$$applyAsyncId);
+    if (this.$root.$$applyAsyncId) { //calling from digest we will cancel pending and flush immediately
+        clearTimeout(this.$root.$$applyAsyncId);
         this.$$flushApplyAsync();//draining
     }
 
@@ -76,10 +76,20 @@ Scope.prototype.$digest = function () {
     }
 };
 
-Scope.prototype.$new = function () {
-    let ChildScope = function () {};
-    ChildScope.prototype = this;
-    let child = new ChildScope();
+Scope.prototype.$new = function (isolated) {
+    let child;
+    if (isolated) {
+        child = new Scope();
+        //since isolated Scope is not root it should not be circular referencing it should reference root scope
+        child.$root = this.$root;
+        child.$$asyncQueue = this.$$asyncQueue; //to not get attribute shadowing and pick up the root
+        child.$$postDigestQueue = this.$$postDigestQueue; //to not get attribute shadowing and pick up the root
+        child.$$applyAsyncQueue = this.$$applyAsyncQueue; //to not get attribute shadowing and pick up the root
+    } else {
+        let ChildScope = function () {};
+        ChildScope.prototype = this;
+        child = new ChildScope();
+    }
     this.$$children.push(child);
     child.$$watchers = []; //attribute shadowing each has its watchers and shadows the parent
     child.$$children = []; //attribute shadowing
@@ -139,9 +149,9 @@ Scope.prototype.$applyAsync = function (expr) {
         this.$eval(expr)
     });
 
-    if (this.$$applyAsyncId === null) {
+    if (this.$root.$$applyAsyncId === null) {
         //Point is we schedule it only once
-        this.$$applyAsyncId = setTimeout(() => {
+        this.$root.$$applyAsyncId = setTimeout(() => {
             this.$apply(() => {
                 this.$$flushApplyAsync.bind(this);
             });
@@ -171,7 +181,7 @@ Scope.prototype.$$flushApplyAsync = function () {
             console.error(e);
         }
     }
-    this.$$applyAsyncId = null;
+    this.$root.$$applyAsyncId = null;
 };
 
 Scope.prototype.$beginPhase = function (phase) {
