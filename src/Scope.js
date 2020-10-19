@@ -76,24 +76,38 @@ Scope.prototype.$digest = function () {
     }
 };
 
-Scope.prototype.$new = function (isolated) {
+Scope.prototype.$new = function (isolated,parent) {
     let child;
+    parent  = parent || this; //is the scope whom we push childrens into
     if (isolated) {
         child = new Scope();
         //since isolated Scope is not root it should not be circular referencing it should reference root scope
-        child.$root = this.$root;
-        child.$$asyncQueue = this.$$asyncQueue; //to not get attribute shadowing and pick up the root
-        child.$$postDigestQueue = this.$$postDigestQueue; //to not get attribute shadowing and pick up the root
-        child.$$applyAsyncQueue = this.$$applyAsyncQueue; //to not get attribute shadowing and pick up the root
+        child.$root = parent.$root;
+        child.$$asyncQueue = parent.$$asyncQueue; //to not get attribute shadowing and block root we want to pick up the root
+        child.$$postDigestQueue = parent.$$postDigestQueue; //to not get attribute shadowing and block root we want to pick up the root
+        child.$$applyAsyncQueue = parent.$$applyAsyncQueue; //to not get attribute shadowing and block root we want to pick up the root
     } else {
         let ChildScope = function () {};
-        ChildScope.prototype = this;
+        ChildScope.prototype = this; //to get to know it is always root
         child = new ChildScope();
     }
-    this.$$children.push(child);
-    child.$$watchers = []; //attribute shadowing each has its watchers and shadows the parent
+    parent.$$children.push(child);
+    child.$$watchers = []; //attribute shadowing each has its watchers and should shadows the parent
     child.$$children = []; //attribute shadowing
+    child.$parent = parent;
     return child;
+};
+
+Scope.prototype.$destroy = function () {
+    //as long as it is not the rootscope and has a parent i will also remove the watchers os scope
+    if (this.$parent) {
+        let siblings = this.$parent.$$children;
+        let indexOfThis = siblings.indexOf(this);
+        if (indexOfThis >= 0) {
+             siblings.splice(indexOfThis,1);
+        }
+        this.$$watchers = null; //for the current scope digest with no upper inheritance
+    }
 };
 
 /**

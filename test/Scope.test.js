@@ -1133,6 +1133,63 @@ describe("Scope", function () {
             expect(child.didPostDigest).toBeTruthy();
 
         });
+
+
+        it("can take some scope as the parent",function () {
+            let prototypeParent = new Scope(); //root for them
+            let hierarchyParent = new Scope(); //root for them
+
+            let child = prototypeParent.$new(false, hierarchyParent);
+            prototypeParent.a = 42;
+            hierarchyParent.b = 42;
+            expect(child.a).toBe(42);
+            expect(child.n).toBeUndefined(); //is not its prototype
+
+            child.counter = 0;
+            child.$watch(function (scope) {
+                return scope.a;
+            }, function (newValue, oldValue,scope) {
+                scope.counter++;
+            });
+
+            prototypeParent.$digest();
+            expect(child.counter).toBe(0);
+
+            hierarchyParent.$digest();
+            expect(child.counter).toBe(1);
+        });
+
+
+        it("no longer get digested when destroy is being called",function () {
+           let parent = new Scope();
+           let child = parent.$new();
+
+           child.aValue = 'abc';
+           child.counter = 0;
+
+           child.$watch(function (scope) {
+              return scope.aValue;
+           },function (newValue,oldValue,scope) {
+               scope.counter++;
+           });
+
+            parent.$digest();
+            expect(child.counter).toBe(1);
+
+            child.aValue = 'bcd';
+
+            parent.$digest();
+            expect(child.counter).toBe(2);
+
+            child.$destroy();
+            child.aValue = 'bdcg';
+
+            parent.$digest();
+            expect(child.counter).toBe(2);
+
+            child.$digest(); //this is why we are making the current watchers null
+            expect(child.counter).toBe(2);
+        });
     });
 });
 
