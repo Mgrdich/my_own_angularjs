@@ -1230,7 +1230,19 @@ describe("Scope", function () {
 
 
         it("will work with normal non Collection that is NaN",function () {
+            scope.aValue = 0/0;
+            scope.counter = 0;
+            scope.$watchCollection(
+                function(scope) { return scope.aValue; },
+                function(newValue, oldValue, scope) {
+                    scope.counter++;
+                }
+            );
+            scope.$digest();
+            expect(scope.counter).toBe(1);
 
+            scope.$digest();
+            expect(scope.counter).toBe(1);
         });
     });
 });

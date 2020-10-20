@@ -281,12 +281,19 @@ Scope.prototype.$watchCollection = function (watchFn,listenerFn) {
     let internalWatchFn = function (scope) {
         newValue = watchFn(scope);
 
-        if(!def.areEqual(newValue,oldValue,false)){
-            changeCount++;
-        }
-        //check for changes
-        oldValue = newValue;
+        if (def.Lo.isObject(newValue)) {
+            if (def.Lo.isArray(newValue)) {
 
+            } else {
+
+            }
+        } else { //primitive Values
+            if (!def.areEqual(newValue, oldValue, false)) {
+                changeCount++;
+            }
+            //check for changes
+            oldValue = newValue;
+        }
         return changeCount;
     };
     let internalListenerFn = () => {
