@@ -23,4 +23,15 @@ Lib.prototype.areEqual = function (newValue, oldValue, valueEq) {
     }
 };
 
+
+//TODO forEach
+
+//TODO forEachRight
+
+//TODO isObject
+
+//TODO isArray
+
+//TODO isEqual
+
 module.exports = Lib;

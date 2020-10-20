@@ -283,7 +283,10 @@ Scope.prototype.$watchCollection = function (watchFn,listenerFn) {
 
         if (def.Lo.isObject(newValue)) {
             if (def.Lo.isArray(newValue)) {
-
+                if(!def.Lo.isArray(oldValue)){ //if the previous is not array so it is changed
+                    oldValue = [];
+                    changeCount++;
+                }
             } else {
 
             }
