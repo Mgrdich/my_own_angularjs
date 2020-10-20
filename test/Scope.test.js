@@ -1198,7 +1198,40 @@ describe("Scope", function () {
 
 
     describe("$watchCollection",function () {
+        let scope;
+        beforeEach(function () {
+            scope = new Scope();
+        });
 
+        it("will work like a normal watch for non Collections",function () {
+            let someValue = null;
+
+            scope.aValue = '42';
+            scope.counter = 0;
+
+            scope.$watchCollection(function (scope) {
+                return scope.aValue;
+            }, function (newValue, oldValue, scope) {
+                someValue = newValue;
+                scope.counter++;
+            });
+
+            scope.$digest();
+            expect(scope.counter).toBe(1);
+            expect(someValue).toBe(scope.aValue);
+
+            scope.aValue = '4202';
+            scope.$digest();
+            expect(scope.counter).toBe(2);
+
+            scope.$digest();
+            expect(scope.counter).toBe(2);
+        });
+
+
+        it("will work with normal non Collection that is NaN",function () {
+
+        });
     });
 });
 
