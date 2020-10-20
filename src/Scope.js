@@ -273,6 +273,12 @@ Scope.prototype.$$everyScope = function (fn) {
     }
 };
 
+Scope.prototype.$watchCollection = function (watchFn,listenerFn) {
+    let internalWatchFn = function () {};
+    let internalListenerFn = function () {};
+    return this.$watch(internalWatchFn,internalListenerFn);
+};
+
 
 /**
  * @description private functions

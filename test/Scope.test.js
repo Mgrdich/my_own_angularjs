@@ -10,6 +10,8 @@ describe("Scope", function () {
         expect(scope.aProperty).toBe(1);
     });
 
+
+
     describe("digest",function () {
         let scope;
         beforeEach(function () {
@@ -1184,12 +1186,19 @@ describe("Scope", function () {
             child.$destroy();
             child.aValue = 'bdcg';
 
-            parent.$digest();
+            parent.$digest(); //since it is already deleted from children array
             expect(child.counter).toBe(2);
 
             child.$digest(); //this is why we are making the current watchers null
             expect(child.counter).toBe(2);
+
+            //rest it can be collected by js garbage collector
         });
+    });
+
+
+    describe("$watchCollection",function () {
+
     });
 });
 
