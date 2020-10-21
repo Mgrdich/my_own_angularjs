@@ -1338,6 +1338,28 @@ describe("Scope", function () {
             scope.$digest();
             expect(scope.counter).toBe(2);
         });
+
+
+        it("does not fail with NaN in Arrays",function () {
+            scope.arr = [2, NaN, 3];
+            scope.counter = 0;
+
+            scope.$watchCollection(function () {
+                return scope.arr;
+            },function (newValue,oldValue,scope) {
+                scope.counter++;
+            });
+
+            scope.$digest();
+            expect(scope.counter).toBe(1);
+
+            scope.arr.push(1);
+            scope.$digest();
+            expect(scope.counter).toBe(2);
+
+            scope.$digest();
+            expect(scope.counter).toBe(2);
+        });
     });
 });
 
