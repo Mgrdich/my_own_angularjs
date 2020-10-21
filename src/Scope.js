@@ -274,8 +274,8 @@ Scope.prototype.$$everyScope = function (fn) {
 };
 
 Scope.prototype.$watchCollection = function (watchFn,listenerFn) {
-    let newValue = null;
-    let oldValue = null;
+    let newValue;
+    let oldValue;
     let changeCount = 0;
 
     let internalWatchFn = function (scope) {
@@ -284,9 +284,22 @@ Scope.prototype.$watchCollection = function (watchFn,listenerFn) {
         if (def.Lo.isObject(newValue)) {
             if (def.Lo.isArray(newValue)) {
                 if(!def.Lo.isArray(oldValue)){ //if the previous is not array so it is changed
-                    oldValue = [];
                     changeCount++;
+                    oldValue = [];
                 }
+
+                if(newValue.length !== oldValue.length)  {
+                    changeCount++;
+                    oldValue.length = newValue.length;
+                }
+
+                def.Lo.forEach(newValue,function (newItem,index) {
+                let bothNaN = def.Lo.isNaN(newItem) && def.Lo.isNaN(oldValue);
+                    if(!bothNaN && newItem !== oldValue) { //TODO not use areEqual ??
+                        changeCount++;
+                        oldValue[index] = newItem;
+                    }
+                });
             } else {
 
             }
