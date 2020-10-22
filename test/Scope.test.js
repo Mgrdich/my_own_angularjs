@@ -1360,6 +1360,55 @@ describe("Scope", function () {
             scope.$digest();
             expect(scope.counter).toBe(2);
         });
+
+
+        it("array like objects notices a change in arguments array like object", function () {
+            scope.counter = 0;
+            (function () {
+                scope.functionArgument = arguments;
+            })(1, 2, 3);
+
+            expect(scope.functionArgument[1]).toBe(2);
+
+            scope.$watchCollection(function () {
+                return scope.functionArgument;
+            },function (newValue,oldValue,scope) {
+                scope.counter++;
+            });
+
+            scope.$digest();
+            expect(scope.counter).toBe(1);
+
+            scope.functionArgument[1] = 455;
+            scope.$digest();
+            expect(scope.counter).toBe(2);
+
+            scope.$digest();
+            expect(scope.counter).toBe(2);
+
+        });
+
+
+        it("notices the changes in the NodeList which is array object Argment",function () {
+            document.documentElement.appendChild(document.createElement('div'));
+            scope.arrayLike = document.getElementsByTagName('div');
+            scope.counter = 0;
+            scope.$watchCollection(
+                function(scope) { return scope.arrayLike; },
+                function(newValue, oldValue, scope) {
+                    scope.counter++;
+                }
+            );
+            scope.$digest();
+            expect(scope.counter).toBe(1);
+
+            document.documentElement.appendChild(document.createElement('div'));
+            scope.$digest();
+            expect(scope.counter).toBe(2);
+
+            scope.$digest();
+            expect(scope.counter).toBe(2)
+        });
     });
 });
 

@@ -36,4 +36,6 @@ Lib.prototype.areEqual = function (newValue, oldValue, valueEq) {
 
 //TODO cloneDeep
 
+//TODO isArrayLike
+
 module.exports = Lib;
