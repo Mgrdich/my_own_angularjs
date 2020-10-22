@@ -34,4 +34,6 @@ Lib.prototype.areEqual = function (newValue, oldValue, valueEq) {
 
 //TODO isEqual
 
+//TODO cloneDeep
+
 module.exports = Lib;
