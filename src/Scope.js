@@ -295,7 +295,7 @@ Scope.prototype.$watchCollection = function (watchFn,listenerFn) {
 
                 def.Lo.forEach(newValue,function (newItem,index) {
                 let bothNaN = def.Lo.isNaN(newItem) && def.Lo.isNaN(oldValue);
-                    if(!bothNaN && newItem !== oldValue) { //TODO not use areEqual ??
+                    if(!bothNaN && newItem !== oldValue[index]) { //TODO not use areEqual ??
                         changeCount++;
                         oldValue[index] = newItem;
                     }
