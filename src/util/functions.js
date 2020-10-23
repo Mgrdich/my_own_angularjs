@@ -49,6 +49,6 @@ Lib.prototype.areEqual = function (newValue, oldValue, valueEq) {
 
 //TODO cloneDeep
 
-//TODO isArrayLike
+//TODO isArrayLike from the mixin
 
 module.exports = Lib;
