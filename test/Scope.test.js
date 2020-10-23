@@ -1522,7 +1522,7 @@ describe("Scope", function () {
             scope.aValue = 1;
             let oldGivenValue = null;
             scope.$watchCollection(function (scope) {
-                    return scope.obj;
+                    return scope.aValue;
                 },
                 function (newValue, oldValue) {
                     oldGivenValue = oldValue;
@@ -1540,7 +1540,7 @@ describe("Scope", function () {
             scope.arr = [1,2,3];
             let oldGivenValue = null;
             scope.$watchCollection(function (scope) {
-                    return scope.obj;
+                    return scope.arr;
                 },
                 function (newValue, oldValue) {
                     oldGivenValue = oldValue;
@@ -1550,7 +1550,7 @@ describe("Scope", function () {
 
             scope.arr.push = 2;
             scope.$digest();
-            expect(oldGivenValue).toEqual([1,2,3]);
+            expect([...oldGivenValue]).toEqual([1,2,3]); //check HERE serialize sting issue
         });
 
 
