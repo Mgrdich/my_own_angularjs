@@ -1517,6 +1517,76 @@ describe("Scope", function () {
             expect(scope.counter).toBe(2);
         });
 
+
+        it("gives the old non collection value to the listener", function () {
+            scope.aValue = 1;
+            let oldGivenValue = null;
+            scope.$watchCollection(function (scope) {
+                    return scope.obj;
+                },
+                function (newValue, oldValue) {
+                    oldGivenValue = oldValue;
+                }
+            );
+            scope.$digest();
+
+            scope.aValue = 2;
+            scope.$digest();
+            expect(oldGivenValue).toBe(1);
+        });
+
+
+        it("gives old value array to the listener",function () {
+            scope.arr = [1,2,3];
+            let oldGivenValue = null;
+            scope.$watchCollection(function (scope) {
+                    return scope.obj;
+                },
+                function (newValue, oldValue) {
+                    oldGivenValue = oldValue;
+                }
+            );
+            scope.$digest();
+
+            scope.arr.push = 2;
+            scope.$digest();
+            expect(oldGivenValue).toEqual([1,2,3]);
+        });
+
+
+        it("gives the old object value to the listener",function () {
+            scope.obj = {a:1};
+            let oldGivenValue = null;
+            scope.$watchCollection(function (scope) {
+                    return scope.obj;
+                },
+                function (newValue, oldValue) {
+                    oldGivenValue = oldValue;
+                }
+            );
+            scope.$digest();
+
+            scope.obj.b = 2;
+            scope.$digest();
+            expect(oldGivenValue).toEqual({a:1});
+        });
+
+
+        it("the new Value as the old value on the first digest",function () {
+            scope.obj = {a:1};
+            let oldGivenValue = null;
+            scope.$watchCollection(function (scope) {
+                    return scope.obj;
+                },
+                function (newValue, oldValue) {
+                    oldGivenValue = oldValue;
+                }
+            );
+
+            scope.$digest();
+            expect(oldGivenValue).toEqual({a:1});
+        });
+
     });
 });
 
