@@ -273,11 +273,21 @@ Scope.prototype.$$everyScope = function (fn) {
     }
 };
 
+/**
+ * @description a more moderate watch that uses simple
+ * techniques to check whether array or an object
+ * been changed without recursive calling
+ * */
 Scope.prototype.$watchCollection = function (watchFn,listenerFn) {
-    let newValue;
-    let oldValue;
+    let newValue; //local variables to store values to trigger change
+    let oldValue; //local variables to store values to trigger change
+
+    // indicate whether the watch function should execute the triggers or not
+    //  local always will get increase never same value maybe that is way
+    //  they did it with no short circuit return
     let changeCount = 0;
-    let oldLength;
+
+    let oldLength; //storing the oldValue to avoid one loop and gets
 
     let internalWatchFn = function (scope) {
         newValue = watchFn(scope);
@@ -342,7 +352,7 @@ Scope.prototype.$watchCollection = function (watchFn,listenerFn) {
                 changeCount++;
             }
             //check for changes
-            oldValue = newValue;
+            oldValue = newValue; //for the next take
         }
         return changeCount;
     };
