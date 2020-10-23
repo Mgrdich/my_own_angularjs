@@ -8,6 +8,7 @@ function Scope() {
     this.$$applyAsyncQueue = [];
     this.$$postDigestQueue = [];
     this.$$children = [];
+    this.$$listeners = {};
     this.$$applyAsyncId = null;
     this.$$phase = null;
     this.$root = this;
@@ -94,6 +95,7 @@ Scope.prototype.$new = function (isolated,parent) {
     parent.$$children.push(child);
     child.$$watchers = []; //attribute shadowing each has its watchers and should shadows the parent
     child.$$children = []; //attribute shadowing
+    child.$$listeners = {}; //attribute shadowing
     child.$parent = parent;
     return child;
 };
@@ -372,6 +374,14 @@ Scope.prototype.$watchCollection = function (watchFn,listenerFn) {
         }
     };
     return this.$watch(internalWatchFn,internalListenerFn);
+};
+
+Scope.prototype.$on = function (eventName,listener) {
+    let listeners = this.$$listeners[eventName];
+    if(!listeners){
+        this.$$listeners[eventName] = listeners = [];
+    }
+    listeners.push(listener);
 };
 
 

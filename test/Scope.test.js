@@ -1588,5 +1588,61 @@ describe("Scope", function () {
         });
 
     });
+
+
+    describe("Events",function () {
+        let scope;
+        let parent;
+        let child;
+        let isolatedChild;
+
+        beforeEach(function () {
+            parent = new Scope();
+            scope = parent.$new();
+            child = scope.$new();
+            isolatedChild = scope.$new(true);
+        });
+
+        it("allows registration events",function () {
+            let listener1 = function () {};
+            let listener2 = function () {};
+            let listener3 = function () {};
+
+            scope.$on('someEvent',listener1);
+            scope.$on('someEvent',listener2);
+            scope.$on('someOtherEvent',listener3);
+
+            expect(scope.$$listeners).toEqual({
+                someEvent: [listener1, listener2],
+                someOtherEvent: [listener3]
+            });
+
+        });
+
+
+        it("register different events on each scope",function () {
+            let listener1 = function () {};
+            let listener2 = function () {};
+            let listener3 = function () {};
+
+            scope.$on('someEvent',listener1);
+            child.$on('someEvent',listener2);
+            isolatedChild.$on('someOtherEvent',listener3);
+
+            expect(scope.$$listeners).toEqual({
+                someEvent: [listener1],
+            });
+
+            expect(child.$$listeners).toEqual({
+                someEvent: [listener2],
+            });
+
+            expect(isolatedChild.$$listeners).toEqual({
+                someOtherEvent: [listener3],
+            });
+
+        });
+
+    });
 });
 
