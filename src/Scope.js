@@ -277,9 +277,11 @@ Scope.prototype.$watchCollection = function (watchFn,listenerFn) {
     let newValue;
     let oldValue;
     let changeCount = 0;
+    let oldLength;
 
     let internalWatchFn = function (scope) {
         newValue = watchFn(scope);
+        let newLength;
 
         if (def.Lo.isObject(newValue)) {
             if (def.Lo.isArrayLike(newValue)) { //considers array like if its not a function and has a length
@@ -295,7 +297,7 @@ Scope.prototype.$watchCollection = function (watchFn,listenerFn) {
 
                 def.Lo.forEach(newValue,function (newItem,index) {
                 let bothNaN = def.Lo.isNaN(newItem) && def.Lo.isNaN(oldValue[index]);
-                    if(!bothNaN && newItem !== oldValue[index]) { //TODO not use areEqual ??
+                    if(!bothNaN && newItem !== oldValue[index]) { //both are non not to be considered a change
                         changeCount++;
                         oldValue[index] = newItem;
                     }
@@ -304,14 +306,36 @@ Scope.prototype.$watchCollection = function (watchFn,listenerFn) {
                 if(!def.Lo.isObject(oldValue) || def.Lo.isArrayLike(oldValue)) {
                     changeCount++;
                     oldValue = {};
+                    oldLength = 0;
                 }
+                newLength = 0;
                 def.Lo.forOwn(newValue,function (newItem,key) {
-                    let bothNaN = def.Lo.isNaN(newItem) && def.Lo.isNaN(oldValue[key]);
-                    if(!bothNaN && newItem !== oldValue[key]) { //TODO not use areEqual ??
+                    newLength++;
+                    if(oldValue.hasOwnProperty(key)){
+                        let bothNaN = def.Lo.isNaN(newItem) && def.Lo.isNaN(oldValue[key]);
+                        if(!bothNaN && newItem !== oldValue[key]) { //both are non not to be considered a change
+                            changeCount++;
+                            oldValue[key] = newItem;
+                        }
+                    } else {
                         changeCount++;
+                        oldLength++;
                         oldValue[key] = newItem;
                     }
+
                 });
+
+                if (oldLength > newLength) {
+                    changeCount++;
+                    //iterate over the oldLoop and check if the key is still there not deleted
+                    def.Lo.forOwn(oldValue, function (item, key) {
+                        if (!newValue.hasOwnProperty(key)) {
+                            changeCount++;
+                            oldLength--;
+                            delete oldValue[key];
+                        }
+                    });
+                }
             }
         } else { //primitive Values
             if (!def.areEqual(newValue, oldValue, false)) {

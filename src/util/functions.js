@@ -7,6 +7,17 @@ function Lib() {
 
 }
 
+_.mixin({
+    isArrayLike: function(obj) {
+        if (_.isNull(obj) || _.isUndefined(obj)) {
+            return false;
+        }
+        let length = obj.length;
+        return length === 0 ||
+            (_.isNumber(length) && length > 0 && (length - 1) in obj);
+    }
+});
+
 Lib.prototype.Lo = _; //extending Lodash Mgo Style :)
 
 Lib.prototype.noop = function () {};
@@ -22,6 +33,8 @@ Lib.prototype.areEqual = function (newValue, oldValue, valueEq) {
         return newValue === oldValue || (this.isNumber(newValue) && this.isNumber(oldValue) && isNaN(newValue) && isNaN(oldValue));
     }
 };
+
+
 
 
 //TODO forEach

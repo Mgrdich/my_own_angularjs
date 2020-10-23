@@ -1477,6 +1477,30 @@ describe("Scope", function () {
             expect(scope.counter).toBe(2);
 
         });
+
+
+        it("detecting the change delete attribute",function () {
+            scope.counter = 0;
+            scope.obj = {a:1,b:2};
+
+            scope.$watchCollection(function () {
+                return scope.obj;
+            },function (newValue,oldValue,scope) {
+                scope.counter++;
+            });
+
+            scope.$digest();
+            expect(scope.counter).toBe(1);
+
+            delete scope.obj.a;
+            scope.$digest();
+            expect(scope.counter).toBe(2);
+
+            scope.$digest();
+            expect(scope.counter).toBe(2);
+
+        });
+
     });
 });
 
