@@ -282,7 +282,7 @@ Scope.prototype.$watchCollection = function (watchFn,listenerFn) {
         newValue = watchFn(scope);
 
         if (def.Lo.isObject(newValue)) {
-            if (def.Lo.isArray(newValue)) {
+            if (def.Lo.isArrayLike(newValue)) {
                 if(!def.Lo.isArray(oldValue)){ //if the previous is not array so it is changed
                     changeCount++;
                     oldValue = [];
@@ -300,8 +300,9 @@ Scope.prototype.$watchCollection = function (watchFn,listenerFn) {
                         oldValue[index] = newItem;
                     }
                 });
-            } else {
-
+            } else if(!def.Lo.isObject(oldValue) && def.Lo.isArrayLike(oldValue)) { //TODO check me
+                changeCount++;
+                oldValue = {};
             }
         } else { //primitive Values
             if (!def.areEqual(newValue, oldValue, false)) {

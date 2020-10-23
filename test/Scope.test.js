@@ -1409,6 +1409,74 @@ describe("Scope", function () {
             scope.$digest();
             expect(scope.counter).toBe(2)
         });
+
+
+        it("detecting new objects when a value becomes one",function () {
+            scope.counter = 0;
+            scope.obj = null;
+
+            scope.$watchCollection(function () {
+                return scope.obj;
+            },function (newValue,oldValue,scope) {
+                scope.counter++;
+            });
+
+            scope.$digest();
+            expect(scope.counter).toBe(1);
+
+            scope.obj = {a:1};
+            scope.$digest();
+            expect(scope.counter).toBe(2);
+
+            scope.$digest();
+            expect(scope.counter).toBe(2);
+        });
+
+
+        it("detecting or changing an attribute in an object",function () {
+            scope.counter = 0;
+            scope.obj = {a:1};
+
+            scope.$watchCollection(function () {
+                return scope.obj;
+            },function (newValue,oldValue,scope) {
+                scope.counter++;
+            });
+
+            scope.$digest();
+            expect(scope.counter).toBe(1);
+
+            scope.obj.b = 2;
+            scope.$digest();
+            expect(scope.counter).toBe(2);
+
+            scope.$digest();
+            expect(scope.counter).toBe(2);
+
+        });
+
+
+        it("detecting the change of the same attribute",function () {
+            scope.counter = 0;
+            scope.obj = {a:1};
+
+            scope.$watchCollection(function () {
+                return scope.obj;
+            },function (newValue,oldValue,scope) {
+                scope.counter++;
+            });
+
+            scope.$digest();
+            expect(scope.counter).toBe(1);
+
+            scope.obj.a = 2;
+            scope.$digest();
+            expect(scope.counter).toBe(2);
+
+            scope.$digest();
+            expect(scope.counter).toBe(2);
+
+        });
     });
 });
 
