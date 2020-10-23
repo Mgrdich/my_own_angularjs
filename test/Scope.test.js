@@ -1389,7 +1389,7 @@ describe("Scope", function () {
         });
 
 
-        it("notices the changes in the NodeList which is array object Argment",function () {
+        it("notices the changes in the NodeList which is array object Argument",function () {
             document.documentElement.appendChild(document.createElement('div'));
             scope.arrayLike = document.getElementsByTagName('div');
             scope.counter = 0;
@@ -1424,7 +1424,7 @@ describe("Scope", function () {
             scope.$digest();
             expect(scope.counter).toBe(1);
 
-            scope.obj = {a:1};
+            scope.obj = {a: 1};
             scope.$digest();
             expect(scope.counter).toBe(2);
 
@@ -1435,7 +1435,7 @@ describe("Scope", function () {
 
         it("detecting or changing an attribute in an object",function () {
             scope.counter = 0;
-            scope.obj = {a:1};
+            scope.obj = {a: 1};
 
             scope.$watchCollection(function () {
                 return scope.obj;

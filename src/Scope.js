@@ -282,7 +282,7 @@ Scope.prototype.$watchCollection = function (watchFn,listenerFn) {
         newValue = watchFn(scope);
 
         if (def.Lo.isObject(newValue)) {
-            if (def.Lo.isArrayLike(newValue)) {
+            if (def.Lo.isArrayLike(newValue)) { //considers array like if its not a function and has a length
                 if(!def.Lo.isArray(oldValue)){ //if the previous is not array so it is changed
                     changeCount++;
                     oldValue = [];
@@ -300,9 +300,18 @@ Scope.prototype.$watchCollection = function (watchFn,listenerFn) {
                         oldValue[index] = newItem;
                     }
                 });
-            } else if(!def.Lo.isObject(oldValue) && def.Lo.isArrayLike(oldValue)) { //TODO check me
-                changeCount++;
-                oldValue = {};
+            } else {
+                if(!def.Lo.isObject(oldValue) || def.Lo.isArrayLike(oldValue)) {
+                    changeCount++;
+                    oldValue = {};
+                }
+                def.Lo.forOwn(newValue,function (newItem,key) {
+                    let bothNaN = def.Lo.isNaN(newItem) && def.Lo.isNaN(oldValue[key]);
+                    if(!bothNaN && newItem !== oldValue[key]) { //TODO not use areEqual ??
+                        changeCount++;
+                        oldValue[key] = newItem;
+                    }
+                });
             }
         } else { //primitive Values
             if (!def.areEqual(newValue, oldValue, false)) {
