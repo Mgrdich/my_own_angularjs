@@ -384,19 +384,19 @@ Scope.prototype.$on = function (eventName,listener) {
     listeners.push(listener || function () {}); //TODO check me does angular do this
 };
 
-Scope.prototype.$emit = function (eventName, data) {
-    this.$$fireEventsOnScope(eventName,data);
+Scope.prototype.$emit = function (eventName, ...additionalArguments) {
+    this.$$fireEventsOnScope(eventName,additionalArguments);
 };
 
-Scope.prototype.$broadcast = function (eventName,data) {
-    this.$$fireEventsOnScope(eventName,data);
+Scope.prototype.$broadcast = function (eventName,...additionalArguments) {
+    this.$$fireEventsOnScope(eventName,additionalArguments);
 };
 
-Scope.prototype.$$fireEventsOnScope = function (eventName,data) {
-    let event = {name: eventName};
+Scope.prototype.$$fireEventsOnScope = function (eventName,additionalArguments) {
+    let listenerArgs = [eventName,...additionalArguments]; // let listenerArgs = [event].concat(additionalArguments);
     let listeners = this.$$listeners[eventName] || [];
     def.Lo.forEach(listeners, function (listener) {
-        listener(event);
+        listener(...listenerArgs); //listener.apply(null,listenerArgs)
     });
 };
 

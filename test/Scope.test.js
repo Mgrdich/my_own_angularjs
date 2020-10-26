@@ -1660,6 +1660,7 @@ describe("Scope", function () {
             it("passes an an event object with the same name :" + method, function () {
                 let listener = jest.fn();
                 scope.$on('someEvent',listener);
+                
                 scope[method]('someEvent');
 
                 expect(listener).toHaveBeenCalled();
@@ -1680,6 +1681,19 @@ describe("Scope", function () {
                 let event2 = listener2.mock.calls[listener2.mock.calls.length - 1][0].name;
 
                 expect(event1).toBe(event2);
+            });
+
+
+            it("passes additional argument on Emit for $on to receive",function () {
+                let listener = jest.fn();
+
+                scope.$on('someEvent',listener);
+
+                scope[method]('someEvent','firstArgument',['secondArgument1','secondArgument2'],3);
+
+                expect(listener.mock.calls[listener.mock.calls.length - 1][0]).toEqual('firstArgument');
+                expect(listener.mock.calls[listener.mock.calls.length - 1][1]).toEqual(['secondArgument1','secondArgument2']);
+                expect(listener.mock.calls[listener.mock.calls.length - 1][2]).toEqual(3);
             });
         });
     });
