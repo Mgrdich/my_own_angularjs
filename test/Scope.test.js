@@ -1663,7 +1663,7 @@ describe("Scope", function () {
                 scope[method]('someEvent');
 
                 expect(listener).toHaveBeenCalled();
-                expect(listener.mock.calls[listener.mock.calls.length - 1]).toEqual('someEvent');
+                expect(listener.mock.calls[listener.mock.calls.length - 1][0].name).toEqual('someEvent');
             });
 
 
@@ -1676,8 +1676,8 @@ describe("Scope", function () {
 
                 scope[method]('someEvent');
 
-                let event1 = listener1.mock.calls[listener1.mock.calls.length - 1];
-                let event2 = listener2.mock.calls[listener2.mock.calls.length - 1];
+                let event1 = listener1.mock.calls[listener1.mock.calls.length - 1][0].name;
+                let event2 = listener2.mock.calls[listener2.mock.calls.length - 1][0].name;
 
                 expect(event1).toBe(event2);
             });
