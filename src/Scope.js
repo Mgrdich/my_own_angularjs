@@ -392,8 +392,9 @@ Scope.prototype.$broadcast = function (eventName,...additionalArguments) {
     this.$$fireEventsOnScope(eventName,additionalArguments);
 };
 
-Scope.prototype.$$fireEventsOnScope = function (eventName,additionalArguments) {
-    let listenerArgs = [eventName,...additionalArguments]; // let listenerArgs = [event].concat(additionalArguments);
+Scope.prototype.$$fireEventsOnScope = function (eventName, additionalArguments) {
+    let event = {name: eventName};
+    let listenerArgs = [event, ...additionalArguments]; // let listenerArgs = [event].concat(additionalArguments);
     let listeners = this.$$listeners[eventName] || [];
     def.Lo.forEach(listeners, function (listener) {
         listener(...listenerArgs); //listener.apply(null,listenerArgs)

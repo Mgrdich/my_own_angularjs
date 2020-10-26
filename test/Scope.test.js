@@ -1691,9 +1691,10 @@ describe("Scope", function () {
 
                 scope[method]('someEvent','firstArgument',['secondArgument1','secondArgument2'],3);
 
-                expect(listener.mock.calls[listener.mock.calls.length - 1][0]).toEqual('firstArgument');
-                expect(listener.mock.calls[listener.mock.calls.length - 1][1]).toEqual(['secondArgument1','secondArgument2']);
-                expect(listener.mock.calls[listener.mock.calls.length - 1][2]).toEqual(3);
+                expect(listener.mock.calls[listener.mock.calls.length - 1][0].name).toEqual('someEvent');
+                expect(listener.mock.calls[listener.mock.calls.length - 1][1]).toEqual('firstArgument');
+                expect(listener.mock.calls[listener.mock.calls.length - 1][2]).toEqual(['secondArgument1','secondArgument2']);
+                expect(listener.mock.calls[listener.mock.calls.length - 1][3]).toEqual(3);
             });
         });
     });
