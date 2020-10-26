@@ -384,6 +384,22 @@ Scope.prototype.$on = function (eventName,listener) {
     listeners.push(listener);
 };
 
+Scope.prototype.$emit = function (eventName, data) {
+    this.$$fireEventsOnScope(eventName,data);
+};
+
+Scope.prototype.$broadcast = function (eventName,data) {
+    this.$$fireEventsOnScope(eventName,data);
+};
+
+Scope.prototype.$$fireEventsOnScope = function (eventName,data) {
+    let event = {eventName: eventName};
+    let listeners = this.$$listeners[eventName] || [];
+    def.Lo.forEach(listeners, function (listener) {
+        listener(event);
+    });
+};
+
 
 /**
  * @description private functions

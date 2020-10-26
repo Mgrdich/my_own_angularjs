@@ -1643,6 +1643,23 @@ describe("Scope", function () {
 
         });
 
+        //$emit and $broadcast common code
+        def.Lo.forEach(['$emit', '$broadcast'], function (method) {
+            it("calls listeners registered for matching events on " + method, function () {
+                let listener1 = jasmine.createSpy();
+                let listener2 = jasmine.createSpy();
+                scope.$on('someEvent', listener1);
+                scope.$on('someOtherEvent', listener2);
+                scope[method]('someEvent');
+                expect(listener1).toHaveBeenCalled();
+                expect(listener2).not.toHaveBeenCalled();
+            });
+
+
+            it("",function () {
+
+            });
+        });
     });
 });
 
