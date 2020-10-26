@@ -1646,9 +1646,9 @@ describe("Scope", function () {
         //$emit and $broadcast common code
         def.Lo.forEach(['$emit', '$broadcast'], function (method) {
         
-            it("calls listeners registered for matching events on " + method, function () {
-                let listener1 = jasmine.createSpy();
-                let listener2 = jasmine.createSpy();
+            it("calls listeners registered for matching events on :" + method, function () {
+                let listener1 = jest.fn();
+                let listener2 = jest.fn();
                 scope.$on('someEvent', listener1);
                 scope.$on('someOtherEvent', listener2);
                 scope[method]('someEvent');
@@ -1684,7 +1684,7 @@ describe("Scope", function () {
             });
 
 
-            it("passes additional argument on Emit for $on to receive",function () {
+            it("passes additional argument on Emit for $on to receive :"+method,function () {
                 let listener = jest.fn();
 
                 scope.$on('someEvent',listener);
@@ -1695,6 +1695,43 @@ describe("Scope", function () {
                 expect(listener.mock.calls[listener.mock.calls.length - 1][1]).toEqual('firstArgument');
                 expect(listener.mock.calls[listener.mock.calls.length - 1][2]).toEqual(['secondArgument1','secondArgument2']);
                 expect(listener.mock.calls[listener.mock.calls.length - 1][3]).toEqual(3);
+            });
+
+
+            it("returns the event of the object :" + method,function () {
+                let returnedObject = scope[method]('someEvent');
+
+                expect(returnedObject).toBeDefined();
+                expect(returnedObject.name).toBe('someEvent');
+            });
+
+
+            it("deregister the events from the listener :" + method, function () {
+                let mock = jest.fn();
+                let deregister = scope.$on('someEvent', mock);
+
+                deregister();
+                scope[method]('someEvent');
+
+                expect(mock).not.toHaveBeenCalled();
+            });
+
+
+            it("does not skip next listener when it is removed from a listener: "+method,function () {
+                let deregister;
+
+                let listener = function () {
+                    deregister();
+                };
+
+                let listener2 = jest.fn();
+
+                deregister = scope.$on('firstEvent',listener);
+                scope.$on('firstEvent',listener2);
+
+                scope[method]('firstEvent');
+
+                expect(listener2).toHaveBeenCalled();
             });
         });
     });

@@ -382,23 +382,37 @@ Scope.prototype.$on = function (eventName,listener) {
         this.$$listeners[eventName] = listeners = [];
     }
     listeners.push(listener || function () {}); //TODO check me does angular do this
+
+    return function () {
+        let index = listeners.indexOf(listener);
+        if (index >= 0) {
+            listeners[index] = null; //since an event can have multiple calls on the array of the same name
+        }
+    }
 };
 
 Scope.prototype.$emit = function (eventName, ...additionalArguments) {
-    this.$$fireEventsOnScope(eventName,additionalArguments);
+    return this.$$fireEventsOnScope(eventName,additionalArguments);
 };
 
 Scope.prototype.$broadcast = function (eventName,...additionalArguments) {
-    this.$$fireEventsOnScope(eventName,additionalArguments);
+    return this.$$fireEventsOnScope(eventName,additionalArguments);
 };
 
 Scope.prototype.$$fireEventsOnScope = function (eventName, additionalArguments) {
     let event = {name: eventName};
     let listenerArgs = [event, ...additionalArguments]; // let listenerArgs = [event].concat(additionalArguments);
     let listeners = this.$$listeners[eventName] || [];
-    def.Lo.forEach(listeners, function (listener) {
-        listener(...listenerArgs); //listener.apply(null,listenerArgs)
-    });
+    let i = 0;
+    while (i < listeners.length) {
+        if (listeners[i] === null) {
+            listeners.splice(i, 1);
+        } else {
+            listeners[i](...listenerArgs);//listener.apply(null,listenerArgs)
+            i++;
+        }
+    }
+    return event;
 };
 
 
