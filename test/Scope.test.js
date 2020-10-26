@@ -1645,6 +1645,7 @@ describe("Scope", function () {
 
         //$emit and $broadcast common code
         def.Lo.forEach(['$emit', '$broadcast'], function (method) {
+        
             it("calls listeners registered for matching events on " + method, function () {
                 let listener1 = jasmine.createSpy();
                 let listener2 = jasmine.createSpy();
@@ -1656,8 +1657,29 @@ describe("Scope", function () {
             });
 
 
-            it("",function () {
+            it("passes an an event object with the same name :" + method, function () {
+                let listener = jest.fn();
+                scope.$on('someEvent',listener);
+                scope[method]('someEvent');
 
+                expect(listener).toHaveBeenCalled();
+                expect(listener.mock.calls[listener.mock.calls.length - 1]).toEqual('someEvent');
+            });
+
+
+            it("passes the same event object to each listener on :" + method, function () {
+                let listener1 = jest.fn();
+                let listener2 = jest.fn();
+
+                scope.$on('someEvent',listener1);
+                scope.$on('someEvent',listener2);
+
+                scope[method]('someEvent');
+
+                let event1 = listener1.mock.calls[listener1.mock.calls.length - 1];
+                let event2 = listener2.mock.calls[listener2.mock.calls.length - 1];
+
+                expect(event1).toBe(event2);
             });
         });
     });

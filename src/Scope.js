@@ -381,7 +381,7 @@ Scope.prototype.$on = function (eventName,listener) {
     if(!listeners){
         this.$$listeners[eventName] = listeners = [];
     }
-    listeners.push(listener);
+    listeners.push(listener || function () {}); //TODO check me does angular do this
 };
 
 Scope.prototype.$emit = function (eventName, data) {
@@ -393,7 +393,7 @@ Scope.prototype.$broadcast = function (eventName,data) {
 };
 
 Scope.prototype.$$fireEventsOnScope = function (eventName,data) {
-    let event = {eventName: eventName};
+    let event = {name: eventName};
     let listeners = this.$$listeners[eventName] || [];
     def.Lo.forEach(listeners, function (listener) {
         listener(event);
