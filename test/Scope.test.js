@@ -1761,8 +1761,8 @@ describe("Scope", function () {
 
             scope.$emit('someEvent');
 
-            let parentArg = parentListener.mock.calls[listener.mock.calls.length - 1][0].name;
-            let childArg = childListener.mock.calls[listener.mock.calls.length - 1][0].name;
+            let parentArg = parentListener.mock.calls[parentListener.mock.calls.length - 1][0].name;
+            let childArg = childListener.mock.calls[childListener.mock.calls.length - 1][0].name;
             expect(parentArg).toEqual(childArg);
         });
 
@@ -1793,8 +1793,8 @@ describe("Scope", function () {
 
             parent.$broadcast('someEvent');
 
-            let parentArg = parentListener.mock.calls[listener.mock.calls.length - 1][0].name;
-            let childArg = childListener.mock.calls[listener.mock.calls.length - 1][0].name;
+            let parentArg = parentListener.mock.calls[parentListener.mock.calls.length - 1][0].name;
+            let childArg = childListener.mock.calls[childListener.mock.calls.length - 1][0].name;
             expect(parentArg).toEqual(childArg);
         });
 

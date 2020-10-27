@@ -392,16 +392,28 @@ Scope.prototype.$on = function (eventName,listener) {
 };
 
 Scope.prototype.$emit = function (eventName, ...additionalArguments) {
-    return this.$$fireEventsOnScope(eventName,additionalArguments);
-};
-
-Scope.prototype.$broadcast = function (eventName,...additionalArguments) {
-    return this.$$fireEventsOnScope(eventName,additionalArguments);
-};
-
-Scope.prototype.$$fireEventsOnScope = function (eventName, additionalArguments) {
     let event = {name: eventName};
     let listenerArgs = [event, ...additionalArguments]; // let listenerArgs = [event].concat(additionalArguments);
+    let scope = this;
+    do {
+        scope.$$fireEventsOnScope(eventName, listenerArgs);
+        scope = scope.$parent;
+    } while (scope);
+
+    return event;
+};
+
+Scope.prototype.$broadcast = function (eventName, ...additionalArguments) {
+    let event = {name: eventName};
+    let listenerArgs = [event, ...additionalArguments]; // let listenerArgs = [event].concat(additionalArguments);
+    this.$$everyScope(function (scope) {
+        scope.$$fireEventsOnScope(eventName, listenerArgs);
+        return true;
+    });
+    return event;
+};
+
+Scope.prototype.$$fireEventsOnScope = function (eventName, listenerArgs) {
     let listeners = this.$$listeners[eventName] || [];
     let i = 0;
     while (i < listeners.length) {
@@ -412,7 +424,6 @@ Scope.prototype.$$fireEventsOnScope = function (eventName, additionalArguments) 
             i++;
         }
     }
-    return event;
 };
 
 
