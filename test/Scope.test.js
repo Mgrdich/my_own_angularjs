@@ -1643,6 +1643,7 @@ describe("Scope", function () {
 
         });
 
+
         //$emit and $broadcast common code
         def.Lo.forEach(['$emit', '$broadcast'], function (method) {
         
@@ -1733,7 +1734,70 @@ describe("Scope", function () {
 
                 expect(listener2).toHaveBeenCalled();
             });
+
         });
+
+
+        it("propagates up to the scope hierarchy $emit",function () {
+            let parentListener = jest.fn();
+            let childListener = jest.fn();
+
+            parent.$on('someEvent',parentListener);
+            scope.$on('someEvent',childListener);
+
+            scope.$emit('someEvent');
+
+            expect(parentListener).toHaveBeenCalled();
+            expect(childListener).toHaveBeenCalled();
+        });
+
+
+        it("propagates the same event up with $emit",function () {
+            let parentListener = jest.fn();
+            let childListener = jest.fn();
+
+            scope.$on('someEvent',parentListener);
+            scope.$on('someEvent',childListener);
+
+            scope.$emit('someEvent');
+
+            let parentArg = parentListener.mock.calls[listener.mock.calls.length - 1][0].name;
+            let childArg = childListener.mock.calls[listener.mock.calls.length - 1][0].name;
+            expect(parentArg).toEqual(childArg);
+        });
+
+
+        it("propagates down to the scope hierarchy $broadcast",function () {
+            let parentListener = jest.fn();
+            let childListener = jest.fn();
+            let isolatedListener = jest.fn();
+
+            parent.$on('someEvent',parentListener);
+            scope.$on('someEvent',childListener);
+            isolatedChild.$on('someEvent',isolatedListener);
+
+            parent.$broadcast('someEvent');
+
+            expect(parentListener).toHaveBeenCalled();
+            expect(childListener).toHaveBeenCalled();
+            expect(isolatedListener).toHaveBeenCalled();
+        });
+
+
+        it("propagates down same event down with $broadcast",function () {
+            let parentListener = jest.fn();
+            let childListener = jest.fn();
+
+            parent.$on('someEvent',parentListener);
+            scope.$on('someEvent',childListener);
+
+            parent.$broadcast('someEvent');
+
+            let parentArg = parentListener.mock.calls[listener.mock.calls.length - 1][0].name;
+            let childArg = childListener.mock.calls[listener.mock.calls.length - 1][0].name;
+            expect(parentArg).toEqual(childArg);
+        });
+
     });
 });
 
