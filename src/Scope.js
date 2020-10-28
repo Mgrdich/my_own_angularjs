@@ -395,9 +395,12 @@ Scope.prototype.$emit = function (eventName, ...additionalArguments) {
     let propagationStopped = false;
     let event = {
         name: eventName,
-        targetScope: this ,
-        stopPropagation:function () {
+        targetScope: this,
+        stopPropagation: function () {
             propagationStopped = true;
+        },
+        preventDefault: function () {
+            event.defaultPrevented = true; //this.defaultPrevented = true;
         }
     };
     let listenerArgs = [event, ...additionalArguments]; // let listenerArgs = [event].concat(additionalArguments);
@@ -415,9 +418,12 @@ Scope.prototype.$broadcast = function (eventName, ...additionalArguments) {
     let propagationStopped = false;
     let event = {
         name: eventName,
-        targetScope: this ,
-        stopPropagation:function () {
+        targetScope: this,
+        stopPropagation: function () {
             propagationStopped = true;
+        },
+        preventDefault: function () {
+            event.defaultPrevented = true; //this.defaultPrevented = true;
         }
     };
     let listenerArgs = [event, ...additionalArguments]; // let listenerArgs = [event].concat(additionalArguments);

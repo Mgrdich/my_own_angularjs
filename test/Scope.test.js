@@ -1883,10 +1883,25 @@ describe("Scope", function () {
             expect(parentListener).not.toHaveBeenCalled();
         });
 
-
-        it("does not propagate the event if stopped same scope emit",function () {
+        it("does not propagate the event will recieve on the same scope",function () {
             let scopeListener = function (event) {
                 event.stopPropagation();
+            };
+
+            let sameScopeListener = jest.fn();
+
+            scope.$on('someEvent',scopeListener);
+            scope.$on('someEvent',sameScopeListener);
+
+            scope.$emit('someEvent');
+
+            expect(sameScopeListener).toHaveBeenCalled();
+        });
+
+
+        it("does prevent the default",function () {
+            let scopeListener = function (event) {
+                event.preventDefault();
             };
 
             let scopeMock = jest.fn();
@@ -1894,9 +1909,11 @@ describe("Scope", function () {
             scope.$on('someEvent',scopeListener);
             scope.$on('someEvent',scopeMock);
 
-            scope.$emit();
+            let event1 = scope.$emit('someEvent');
+            let event2 = scope.$broadcast('someEvent');
 
-            expect(scopeMock).not.toHaveBeenCalled();
+            expect(event1.defaultPrevented).toBeTruthy();
+            expect(event2.defaultPrevented).toBeTruthy();
         });
 
     });
