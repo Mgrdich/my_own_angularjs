@@ -1846,6 +1846,7 @@ describe("Scope", function () {
             expect(currentScopeOnParent).toBe(parent)
         });
 
+
         it("attaches the current scope in propagation in the event broadcast",function () {
             let currentScopeOnScope = null;
             let currentScopeOnChild = null;
@@ -1864,6 +1865,38 @@ describe("Scope", function () {
 
             expect(currentScopeOnScope).toBe(scope);
             expect(currentScopeOnChild).toBe(child)
+        });
+
+
+        it("does not propagate the event if stopped parent emit",function () {
+            let scopeListener = function (event) {
+                event.stopPropagation();
+            };
+
+            let parentListener = jest.fn();
+
+            scope.$on('someEvent',scopeListener);
+            parent.$on('someEvent',parentListener);
+
+            scope.$emit();
+
+            expect(parentListener).not.toHaveBeenCalled();
+        });
+
+
+        it("does not propagate the event if stopped same scope emit",function () {
+            let scopeListener = function (event) {
+                event.stopPropagation();
+            };
+
+            let scopeMock = jest.fn();
+
+            scope.$on('someEvent',scopeListener);
+            scope.$on('someEvent',scopeMock);
+
+            scope.$emit();
+
+            expect(scopeMock).not.toHaveBeenCalled();
         });
 
     });

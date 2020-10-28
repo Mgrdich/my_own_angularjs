@@ -392,20 +392,34 @@ Scope.prototype.$on = function (eventName,listener) {
 };
 
 Scope.prototype.$emit = function (eventName, ...additionalArguments) {
-    let event = {name: eventName, targetScope: this};
+    let propagationStopped = false;
+    let event = {
+        name: eventName,
+        targetScope: this ,
+        stopPropagation:function () {
+            propagationStopped = true;
+        }
+    };
     let listenerArgs = [event, ...additionalArguments]; // let listenerArgs = [event].concat(additionalArguments);
     let scope = this;
     do {
         event.currentScope = scope;
         scope.$$fireEventsOnScope(eventName, listenerArgs);
         scope = scope.$parent;
-    } while (scope);
+    } while (scope && !propagationStopped);
 
     return event;
 };
 
 Scope.prototype.$broadcast = function (eventName, ...additionalArguments) {
-    let event = {name: eventName, targetScope: this};
+    let propagationStopped = false;
+    let event = {
+        name: eventName,
+        targetScope: this ,
+        stopPropagation:function () {
+            propagationStopped = true;
+        }
+    };
     let listenerArgs = [event, ...additionalArguments]; // let listenerArgs = [event].concat(additionalArguments);
     this.$$everyScope(function (scope) {
         event.currentScope = scope;
