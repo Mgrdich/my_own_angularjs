@@ -392,7 +392,7 @@ Scope.prototype.$on = function (eventName,listener) {
 };
 
 Scope.prototype.$emit = function (eventName, ...additionalArguments) {
-    let event = {name: eventName};
+    let event = {name: eventName,targetScope:this};
     let listenerArgs = [event, ...additionalArguments]; // let listenerArgs = [event].concat(additionalArguments);
     let scope = this;
     do {
@@ -404,7 +404,7 @@ Scope.prototype.$emit = function (eventName, ...additionalArguments) {
 };
 
 Scope.prototype.$broadcast = function (eventName, ...additionalArguments) {
-    let event = {name: eventName};
+    let event = {name: eventName,targetScope:this};
     let listenerArgs = [event, ...additionalArguments]; // let listenerArgs = [event].concat(additionalArguments);
     this.$$everyScope(function (scope) {
         scope.$$fireEventsOnScope(eventName, listenerArgs);

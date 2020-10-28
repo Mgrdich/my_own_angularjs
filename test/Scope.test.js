@@ -1798,6 +1798,33 @@ describe("Scope", function () {
             expect(parentArg).toEqual(childArg);
         });
 
+
+        it("includes the current and targeted scope in the event object emit", function () {
+            let scopeListener = jest.fn();
+            let parentListener = jest.fn();
+
+            scope.$on('someEvent', scopeListener);
+            parent.$on('someEvent', parentListener);
+
+            scope.$emit('someEvent');
+
+            expect(scopeListener.mock.calls[scopeListener.mock.calls.length - 1][0].targetScope).toEqual(scope);
+            expect(parentListener.mock.calls[parentListener.mock.calls.length - 1][0].targetScope).toEqual(scope);
+        });
+
+        it("includes the current and targeted scope in the event object broadcast", function () {
+            let scopeListener = jest.fn();
+            let parentListener = jest.fn();
+
+            scope.$on('someEvent', scopeListener);
+            parent.$on('someEvent', parentListener);
+
+            scope.$broadcast('someEvent');
+
+            expect(scopeListener.mock.calls[scopeListener.mock.calls.length - 1][0].targetScope).toEqual(scope);
+            expect(parentListener.mock.calls[parentListener.mock.calls.length - 1][0].targetScope).toEqual(parent);
+        });
+
     });
 });
 
