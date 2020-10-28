@@ -392,10 +392,11 @@ Scope.prototype.$on = function (eventName,listener) {
 };
 
 Scope.prototype.$emit = function (eventName, ...additionalArguments) {
-    let event = {name: eventName,targetScope:this};
+    let event = {name: eventName, targetScope: this};
     let listenerArgs = [event, ...additionalArguments]; // let listenerArgs = [event].concat(additionalArguments);
     let scope = this;
     do {
+        event.currentScope = scope;
         scope.$$fireEventsOnScope(eventName, listenerArgs);
         scope = scope.$parent;
     } while (scope);
@@ -404,9 +405,10 @@ Scope.prototype.$emit = function (eventName, ...additionalArguments) {
 };
 
 Scope.prototype.$broadcast = function (eventName, ...additionalArguments) {
-    let event = {name: eventName,targetScope:this};
+    let event = {name: eventName, targetScope: this};
     let listenerArgs = [event, ...additionalArguments]; // let listenerArgs = [event].concat(additionalArguments);
     this.$$everyScope(function (scope) {
+        event.currentScope = scope;
         scope.$$fireEventsOnScope(eventName, listenerArgs);
         return true;
     });

@@ -1801,15 +1801,15 @@ describe("Scope", function () {
 
         it("includes the current and targeted scope in the event object emit", function () {
             let scopeListener = jest.fn();
-            let parentListener = jest.fn();
+            let childListener = jest.fn();
 
             scope.$on('someEvent', scopeListener);
-            parent.$on('someEvent', parentListener);
+            parent.$on('someEvent', childListener);
 
             scope.$emit('someEvent');
 
             expect(scopeListener.mock.calls[scopeListener.mock.calls.length - 1][0].targetScope).toEqual(scope);
-            expect(parentListener.mock.calls[parentListener.mock.calls.length - 1][0].targetScope).toEqual(scope);
+            expect(childListener.mock.calls[childListener.mock.calls.length - 1][0].targetScope).toEqual(scope);
         });
 
         it("includes the current and targeted scope in the event object broadcast", function () {
@@ -1817,12 +1817,53 @@ describe("Scope", function () {
             let parentListener = jest.fn();
 
             scope.$on('someEvent', scopeListener);
-            parent.$on('someEvent', parentListener);
+            child.$on('someEvent', parentListener);
 
             scope.$broadcast('someEvent');
 
             expect(scopeListener.mock.calls[scopeListener.mock.calls.length - 1][0].targetScope).toEqual(scope);
-            expect(parentListener.mock.calls[parentListener.mock.calls.length - 1][0].targetScope).toEqual(parent);
+            expect(parentListener.mock.calls[parentListener.mock.calls.length - 1][0].targetScope).toEqual(scope);
+        });
+
+
+        it("attaches the current scope in propagation in the event emit",function () {
+            let currentScopeOnScope = null;
+            let currentScopeOnParent = null;
+
+            let scopeListener = function (event) {
+                currentScopeOnScope = event.currentScope;
+            };
+            let parentListener = function (event) {
+                currentScopeOnParent = event.currentScope;
+            };
+
+            scope.$on('someEvent', scopeListener);
+            parent.$on('someEvent', parentListener);
+
+            scope.$emit('someEvent');
+
+            expect(currentScopeOnScope).toBe(scope);
+            expect(currentScopeOnParent).toBe(parent)
+        });
+
+        it("attaches the current scope in propagation in the event broadcast",function () {
+            let currentScopeOnScope = null;
+            let currentScopeOnChild = null;
+
+            let scopeListener = function (event) {
+                currentScopeOnScope = event.currentScope;
+            };
+            let childListener = function (event) {
+                currentScopeOnChild = event.currentScope;
+            };
+
+            scope.$on('someEvent', scopeListener);
+            child.$on('someEvent', childListener);
+
+            scope.$broadcast('someEvent');
+
+            expect(currentScopeOnScope).toBe(scope);
+            expect(currentScopeOnChild).toBe(child)
         });
 
     });
