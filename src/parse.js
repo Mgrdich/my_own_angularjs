@@ -2,6 +2,19 @@
 //the expression by evaluating it as JavaScript code. It also sets the context of the code to
 //be a scope object using the JavaScript with statement.
 
+/**
+ * @description Graphical explanation
+ * 'a + b'
+ * ---- Lexer ---->
+ * Tokens [{text:'a',identifier:true},{text:'+'},{text:'b',identifier:true}]
+ *
+ * ---- AST Builder ----->
+ * {type: AST.BinaryExpression,operator: '+',left: {type: AST.Identifier,name: 'a'},right: {type: AST.Identifier,name: 'b'}}
+ *
+ * ---- AST Compiler ----->
+ * function(scope) {return scope.a + scope.b;}
+ * */
+
 export default function parse(expr) {
     let lexer = new Lexer();
     let parser = new Parser(lexer);
