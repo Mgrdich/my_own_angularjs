@@ -410,6 +410,7 @@ Scope.prototype.$emit = function (eventName, ...additionalArguments) {
         scope.$$fireEventsOnScope(eventName, listenerArgs);
         scope = scope.$parent;
     } while (scope && !propagationStopped);
+    event.currentScope = null;
 
     return event;
 };
@@ -432,6 +433,8 @@ Scope.prototype.$broadcast = function (eventName, ...additionalArguments) {
         scope.$$fireEventsOnScope(eventName, listenerArgs);
         return true;
     });
+    event.currentScope = null;
+
     return event;
 };
 

@@ -1868,6 +1868,26 @@ describe("Scope", function () {
         });
 
 
+        it("sets current Scope null after propagation is over",function () {
+           let event = null;
+           let event1 = null;
+           let scopeListener = function (evt){
+               event = evt;
+           };
+           let scopeListener1 = function (evt){
+               event1 = evt;
+           }
+           scope.$on('someEvent',scopeListener);
+           scope.$on('someEventForBroadcast',scopeListener1);
+
+           scope.$emit('someEvent');
+           scope.$broadcast('someEventForBroadcast');
+
+           expect(event.currentScope).toBe(null);
+           expect(event1.currentScope).toBe(null);
+        });
+
+
         it("does not propagate the event if stopped parent emit",function () {
             let scopeListener = function (event) {
                 event.stopPropagation();
