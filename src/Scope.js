@@ -102,6 +102,7 @@ Scope.prototype.$new = function (isolated,parent) {
 
 Scope.prototype.$destroy = function () {
     //as long as it is not the rootscope and has a parent i will also remove the watchers os scope
+    this.$broadcast('$destroy'); // notify some cleanups functions 
     if (this.$parent) {
         let siblings = this.$parent.$$children;
         let indexOfThis = siblings.indexOf(this);
@@ -109,6 +110,7 @@ Scope.prototype.$destroy = function () {
              siblings.splice(indexOfThis,1);
         }
         this.$$watchers = null; //for the current scope digest with no upper inheritance
+        this.$$listeners = {}; //for $emit and broadcast listeners to not run
     }
 };
 
@@ -399,7 +401,7 @@ Scope.prototype.$emit = function (eventName, ...additionalArguments) {
         stopPropagation: function () {
             propagationStopped = true;
         },
-        preventDefault: function () {
+        preventDefault: function () { //for angular routes
             event.defaultPrevented = true; //this.defaultPrevented = true;
         }
     };
@@ -410,7 +412,7 @@ Scope.prototype.$emit = function (eventName, ...additionalArguments) {
         scope.$$fireEventsOnScope(eventName, listenerArgs);
         scope = scope.$parent;
     } while (scope && !propagationStopped);
-    event.currentScope = null;
+    event.currentScope = null; //not to have a value after the emit is done
 
     return event;
 };
@@ -420,10 +422,10 @@ Scope.prototype.$broadcast = function (eventName, ...additionalArguments) {
     let event = {
         name: eventName,
         targetScope: this,
-        stopPropagation: function () {
+        stopPropagation: function () { //is this used???
             propagationStopped = true;
         },
-        preventDefault: function () {
+        preventDefault: function () { //for angular routes
             event.defaultPrevented = true; //this.defaultPrevented = true;
         }
     };
@@ -433,7 +435,7 @@ Scope.prototype.$broadcast = function (eventName, ...additionalArguments) {
         scope.$$fireEventsOnScope(eventName, listenerArgs);
         return true;
     });
-    event.currentScope = null;
+    event.currentScope = null; //not to have a value after the emit is done
 
     return event;
 };
@@ -445,7 +447,11 @@ Scope.prototype.$$fireEventsOnScope = function (eventName, listenerArgs) {
         if (listeners[i] === null) {
             listeners.splice(i, 1);
         } else {
-            listeners[i](...listenerArgs);//listener.apply(null,listenerArgs)
+            try {
+                listeners[i](...listenerArgs); //listener.apply(null,listenerArgs) //old way of the spread
+            } catch (e) {
+                console.error(e);
+            }
             i++;
         }
     }

@@ -1603,14 +1603,17 @@ describe("Scope", function () {
             isolatedChild = scope.$new(true);
         });
 
-        it("allows registration events",function () {
-            let listener1 = function () {};
-            let listener2 = function () {};
-            let listener3 = function () {};
+        it("allows registration events", function () {
+            let listener1 = function () {
+            };
+            let listener2 = function () {
+            };
+            let listener3 = function () {
+            };
 
-            scope.$on('someEvent',listener1);
-            scope.$on('someEvent',listener2);
-            scope.$on('someOtherEvent',listener3);
+            scope.$on('someEvent', listener1);
+            scope.$on('someEvent', listener2);
+            scope.$on('someOtherEvent', listener3);
 
             expect(scope.$$listeners).toEqual({
                 someEvent: [listener1, listener2],
@@ -1620,14 +1623,17 @@ describe("Scope", function () {
         });
 
 
-        it("register different events on each scope",function () {
-            let listener1 = function () {};
-            let listener2 = function () {};
-            let listener3 = function () {};
+        it("register different events on each scope", function () {
+            let listener1 = function () {
+            };
+            let listener2 = function () {
+            };
+            let listener3 = function () {
+            };
 
-            scope.$on('someEvent',listener1);
-            child.$on('someEvent',listener2);
-            isolatedChild.$on('someOtherEvent',listener3);
+            scope.$on('someEvent', listener1);
+            child.$on('someEvent', listener2);
+            isolatedChild.$on('someOtherEvent', listener3);
 
             expect(scope.$$listeners).toEqual({
                 someEvent: [listener1],
@@ -1646,7 +1652,7 @@ describe("Scope", function () {
 
         //$emit and $broadcast common code
         def.Lo.forEach(['$emit', '$broadcast'], function (method) {
-        
+
             it("calls listeners registered for matching events on :" + method, function () {
                 let listener1 = jest.fn();
                 let listener2 = jest.fn();
@@ -1660,8 +1666,8 @@ describe("Scope", function () {
 
             it("passes an an event object with the same name :" + method, function () {
                 let listener = jest.fn();
-                scope.$on('someEvent',listener);
-                
+                scope.$on('someEvent', listener);
+
                 scope[method]('someEvent');
 
                 expect(listener).toHaveBeenCalled();
@@ -1673,8 +1679,8 @@ describe("Scope", function () {
                 let listener1 = jest.fn();
                 let listener2 = jest.fn();
 
-                scope.$on('someEvent',listener1);
-                scope.$on('someEvent',listener2);
+                scope.$on('someEvent', listener1);
+                scope.$on('someEvent', listener2);
 
                 scope[method]('someEvent');
 
@@ -1685,21 +1691,21 @@ describe("Scope", function () {
             });
 
 
-            it("passes additional argument on Emit for $on to receive :"+method,function () {
+            it("passes additional argument on Emit for $on to receive :" + method, function () {
                 let listener = jest.fn();
 
-                scope.$on('someEvent',listener);
+                scope.$on('someEvent', listener);
 
-                scope[method]('someEvent','firstArgument',['secondArgument1','secondArgument2'],3);
+                scope[method]('someEvent', 'firstArgument', ['secondArgument1', 'secondArgument2'], 3);
 
                 expect(listener.mock.calls[listener.mock.calls.length - 1][0].name).toEqual('someEvent');
                 expect(listener.mock.calls[listener.mock.calls.length - 1][1]).toEqual('firstArgument');
-                expect(listener.mock.calls[listener.mock.calls.length - 1][2]).toEqual(['secondArgument1','secondArgument2']);
+                expect(listener.mock.calls[listener.mock.calls.length - 1][2]).toEqual(['secondArgument1', 'secondArgument2']);
                 expect(listener.mock.calls[listener.mock.calls.length - 1][3]).toEqual(3);
             });
 
 
-            it("returns the event of the object :" + method,function () {
+            it("returns the event of the object :" + method, function () {
                 let returnedObject = scope[method]('someEvent');
 
                 expect(returnedObject).toBeDefined();
@@ -1718,7 +1724,7 @@ describe("Scope", function () {
             });
 
 
-            it("does not skip next listener when it is removed from a listener: "+method,function () {
+            it("does not skip next listener when it is removed from a listener: " + method, function () {
                 let deregister;
 
                 let listener = function () {
@@ -1727,8 +1733,8 @@ describe("Scope", function () {
 
                 let listener2 = jest.fn();
 
-                deregister = scope.$on('firstEvent',listener);
-                scope.$on('firstEvent',listener2);
+                deregister = scope.$on('firstEvent', listener);
+                scope.$on('firstEvent', listener2);
 
                 scope[method]('firstEvent');
 
@@ -1738,12 +1744,12 @@ describe("Scope", function () {
         });
 
 
-        it("propagates up to the scope hierarchy $emit",function () {
+        it("propagates up to the scope hierarchy $emit", function () {
             let parentListener = jest.fn();
             let childListener = jest.fn();
 
-            parent.$on('someEvent',parentListener);
-            scope.$on('someEvent',childListener);
+            parent.$on('someEvent', parentListener);
+            scope.$on('someEvent', childListener);
 
             scope.$emit('someEvent');
 
@@ -1752,12 +1758,12 @@ describe("Scope", function () {
         });
 
 
-        it("propagates the same event up with $emit",function () {
+        it("propagates the same event up with $emit", function () {
             let parentListener = jest.fn();
             let childListener = jest.fn();
 
-            scope.$on('someEvent',parentListener);
-            scope.$on('someEvent',childListener);
+            scope.$on('someEvent', parentListener);
+            scope.$on('someEvent', childListener);
 
             scope.$emit('someEvent');
 
@@ -1767,14 +1773,14 @@ describe("Scope", function () {
         });
 
 
-        it("propagates down to the scope hierarchy $broadcast",function () {
+        it("propagates down to the scope hierarchy $broadcast", function () {
             let parentListener = jest.fn();
             let childListener = jest.fn();
             let isolatedListener = jest.fn();
 
-            parent.$on('someEvent',parentListener);
-            scope.$on('someEvent',childListener);
-            isolatedChild.$on('someEvent',isolatedListener);
+            parent.$on('someEvent', parentListener);
+            scope.$on('someEvent', childListener);
+            isolatedChild.$on('someEvent', isolatedListener);
 
             parent.$broadcast('someEvent');
 
@@ -1784,12 +1790,12 @@ describe("Scope", function () {
         });
 
 
-        it("propagates down same event down with $broadcast",function () {
+        it("propagates down same event down with $broadcast", function () {
             let parentListener = jest.fn();
             let childListener = jest.fn();
 
-            parent.$on('someEvent',parentListener);
-            scope.$on('someEvent',childListener);
+            parent.$on('someEvent', parentListener);
+            scope.$on('someEvent', childListener);
 
             parent.$broadcast('someEvent');
 
@@ -1826,7 +1832,7 @@ describe("Scope", function () {
         });
 
 
-        it("attaches the current scope in propagation in the event emit",function () {
+        it("attaches the current scope in propagation in the event emit", function () {
             let currentScopeOnScope = null;
             let currentScopeOnParent = null;
 
@@ -1847,7 +1853,7 @@ describe("Scope", function () {
         });
 
 
-        it("attaches the current scope in propagation in the event broadcast",function () {
+        it("attaches the current scope in propagation in the event broadcast", function () {
             let currentScopeOnScope = null;
             let currentScopeOnChild = null;
 
@@ -1868,50 +1874,51 @@ describe("Scope", function () {
         });
 
 
-        it("sets current Scope null after propagation is over",function () {
-           let event = null;
-           let event1 = null;
-           let scopeListener = function (evt){
-               event = evt;
-           };
-           let scopeListener1 = function (evt){
-               event1 = evt;
-           }
-           scope.$on('someEvent',scopeListener);
-           scope.$on('someEventForBroadcast',scopeListener1);
+        it("sets current Scope null after propagation is over", function () {
+            let event = null;
+            let event1 = null;
+            let scopeListener = function (evt) {
+                event = evt;
+            };
+            let scopeListener1 = function (evt) {
+                event1 = evt;
+            }
+            scope.$on('someEvent', scopeListener);
+            scope.$on('someEventForBroadcast', scopeListener1);
 
-           scope.$emit('someEvent');
-           scope.$broadcast('someEventForBroadcast');
+            scope.$emit('someEvent');
+            scope.$broadcast('someEventForBroadcast');
 
-           expect(event.currentScope).toBe(null);
-           expect(event1.currentScope).toBe(null);
+            expect(event.currentScope).toBe(null);
+            expect(event1.currentScope).toBe(null);
         });
 
 
-        it("does not propagate the event if stopped parent emit",function () {
+        it("does not propagate the event if stopped parent emit", function () {
             let scopeListener = function (event) {
                 event.stopPropagation();
             };
 
             let parentListener = jest.fn();
 
-            scope.$on('someEvent',scopeListener);
-            parent.$on('someEvent',parentListener);
+            scope.$on('someEvent', scopeListener);
+            parent.$on('someEvent', parentListener);
 
             scope.$emit();
 
             expect(parentListener).not.toHaveBeenCalled();
         });
 
-        it("does not propagate the event will recieve on the same scope",function () {
+
+        it("does not propagate the event will recieve on the same scope", function () {
             let scopeListener = function (event) {
                 event.stopPropagation();
             };
 
             let sameScopeListener = jest.fn();
 
-            scope.$on('someEvent',scopeListener);
-            scope.$on('someEvent',sameScopeListener);
+            scope.$on('someEvent', scopeListener);
+            scope.$on('someEvent', sameScopeListener);
 
             scope.$emit('someEvent');
 
@@ -1919,21 +1926,78 @@ describe("Scope", function () {
         });
 
 
-        it("does prevent the default",function () {
+        it("does prevent the default", function () {
             let scopeListener = function (event) {
                 event.preventDefault();
             };
 
             let scopeMock = jest.fn();
 
-            scope.$on('someEvent',scopeListener);
-            scope.$on('someEvent',scopeMock);
+            scope.$on('someEvent', scopeListener);
+            scope.$on('someEvent', scopeMock);
 
             let event1 = scope.$emit('someEvent');
             let event2 = scope.$broadcast('someEvent');
 
             expect(event1.defaultPrevented).toBeTruthy();
             expect(event2.defaultPrevented).toBeTruthy();
+        });
+
+
+        it("fires a destroy when it is removed", function () {
+            let listener = jest.fn();
+            scope.$on("$destroy", listener);
+
+            scope.$destroy();
+
+            expect(listener).toHaveBeenCalled();
+        });
+
+
+        it("fires a destroy children when it is removed", function () {
+            let listener = jest.fn();
+            child.$on("$destroy", listener);
+
+            scope.$destroy();
+
+            expect(listener).toHaveBeenCalled();
+        });
+
+
+        it("no longer calls listeners after destroyed", function () {
+            let listener = jest.fn();
+            scope.$on('myEvent', listener);
+
+            scope.$destroy();
+
+            scope.$emit('myEvent');
+            expect(listener).not.toHaveBeenCalled();
+
+        });
+
+
+        it("does not stop when exception is thrown", function () {
+            let listener1 = function () {
+                throw "$emit throw error";
+            };
+            let listener2 = function () {
+                throw "$broadcast throw error";
+            };
+
+            let listener3 = jest.fn();
+            let listener4 = jest.fn();
+
+            scope.$on('someEvent$emit',listener1);
+            scope.$on('someEvent$emit',listener3);
+
+            scope.$on('someEvent$broadcast',listener2);
+            scope.$on('someEvent$broadcast',listener4);
+
+            scope.$emit('someEvent$emit');
+            scope.$broadcast('someEvent$broadcast');
+
+            expect(listener3).toHaveBeenCalled();
+            expect(listener4).toHaveBeenCalled();
         });
 
     });
