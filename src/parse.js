@@ -8,6 +8,15 @@
 const Lib = require("../src/util/functions");
 const def = new Lib();
 
+let ESCAPES = {
+    'n': '\n',
+    'f': '\f',
+    'r': '\r',
+    't': '\t',
+    'v': '\v',
+    '\'': '\'',
+    '"': '"',
+};
 
 function parse(expr) {
     let lexer = new Lexer();
@@ -64,8 +73,8 @@ Lexer.prototype.lex = function (text){
         this.ch = this.text.charAt(this.index);
         if (this.isNumber(this.ch) || this.ch === '.' && this.isNumber(this.peek())) {
             this.readNumber();
-        } else if (this.ch === '\'' || this.ch === '"') {
-            this.readString();
+        } else if (this.ch === '\'' || this.ch === '"') { //keep in mind this inside original string quote
+            this.readString(this.ch);
         } else {
             throw `Unexpected next character ${this.ch}`;
         }
@@ -106,22 +115,38 @@ Lexer.prototype.readNumber = function () {
     });
 };
 
-Lexer.prototype.readString = function () {
+Lexer.prototype.readString = function (quote) {
     this.index++; //skip the quote character
     let string = '';
+    let escape = false;
+
     while (this.index < this.text.length) {
-        let ch = this.text.charAt(this.index);
-        if(ch === '\'' || ch === '"') {
+        let ch = this.text.charAt(this.index); //current character
+
+        if (escape) {
+            let replacement = ESCAPES[ch];
+            if (replacement) {
+                string += replacement;
+            } else {
+                string += ch;
+            }
+            escape = false;
+        } else if (quote === ch) { //first quote check is done up should equall to last quote
             this.index++; //last character skip
             this.tokens.push({
-               text:string,
-               value:string
+                text: string,
+                value: string
             });
+            return ; //this will terminate and indicate quotes match
+        } else if (ch === '\\') { //espace \ then consider \
+            escape = true;
         } else {
             string += ch;
         }
+
         this.index++;
     }
+    throw 'Unmatched quote';
 }
 
 Lexer.prototype.peek = function () {  //it looks at the next char without moving the index
@@ -180,6 +205,12 @@ function ASTCompiler(astBuilder) {
     this.astBuilder = astBuilder; //taking the builder form ast
 }
 
+ASTCompiler.prototype.stringEscapeRegex = /[^ a-zA-Z0-9]/g;
+
+ASTCompiler.prototype.stringEscapeFn = function (c){
+    return '\\u' + ('0000' + c.charCodeAt(0).toString(16)).slice(-4);
+}
+
 ASTCompiler.prototype.compile = function (text){
     let ast = this.astBuilder.ast(text);
     //AST compilation will be done here
@@ -201,7 +232,7 @@ ASTCompiler.prototype.recurse = function (ast) { //param is the ast structure no
 
 ASTCompiler.prototype.escape = function (value){
     if(def.Lo.isString(value)){
-        return '\'' + value + '\'';
+        return '\'' + value.replace(this.stringEscapeRegex,this.stringEscapeFn) + '\'';
     } else {
         return value;
     }

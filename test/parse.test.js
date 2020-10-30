@@ -64,8 +64,29 @@ describe("Parse", function () {
         expect(fn()).toBe('abc');
     });
 
+
     it("can parse string in a single quote",function (){
         let fn = parse("'abc'");
         expect(fn()).toBe('abc');
+    });
+
+
+    it("will not parse a string with mismatching quotes", function () {
+        //first should equal the last
+        expect(function () {
+            parse('"abc\'');
+        }).toThrow();
+    });
+
+
+    it("can parse a string with a single quote inside",function () {
+       let fn = parse("'a\\\'b'");
+       expect(fn()).toEqual('a\'b');
+    });
+
+
+    it('can parse a string with double quotes inside', function () {
+        let fn = parse('"a\\\"b"');
+        expect(fn()).toEqual('a\"b');
     });
 });
