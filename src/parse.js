@@ -5,6 +5,8 @@
  * be a scope object using the JavaScript with statement.
  */
 
+const Lib = require("../src/util/functions");
+const def = new Lib();
 
 
 function parse(expr) {
@@ -60,8 +62,10 @@ Lexer.prototype.lex = function (text){
 
     while (this.index < this.text.length) { //where we will add different kind of characters
         this.ch = this.text.charAt(this.index);
-        if(this.isNumber(this.ch) || this.ch === '.' && this.isNumber(this.peek())){
+        if (this.isNumber(this.ch) || this.ch === '.' && this.isNumber(this.peek())) {
             this.readNumber();
+        } else if (this.ch === '\'' || this.ch === '"') {
+            this.readString();
         } else {
             throw `Unexpected next character ${this.ch}`;
         }
@@ -83,12 +87,12 @@ Lexer.prototype.readNumber = function () {
         } else { //scientific notation
             let nextCh = this.peek();
             let prevCh = numberAsString.charAt(numberAsString.length - 1);
-            if(ch === 'e' && this.isExpOpertator(nextCh)){ //e+ e- e1 pointer on the exponent
+            if(ch === 'e' && this.isExpOperator(nextCh)){ //e+ e- e1 pointer on the exponent
                 numberAsString +=ch;
-            } else if(this.isExpOpertator(ch) && prevCh === 'e' && nextCh && this.isNumber(nextCh)){
+            } else if(this.isExpOperator(ch) && prevCh === 'e' && nextCh && this.isNumber(nextCh)){
                 //first e+ e- e2 - but pointer now is on operator check after the number is there number
                 numberAsString +=ch;
-            } else if(this.isExpOpertator(ch) && prevCh === 'e' && !nextCh || !this.isNumber(nextCh)){
+            } else if(this.isExpOperator(ch) && prevCh === 'e' && !nextCh || !this.isNumber(nextCh)){
                 throw "Invalid Exponent";
             } else {
                 break;
@@ -102,6 +106,24 @@ Lexer.prototype.readNumber = function () {
     });
 };
 
+Lexer.prototype.readString = function () {
+    this.index++; //skip the quote character
+    let string = '';
+    while (this.index < this.text.length) {
+        let ch = this.text.charAt(this.index);
+        if(ch === '\'' || ch === '"') {
+            this.index++; //last character skip
+            this.tokens.push({
+               text:string,
+               value:string
+            });
+        } else {
+            string += ch;
+        }
+        this.index++;
+    }
+}
+
 Lexer.prototype.peek = function () {  //it looks at the next char without moving the index
     if (this.index < this.text.length - 1) {
         return this.text.charAt(this.index + 1);
@@ -109,7 +131,7 @@ Lexer.prototype.peek = function () {  //it looks at the next char without moving
     return false;
 };
 
-Lexer.prototype.isExpOpertator = function (ch){
+Lexer.prototype.isExpOperator = function (ch){
     return ch === '-' || ch === '+' || this.isNumber(ch);
 }
 
@@ -173,8 +195,16 @@ ASTCompiler.prototype.recurse = function (ast) { //param is the ast structure no
             this.state.body.push('return ',this.recurse(ast.body),';');
             break;
         case AST.Literal:
-            return ast.value;
+            return this.escape(ast.value);
     }
 };
+
+ASTCompiler.prototype.escape = function (value){
+    if(def.Lo.isString(value)){
+        return '\'' + value + '\'';
+    } else {
+        return value;
+    }
+}
 
 module.exports = parse;

@@ -59,7 +59,13 @@ describe("Parse", function () {
     });
 
 
-    it("can parse string in a single quote",function (){
+    it("can parse string in a double quote",function (){
+        let fn = parse('"abc"');
+        expect(fn()).toBe('abc');
+    });
 
+    it("can parse string in a single quote",function (){
+        let fn = parse("'abc'");
+        expect(fn()).toBe('abc');
     });
 });
