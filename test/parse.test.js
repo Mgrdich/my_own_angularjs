@@ -58,4 +58,8 @@ describe("Parse", function () {
         expect(function() { parse('42e-a'); }).toThrow();
     });
 
+
+    it("can parse string in a single quote",function (){
+
+    });
 });
