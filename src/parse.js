@@ -7,7 +7,7 @@
 
 
 
-export default function parse(expr) {
+function parse(expr) {
     let lexer = new Lexer();
     let parser = new Parser(lexer);
     return parser.parse(expr);
@@ -55,12 +55,12 @@ Lexer.prototype.lex = function (text){
     //Tokenization will be done here
     this.text = text;
     this.index = 0; //out current character index in string
-    this.ch = undefined; //current character
+    this.ch = undefined; //current character but why not a local variable?
     this.tokens = [];
 
     while (this.index < this.text.length) { //where we will add different kind of characters
         this.ch = this.text.charAt(this.index);
-        if(this.isNumber(this.ch)){
+        if(this.isNumber(this.ch) || this.ch === '.' && this.isNumber(this.peek())){
             this.readNumber();
         } else {
             throw `Unexpected next character ${this.ch}`;
@@ -77,11 +77,22 @@ Lexer.prototype.readNumber = function () {
     //loops after finding one number to check for more
     let numberAsString = '';
     while (this.index < this.text.length) {
-       let ch = this.text.charAt(this.index);
-        if(this.isNumber(this.ch)){
+       let ch = this.text.charAt(this.index).toLowerCase();
+        if(ch === '.' || this.isNumber(ch)){
             numberAsString += ch;
-        } else {
-            break;
+        } else { //scientific notation
+            let nextCh = this.peek();
+            let prevCh = numberAsString.charAt(numberAsString.length - 1);
+            if(ch === 'e' && this.isExpOpertator(nextCh)){ //e+ e- e1 pointer on the exponent
+                numberAsString +=ch;
+            } else if(this.isExpOpertator(ch) && prevCh === 'e' && nextCh && this.isNumber(nextCh)){
+                //first e+ e- e2 - but pointer now is on operator check after the number is there number
+                numberAsString +=ch;
+            } else if(this.isExpOpertator(ch) && prevCh === 'e' && !nextCh || !this.isNumber(nextCh)){
+                throw "Invalid Exponent";
+            } else {
+                break;
+            }
         }
         this.index++;
     }
@@ -90,6 +101,17 @@ Lexer.prototype.readNumber = function () {
         value:Number(numberAsString)
     });
 };
+
+Lexer.prototype.peek = function () {  //it looks at the next char without moving the index
+    if (this.index < this.text.length - 1) {
+        return this.text.charAt(this.index + 1);
+    }
+    return false;
+};
+
+Lexer.prototype.isExpOpertator = function (ch){
+    return ch === '-' || ch === '+' || this.isNumber(ch);
+}
 
 /*------------------------------------------ AST ------------------------------------------*/
 /**
@@ -154,3 +176,5 @@ ASTCompiler.prototype.recurse = function (ast) { //param is the ast structure no
             return ast.value;
     }
 };
+
+module.exports = parse;
