@@ -1653,7 +1653,7 @@ describe("Scope", function () {
         //$emit and $broadcast common code
         def.Lo.forEach(['$emit', '$broadcast'], function (method) {
 
-            it("calls listeners registered for matching events on :" + method, function () {
+            it(`calls listeners registered for matching events on : ${method}`, function () {
                 let listener1 = jest.fn();
                 let listener2 = jest.fn();
                 scope.$on('someEvent', listener1);
@@ -1664,7 +1664,7 @@ describe("Scope", function () {
             });
 
 
-            it("passes an an event object with the same name :" + method, function () {
+            it(`passes an an event object with the same name : ${method}`, function () {
                 let listener = jest.fn();
                 scope.$on('someEvent', listener);
 
@@ -1675,7 +1675,7 @@ describe("Scope", function () {
             });
 
 
-            it("passes the same event object to each listener on :" + method, function () {
+            it(`passes the same event object to each listener on : ${method}`, function () {
                 let listener1 = jest.fn();
                 let listener2 = jest.fn();
 
@@ -1691,7 +1691,7 @@ describe("Scope", function () {
             });
 
 
-            it("passes additional argument on Emit for $on to receive :" + method, function () {
+            it(`passes additional argument on Emit for $on to receive : ${method}`, function () {
                 let listener = jest.fn();
 
                 scope.$on('someEvent', listener);
@@ -1705,7 +1705,7 @@ describe("Scope", function () {
             });
 
 
-            it("returns the event of the object :" + method, function () {
+            it(`returns the event of the object : ${method}`, function () {
                 let returnedObject = scope[method]('someEvent');
 
                 expect(returnedObject).toBeDefined();
@@ -1713,7 +1713,7 @@ describe("Scope", function () {
             });
 
 
-            it("deregister the events from the listener :" + method, function () {
+            it(`deregister the events from the listener : ${method}`, function () {
                 let mock = jest.fn();
                 let deregister = scope.$on('someEvent', mock);
 
@@ -1724,7 +1724,7 @@ describe("Scope", function () {
             });
 
 
-            it("does not skip next listener when it is removed from a listener: " + method, function () {
+            it(`does not skip next listener when it is removed from a listener: ${method} `, function () {
                 let deregister;
 
                 let listener = function () {
