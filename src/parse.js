@@ -147,7 +147,7 @@ Lexer.prototype.readString = function (quote) {
         this.index++;
     }
     throw 'Unmatched quote';
-}
+};
 
 Lexer.prototype.peek = function () {  //it looks at the next char without moving the index
     if (this.index < this.text.length - 1) {
@@ -158,7 +158,7 @@ Lexer.prototype.peek = function () {  //it looks at the next char without moving
 
 Lexer.prototype.isExpOperator = function (ch){
     return ch === '-' || ch === '+' || this.isNumber(ch);
-}
+};
 
 /*------------------------------------------ AST ------------------------------------------*/
 /**
@@ -209,7 +209,7 @@ ASTCompiler.prototype.stringEscapeRegex = /[^ a-zA-Z0-9]/g;
 
 ASTCompiler.prototype.stringEscapeFn = function (c){
     return '\\u' + ('0000' + c.charCodeAt(0).toString(16)).slice(-4);
-}
+};
 
 ASTCompiler.prototype.compile = function (text){
     let ast = this.astBuilder.ast(text);
@@ -236,6 +236,6 @@ ASTCompiler.prototype.escape = function (value){
     } else {
         return value;
     }
-}
+};
 
 module.exports = parse;
