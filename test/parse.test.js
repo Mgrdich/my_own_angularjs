@@ -125,4 +125,10 @@ describe("Parse", function () {
         let fn = parse(' \n42');
         expect(fn()).toEqual(42);
     });
+
+
+    /*it('will parse empty array', function () {
+        let fn = parse('[]');
+        expect(fn()).toEqual([]);
+    });*/
 });
