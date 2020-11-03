@@ -86,9 +86,38 @@ describe("Parse", function () {
     });
 
 
-    it('can parse a string with double quotes inside', function () {
+    it("can parse a string with double quotes inside", function () {
         let fn = parse('"a\\\"b"'); //with one backslash is escaping the second slash
         expect(fn()).toEqual("a\"b"); //with third is escaping the double quote
         expect(fn()).toEqual('a"b');
+    });
+
+
+    it("can parse a string with unicode escapes",function (){
+       let fn = parse('"\\u00A0"');
+       expect(fn()).toEqual('\u00A0');
+    });
+
+
+    it("will not parse a string with invalid unicode escapes",function (){
+       expect(function (){parse('"\\u00TO"')});
+    });
+
+
+    it("will parse null", function () {
+        let fn = parse('null');
+        expect(fn()).toBe(null);
+    });
+
+
+    it('will parse true', function () {
+        let fn = parse('true');
+        expect(fn()).toBe(true);
+    });
+
+
+    it('will parse false', function () {
+        let fn = parse('false');
+        expect(fn()).toBe(false);
     });
 });

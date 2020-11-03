@@ -75,7 +75,9 @@ Lexer.prototype.lex = function (text){
             this.readNumber();
         } else if (this.ch === '\'' || this.ch === '"') { //keep in mind this inside original string quote
             this.readString(this.ch);
-        } else {
+        } if(this.isIdentifier(this.ch)){
+            this.readIdentifier()
+        }else {
             throw `Unexpected next character ${this.ch}`;
         }
     }
@@ -85,6 +87,10 @@ Lexer.prototype.lex = function (text){
 Lexer.prototype.isNumber = function (ch) {
     return '0' <= ch && ch <= '9';
 };
+
+Lexer.prototype.isIdentifier = function (ch) {
+    return (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || ch === '_' || ch === '$';
+}
 
 Lexer.prototype.readNumber = function () {
     //loops after finding one number to check for more
@@ -124,12 +130,22 @@ Lexer.prototype.readString = function (quote) {
         let ch = this.text.charAt(this.index); //current character
 
         if (escape) {
-            let replacement = ESCAPES[ch]; //after / which character did we see replace it 
-            if (replacement) {
-                string += replacement;
+            if(ch === 'u'){
+                let hex = this.text.substring(this.index + 1, this.index + 5);
+                if(!hex.match(/[\da-f]{4}/i)){
+                    throw "Invalid unicode escape";
+                }
+                this.index+=4; //jump over the hex
+                string+= String.fromCharCode(parseInt(hex,16));
             } else {
-                string += ch;
+                let replacement = ESCAPES[ch]; //after / which character did we see replace it
+                if (replacement) {
+                    string += replacement;
+                } else {
+                    string += ch;
+                }
             }
+
             escape = false;
         } else if (quote === ch) { //first quote check is done up should equal to last quote
             this.index++; //last character skip
@@ -147,6 +163,21 @@ Lexer.prototype.readString = function (quote) {
         this.index++;
     }
     throw 'Unmatched quote';
+};
+
+Lexer.prototype.readIdentifier = function () {
+    let text = '';
+    while (this.index < this.text.length) {
+        let ch = this.text.charAt(this.index);
+        if (this.isIdentifier(ch) || this.isNumber(ch)) {
+            text += ch;
+        } else {
+            break;
+        }
+        this.index++;
+    }
+    let token = {text:text};
+    this.tokens.push(token);
 };
 
 Lexer.prototype.peek = function () {  //it looks at the next char without moving the index
@@ -181,14 +212,27 @@ function AST(lexer) {
 AST.Program = 'Program'; //const
 AST.Literal = 'Literal'; //const
 
+AST.prototype.constants = {
+    'null': {type: AST.Literal, value: null},
+    'true': {type: AST.Literal, value: true},
+    'false': {type: AST.Literal, value: false}
+}
+
 AST.prototype.ast = function (text) {
     this.tokens = this.lexer.lex(text); //taking token form the lexer
     return this.program();
 };
 
 AST.prototype.program = function () {
-    return {type: AST.Program, body: this.constant()};
+    return {type: AST.Program, body: this.primary()};
 };
+
+AST.prototype.primary = function () {
+    if (this.constants.hasOwnProperty(this.tokens[0].text)) {
+        return this.constants[this.tokens[0].text];
+    }
+    return this.constant();
+}
 
 AST.prototype.constant = function () {
     return {type: AST.Literal, value: this.tokens[0].value};
@@ -208,6 +252,7 @@ function ASTCompiler(astBuilder) {
 ASTCompiler.prototype.stringEscapeRegex = /[^ a-zA-Z0-9]/g;
 
 ASTCompiler.prototype.stringEscapeFn = function (c){
+    //we get the unicode replacement of a the escaping
     return '\\u' + ('0000' + c.charCodeAt(0).toString(16)).slice(-4);
 };
 
@@ -230,9 +275,11 @@ ASTCompiler.prototype.recurse = function (ast) { //param is the ast structure no
     }
 };
 
-ASTCompiler.prototype.escape = function (value){
-    if(def.Lo.isString(value)){
-        return '\'' + value.replace(this.stringEscapeRegex,this.stringEscapeFn) + '\'';
+ASTCompiler.prototype.escape = function (value) {
+    if (def.Lo.isString(value)) {
+        return '\'' + value.replace(this.stringEscapeRegex, this.stringEscapeFn) + '\'';
+    } else if (def.Lo.isNull(value)) {
+        return 'null';
     } else {
         return value;
     }
