@@ -124,22 +124,22 @@ Lexer.prototype.readString = function (quote) {
         let ch = this.text.charAt(this.index); //current character
 
         if (escape) {
-            let replacement = ESCAPES[ch];
+            let replacement = ESCAPES[ch]; //after / which character did we see replace it 
             if (replacement) {
                 string += replacement;
             } else {
                 string += ch;
             }
             escape = false;
-        } else if (quote === ch) { //first quote check is done up should equall to last quote
+        } else if (quote === ch) { //first quote check is done up should equal to last quote
             this.index++; //last character skip
             this.tokens.push({
                 text: string,
                 value: string
             });
             return ; //this will terminate and indicate quotes match
-        } else if (ch === '\\') { //espace \ then consider \
-            escape = true;
+        } else if (ch === '\\') { //when backslash \ is escaped by another backslash checking for one backslash as string
+            escape = true; //then applying regular escape characters on it
         } else {
             string += ch;
         }

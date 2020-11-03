@@ -80,13 +80,15 @@ describe("Parse", function () {
 
 
     it("can parse a string with a single quote inside",function () {
-       let fn = parse("'a\\\'b'");
-       expect(fn()).toEqual('a\'b');
+       let fn = parse("'a\\\'b'"); //with one backslash is escaping the second slash
+       expect(fn()).toEqual('a\'b'); //with third is escaping the double quote
+        expect(fn()).toEqual("a'b"); //with third is escaping the double quote
     });
 
 
     it('can parse a string with double quotes inside', function () {
-        let fn = parse('"a\\\"b"');
-        expect(fn()).toEqual('a\"b');
+        let fn = parse('"a\\\"b"'); //with one backslash is escaping the second slash
+        expect(fn()).toEqual("a\"b"); //with third is escaping the double quote
+        expect(fn()).toEqual('a"b');
     });
 });
