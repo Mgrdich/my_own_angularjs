@@ -75,9 +75,11 @@ Lexer.prototype.lex = function (text){
             this.readNumber();
         } else if (this.ch === '\'' || this.ch === '"') { //keep in mind this inside original string quote
             this.readString(this.ch);
-        } if(this.isIdentifier(this.ch)){
+        } else if (this.isIdentifier(this.ch)) {
             this.readIdentifier()
-        }else {
+        } else if (this.isWhiteSpace(this.ch)) {
+            this.index++;
+        } else {
             throw `Unexpected next character ${this.ch}`;
         }
     }
@@ -91,6 +93,14 @@ Lexer.prototype.isNumber = function (ch) {
 Lexer.prototype.isIdentifier = function (ch) {
     return (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || ch === '_' || ch === '$';
 }
+
+Lexer.prototype.isWhiteSpace = function (ch){
+    return ch ===' ' || ch ==='\r' || ch ==='\t' || ch ==='\v' || ch ==='\n'|| ch ==='\u00A0';
+}
+
+Lexer.prototype.isExpOperator = function (ch){
+    return ch === '-' || ch === '+' || this.isNumber(ch);
+};
 
 Lexer.prototype.readNumber = function () {
     //loops after finding one number to check for more
@@ -187,9 +197,6 @@ Lexer.prototype.peek = function () {  //it looks at the next char without moving
     return false;
 };
 
-Lexer.prototype.isExpOperator = function (ch){
-    return ch === '-' || ch === '+' || this.isNumber(ch);
-};
 
 /*------------------------------------------ AST ------------------------------------------*/
 /**

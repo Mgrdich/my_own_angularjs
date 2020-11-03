@@ -120,4 +120,9 @@ describe("Parse", function () {
         let fn = parse('false');
         expect(fn()).toBe(false);
     });
+
+    it('will ignore whitespace', function () {
+        let fn = parse(' \n42');
+        expect(fn()).toEqual(42);
+    });
 });
