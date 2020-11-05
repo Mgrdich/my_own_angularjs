@@ -75,7 +75,7 @@ Lexer.prototype.lex = function (text){
             this.readNumber();
         } else if (this.isString(this.ch)) { //keep in mind this inside original string quote
             this.readString(this.ch);
-        } else if (this.ch === '[' || this.ch === ']') {
+        } else if (this.isArrayOrObject(this.ch)) {
             this.tokens.push({
                 text:this.ch
             });
@@ -100,7 +100,7 @@ Lexer.prototype.isString = function (ch) {
 }
 
 Lexer.prototype.isArrayOrObject = function (ch) {
-
+    return ch === '[' || ch === ']' || ch ===',';
 }
 
 Lexer.prototype.isIdentifier = function (ch) {
