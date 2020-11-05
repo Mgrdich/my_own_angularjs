@@ -127,8 +127,8 @@ describe("Parse", function () {
     });
 
 
-    /*it('will parse empty array', function () {
+    it('will parse empty array', function () {
         let fn = parse('[]');
         expect(fn()).toEqual([]);
-    });*/
+    });
 });

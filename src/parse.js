@@ -78,7 +78,8 @@ Lexer.prototype.lex = function (text){
         } else if (this.ch === '[' || this.ch === ']') {
             this.tokens.push({
                 text:this.ch
-            })
+            });
+            this.index++;
         } else if (this.isIdentifier(this.ch)) {
             this.readIdentifier()
         } else if (this.isWhiteSpace(this.ch)) {
@@ -320,7 +321,7 @@ ASTCompiler.prototype.recurse = function (ast) { //param is the ast structure no
         case AST.Literal:
             return this.escape(ast.value);
         case AST.ArrayExpression:
-            return [];
+            return '[]';
     }
 };
 
