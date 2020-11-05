@@ -60,9 +60,10 @@ Parser.prototype.parse = function (text) {
  * @description The Lexer takes the original expression string and returns an array of tokens parsed
  * from that string. For example, the string "a + b" would result in tokens for a, +,and b
  * */
-function Lexer() {}
+function Lexer() {
+}
 
-Lexer.prototype.lex = function (text){
+Lexer.prototype.lex = function (text) {
     //Tokenization will be done here
     this.text = text;
     this.index = 0; //out current character index in string
@@ -77,7 +78,7 @@ Lexer.prototype.lex = function (text){
             this.readString(this.ch);
         } else if (this.isArrayOrObject(this.ch)) {
             this.tokens.push({
-                text:this.ch
+                text: this.ch
             });
             this.index++;
         } else if (this.isIdentifier(this.ch)) {
@@ -100,18 +101,18 @@ Lexer.prototype.isString = function (ch) {
 }
 
 Lexer.prototype.isArrayOrObject = function (ch) {
-    return ch === '[' || ch === ']' || ch ===',';
+    return ch === '[' || ch === ']' || ch === ',';
 }
 
 Lexer.prototype.isIdentifier = function (ch) {
     return (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || ch === '_' || ch === '$';
 }
 
-Lexer.prototype.isWhiteSpace = function (ch){
-    return ch ===' ' || ch ==='\r' || ch ==='\t' || ch ==='\v' || ch ==='\n'|| ch ==='\u00A0';
+Lexer.prototype.isWhiteSpace = function (ch) {
+    return ch === ' ' || ch === '\r' || ch === '\t' || ch === '\v' || ch === '\n' || ch === '\u00A0';
 }
 
-Lexer.prototype.isExpOperator = function (ch){
+Lexer.prototype.isExpOperator = function (ch) {
     return ch === '-' || ch === '+' || this.isNumber(ch);
 };
 
@@ -119,18 +120,18 @@ Lexer.prototype.readNumber = function () {
     //loops after finding one number to check for more
     let numberAsString = '';
     while (this.index < this.text.length) {
-       let ch = this.text.charAt(this.index).toLowerCase();
-        if(ch === '.' || this.isNumber(ch)){
+        let ch = this.text.charAt(this.index).toLowerCase();
+        if (ch === '.' || this.isNumber(ch)) {
             numberAsString += ch;
         } else { //scientific notation
             let nextCh = this.peek();
             let prevCh = numberAsString.charAt(numberAsString.length - 1);
-            if(ch === 'e' && this.isExpOperator(nextCh)){ //e+ e- e1 pointer on the exponent
-                numberAsString +=ch;
-            } else if(this.isExpOperator(ch) && prevCh === 'e' && nextCh && this.isNumber(nextCh)){
+            if (ch === 'e' && this.isExpOperator(nextCh)) { //e+ e- e1 pointer on the exponent
+                numberAsString += ch;
+            } else if (this.isExpOperator(ch) && prevCh === 'e' && nextCh && this.isNumber(nextCh)) {
                 //first e+ e- e2 - but pointer now is on operator check after the number is there number
-                numberAsString +=ch;
-            } else if(this.isExpOperator(ch) && prevCh === 'e' && !nextCh || !this.isNumber(nextCh)){
+                numberAsString += ch;
+            } else if (this.isExpOperator(ch) && prevCh === 'e' && !nextCh || !this.isNumber(nextCh)) {
                 throw "Invalid Exponent";
             } else {
                 break;
@@ -139,8 +140,8 @@ Lexer.prototype.readNumber = function () {
         this.index++;
     }
     this.tokens.push({
-        text:numberAsString,
-        value:Number(numberAsString)
+        text: numberAsString,
+        value: Number(numberAsString)
     });
 };
 
@@ -153,13 +154,13 @@ Lexer.prototype.readString = function (quote) {
         let ch = this.text.charAt(this.index); //current character
 
         if (escape) {
-            if(ch === 'u'){
+            if (ch === 'u') {
                 let hex = this.text.substring(this.index + 1, this.index + 5);
-                if(!hex.match(/[\da-f]{4}/i)){
+                if (!hex.match(/[\da-f]{4}/i)) {
                     throw "Invalid unicode escape";
                 }
-                this.index+=4; //jump over the hex
-                string+= String.fromCharCode(parseInt(hex,16));
+                this.index += 4; //jump over the hex
+                string += String.fromCharCode(parseInt(hex, 16));
             } else {
                 let replacement = ESCAPES[ch]; //after / which character did we see replace it
                 if (replacement) {
@@ -176,7 +177,7 @@ Lexer.prototype.readString = function (quote) {
                 text: string,
                 value: string
             });
-            return ; //this will terminate and indicate quotes match
+            return; //this will terminate and indicate quotes match
         } else if (ch === '\\') { //when backslash \ is escaped by another backslash checking for one backslash as string
             escape = true; //then applying regular escape characters on it
         } else {
@@ -199,7 +200,7 @@ Lexer.prototype.readIdentifier = function () {
         }
         this.index++;
     }
-    let token = {text:text};
+    let token = {text: text};
     this.tokens.push(token);
 };
 
@@ -256,24 +257,23 @@ AST.prototype.primary = function () {
     if (this.expect('[')) {
         return this.arrayDeclaration();
     } else if (this.constants.hasOwnProperty(this.tokens[0].text)) {
-        return this.constants[this.tokens[0].text];
+        return this.constants[this.consume().text];
     }
     return this.constant();
 }
 
 AST.prototype.constant = function () {
-    return {type: AST.Literal, value: this.tokens[0].value};
+    return {type: AST.Literal, value: this.consume().text};
 };
 
 AST.prototype.expect = function (e) {
-    if (this.tokens.length > 0) {
-        if (this.tokens[0].text === e || !e) {
-            return this.tokens.shift();
-        }
+    let token = this.peek(e);
+    if (token) {
+        return this.tokens.shift();
     }
-}
+};
 
-AST.prototype.consume = function(e) {
+AST.prototype.consume = function (e) {
     let token = this.expect(e);
     if (!token) {
         throw `Unexpected. Expecting: ${e}`;
@@ -282,8 +282,23 @@ AST.prototype.consume = function(e) {
 };
 
 AST.prototype.arrayDeclaration = function () {
+    let elements = [];
+    if (!this.peek(']')) {
+        do {
+            elements.push(this.primary());
+        } while (this.expect(','))
+    }
     this.consume(']');
-    return {type: AST.ArrayExpression};
+    return {type: AST.ArrayExpression, elements: elements};
+};
+
+AST.prototype.peek = function (e) {
+    if (this.tokens.length > 0) {
+        let text = this.tokens[0].text;
+        if (text === e || !e) {
+            return this.tokens[0]
+        }
+    }
 }
 
 
@@ -299,12 +314,12 @@ function ASTCompiler(astBuilder) {
 
 ASTCompiler.prototype.stringEscapeRegex = /[^ a-zA-Z0-9]/g;
 
-ASTCompiler.prototype.stringEscapeFn = function (c){
+ASTCompiler.prototype.stringEscapeFn = function (c) {
     //we get the unicode replacement of a the escaping
     return '\\u' + ('0000' + c.charCodeAt(0).toString(16)).slice(-4);
 };
 
-ASTCompiler.prototype.compile = function (text){
+ASTCompiler.prototype.compile = function (text) {
     let ast = this.astBuilder.ast(text);
     //AST compilation will be done here
     this.state = {body: []};
@@ -314,14 +329,17 @@ ASTCompiler.prototype.compile = function (text){
 };
 
 ASTCompiler.prototype.recurse = function (ast) { //param is the ast structure not the instructor
-    switch (ast.type){
+    switch (ast.type) {
         case AST.Program:
-            this.state.body.push('return ',this.recurse(ast.body),';');
+            this.state.body.push('return ', this.recurse(ast.body), ';');
             break;
         case AST.Literal:
             return this.escape(ast.value);
         case AST.ArrayExpression:
-            return '[]';
+            let elements = ast.elements.map((elem) => {
+                return this.recurse(elem);
+            });
+            return `[${elements.join(',')}]`;
     }
 };
 
