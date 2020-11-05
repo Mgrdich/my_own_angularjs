@@ -72,9 +72,9 @@ Lexer.prototype.lex = function (text) {
 
     while (this.index < this.text.length) { //where we will add different kind of characters
         this.ch = this.text.charAt(this.index);
-        if (this.isNumber(this.ch) || this.ch === '.' && this.isNumber(this.peek())) {
+        if ( this.isNumber(this.ch) || (this.is('.') && this.isNumber(this.peek())) ) {
             this.readNumber();
-        } else if (this.isString(this.ch)) { //keep in mind this inside original string quote
+        } else if (this.isString()) { //keep in mind this inside original string quote
             this.readString(this.ch);
         } else if (this.isArrayOrObject(this.ch)) {
             this.tokens.push({
@@ -92,16 +92,21 @@ Lexer.prototype.lex = function (text) {
     return this.tokens;
 };
 
+Lexer.prototype.is = function (chs) {
+    //checking for any character
+    return chs.indexOf(this.ch) >= 0;
+};
+
 Lexer.prototype.isNumber = function (ch) {
     return '0' <= ch && ch <= '9';
 };
 
 Lexer.prototype.isString = function (ch) {
-    return ch === '\'' || ch === '"';
+    return this.is('\'"');
 }
 
 Lexer.prototype.isArrayOrObject = function (ch) {
-    return ch === '[' || ch === ']' || ch === ',';
+   return this.is('[],{}:');
 }
 
 Lexer.prototype.isIdentifier = function (ch) {
@@ -263,7 +268,7 @@ AST.prototype.primary = function () {
 }
 
 AST.prototype.constant = function () {
-    return {type: AST.Literal, value: this.consume().text};
+    return {type: AST.Literal, value: this.consume().value};
 };
 
 AST.prototype.expect = function (e) {
@@ -285,6 +290,9 @@ AST.prototype.arrayDeclaration = function () {
     let elements = [];
     if (!this.peek(']')) {
         do {
+            if (this.peek(']')) {
+                break;
+            }
             elements.push(this.primary());
         } while (this.expect(','))
     }
