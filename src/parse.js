@@ -126,6 +126,7 @@ Lexer.prototype.readNumber = function () {
     let numberAsString = '';
     while (this.index < this.text.length) {
         let ch = this.text.charAt(this.index).toLowerCase();
+
         if (ch === '.' || this.isNumber(ch)) {
             numberAsString += ch;
         } else { //scientific notation
@@ -136,7 +137,7 @@ Lexer.prototype.readNumber = function () {
             } else if (this.isExpOperator(ch) && prevCh === 'e' && nextCh && this.isNumber(nextCh)) {
                 //first e+ e- e2 - but pointer now is on operator check after the number is there number
                 numberAsString += ch;
-            } else if (this.isExpOperator(ch) && prevCh === 'e' && !nextCh || !this.isNumber(nextCh)) {
+            } else if (this.isExpOperator(ch) && prevCh === 'e' && (!nextCh || !this.isNumber(nextCh))) {
                 throw "Invalid Exponent";
             } else {
                 break;
@@ -272,9 +273,10 @@ AST.prototype.constant = function () {
 };
 
 AST.prototype.expect = function (e) {
+    //Note that expect can also be called with no arguments, in which case it’ll process whatever token is next.
     let token = this.peek(e);
     if (token) {
-        return this.tokens.shift();
+        return this.tokens.shift(); //remove it from the Token
     }
 };
 
@@ -303,7 +305,7 @@ AST.prototype.arrayDeclaration = function () {
 AST.prototype.peek = function (e) {
     if (this.tokens.length > 0) {
         let text = this.tokens[0].text;
-        if (text === e || !e) {
+        if (text === e || !e) { //peek the first character
             return this.tokens[0]
         }
     }
