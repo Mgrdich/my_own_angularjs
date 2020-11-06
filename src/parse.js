@@ -76,13 +76,13 @@ Lexer.prototype.lex = function (text) {
             this.readNumber();
         } else if (this.isString()) { //keep in mind this inside original string quote
             this.readString(this.ch);
-        } else if (this.isArrayOrObject(this.ch)) {
+        } else if (this.isArrayOrObject()) {
             this.tokens.push({
                 text: this.ch
             });
             this.index++;
         } else if (this.isIdentifier(this.ch)) {
-            this.readIdentifier()
+            this.readIdentifier();
         } else if (this.isWhiteSpace(this.ch)) {
             this.index++;
         } else {
@@ -103,19 +103,19 @@ Lexer.prototype.isNumber = function (ch) {
 
 Lexer.prototype.isString = function (ch) {
     return this.is('\'"');
-}
+};
 
-Lexer.prototype.isArrayOrObject = function (ch) {
+Lexer.prototype.isArrayOrObject = function () {
    return this.is('[],{}:');
-}
+};
 
 Lexer.prototype.isIdentifier = function (ch) {
     return (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || ch === '_' || ch === '$';
-}
+};
 
 Lexer.prototype.isWhiteSpace = function (ch) {
     return ch === ' ' || ch === '\r' || ch === '\t' || ch === '\v' || ch === '\n' || ch === '\u00A0';
-}
+};
 
 Lexer.prototype.isExpOperator = function (ch) {
     return ch === '-' || ch === '+' || this.isNumber(ch);
@@ -247,7 +247,7 @@ AST.prototype.constants = {
     'null': {type: AST.Literal, value: null},
     'true': {type: AST.Literal, value: true},
     'false': {type: AST.Literal, value: false}
-}
+};
 
 AST.prototype.ast = function (text) {
     this.tokens = this.lexer.lex(text); //taking token form the lexer
@@ -265,7 +265,7 @@ AST.prototype.primary = function () {
         return this.constants[this.consume().text];
     }
     return this.constant();
-}
+};
 
 AST.prototype.constant = function () {
     return {type: AST.Literal, value: this.consume().value};
@@ -307,7 +307,7 @@ AST.prototype.peek = function (e) {
             return this.tokens[0]
         }
     }
-}
+};
 
 
 /*------------------------------------------ ASTCompiler ------------------------------------------*/
