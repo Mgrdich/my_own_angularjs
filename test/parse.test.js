@@ -137,4 +137,16 @@ describe("Parse", function () {
         let fn = parse('[1,"two",[3],true]');
         expect(fn()).toEqual([1, 'two', [3], true]);
     });
+
+
+    it('will parse array with trailing commas', function () {
+        let fn = parse('[1,2,3,]');
+        expect(fn()).toEqual([1,2,3])
+    });
+
+
+    it('will parse empty object', function () {
+        let fn = parse('{}');
+        expect(fn()).toEqual({});
+    });
 });

@@ -266,7 +266,9 @@ AST.prototype.program = function () {
 AST.prototype.primary = function () {
     if (this.expect('[')) {
         return this.arrayDeclaration();
-    } else if (this.constants.hasOwnProperty(this.tokens[0].text)) {
+    } else if(this.expect('{')) {
+        return  this.object();
+    }if (this.constants.hasOwnProperty(this.tokens[0].text)) {
         return this.constants[this.consume().text];
     }
     return this.constant();
@@ -305,6 +307,11 @@ AST.prototype.arrayDeclaration = function () {
     this.consume(']');
     return {type: AST.ArrayExpression, elements: elements};
 };
+
+AST.prototype.object = function () {
+    this.consume('}');
+    return {type: AST.ObjectExpression};
+}
 
 AST.prototype.peek = function (e) {
     if (this.tokens.length > 0) {
@@ -354,6 +361,8 @@ ASTCompiler.prototype.recurse = function (ast) { //param is the ast structure no
                 return this.recurse(elem);
             });
             return `[${elements.join(',')}]`;
+        case AST.ObjectExpression:
+            return '{}';
     }
 };
 
