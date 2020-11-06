@@ -35,6 +35,10 @@ function parse(expr) {
  *
  * ---- AST Compiler ----->
  * function(scope) {return scope.a + scope.b;}
+ *
+ *
+ * Map of call Function
+ * parse -----> ASTCompiler.compile ----> ASTCompiler has AST instance ----> AST.ast() ------> Lexer.lex
  * */
 
 /*------------------------------------------ Parser ------------------------------------------*/
@@ -137,13 +141,13 @@ Lexer.prototype.readNumber = function () {
             } else if (this.isExpOperator(ch) && prevCh === 'e' && nextCh && this.isNumber(nextCh)) {
                 //first e+ e- e2 - but pointer now is on operator check after the number is there number
                 numberAsString += ch;
-            } else if (this.isExpOperator(ch) && prevCh === 'e' && (!nextCh || !this.isNumber(nextCh))) {
+            } else if (this.isExpOperator(ch) && prevCh === 'e' && (!nextCh || !this.isNumber(nextCh))) { //e+  e-s Invalid
                 throw "Invalid Exponent";
             } else {
-                break;
+                break; //break from loop continuation whatever it is not a number
             }
         }
-        this.index++;
+        this.index++; //push to the next symbol and check it does work break
     }
     this.tokens.push({
         text: numberAsString,
