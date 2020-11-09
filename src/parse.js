@@ -210,7 +210,7 @@ Lexer.prototype.readIdentifier = function () {
         }
         this.index++;
     }
-    let token = {text: text};
+    let token = {text: text,identifier:true};
     this.tokens.push(token);
 };
 
@@ -245,8 +245,10 @@ function AST(lexer) {
  * */
 AST.Program = 'Program';
 AST.Literal = 'Literal';
+AST.Property = 'Property';
 AST.ArrayExpression = 'ArrayExpression';
 AST.ObjectExpression = 'ObjectExpression';
+AST.Identifier = 'Identifier';
 
 AST.prototype.constants = {
     'null': {type: AST.Literal, value: null},
@@ -278,24 +280,43 @@ AST.prototype.constant = function () {
     return {type: AST.Literal, value: this.consume().value};
 };
 
+AST.prototype.identifier = function() {
+    return {type: AST.Identifier, name: this.consume().text};
+};
+
 
 AST.prototype.arrayDeclaration = function () {
     let elements = [];
-    if (!this.peek(']')) {
+    if (!this.peek(']')) { //checking whether array is closed immediately empty array
         do {
-            if (this.peek(']')) { //checking whether array is closed immediately empty array
+            if (this.peek(']')) { //to support the trailing comma to break out early
                 break;
             }
             elements.push(this.primary());
-        } while (this.expect(','))
+        } while (this.expect(','));
     }
     this.consume(']');
     return {type: AST.ArrayExpression, elements: elements};
 };
 
 AST.prototype.object = function () {
+    let properties = [];
+    if (!this.peek('}')) {
+        do {
+            let property = {type: AST.Property};
+            if(this.peek().identifier){
+                property.key = this.identifier();
+            } else {
+                property.key = this.constant();
+            }
+            this.consume(':');
+            property.value = this.primary(); //if it is embedded object recursive else returns the Value
+            properties.push(property);
+        } while (this.expect(','));
+    }
+
     this.consume('}');
-    return {type: AST.ObjectExpression};
+    return {type: AST.ObjectExpression,properties:properties};
 }
 
 AST.prototype.peek = function (e) {
@@ -363,7 +384,12 @@ ASTCompiler.prototype.recurse = function (ast) { //param is the ast structure no
             });
             return `[${elements.join(',')}]`;
         case AST.ObjectExpression:
-            return '{}';
+            let properties = ast.properties.map((property) => {
+               let key = property.key.type === AST.Identifier ? property.key.name : this.escape(property.key.value);
+               let value = this.recurse(property.value);
+               return `${key}:${value}`;
+            });
+            return `{${properties.join(',')}}`;
     }
 };
 

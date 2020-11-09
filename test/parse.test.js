@@ -139,14 +139,19 @@ describe("Parse", function () {
     });
 
 
-    it('will parse array with trailing commas', function () {
+    it("will parse array with trailing commas", function () {
         let fn = parse('[1,2,3,]');
         expect(fn()).toEqual([1,2,3])
     });
 
 
-    it('will parse empty object', function () {
+    it("will parse empty object", function () {
         let fn = parse('{}');
         expect(fn()).toEqual({});
+    });
+
+    it("will parse an object with identifier keys", function() {
+        let fn = parse( {a: 1, b: [2, 3], c: {d: 4}} );
+        expect(fn()).toEqual({a: 1, b: [2, 3], c: {d: 4}});
     });
 });
