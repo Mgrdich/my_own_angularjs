@@ -3,9 +3,7 @@
  * */
 const _ = require('lodash');
 
-function Lib() {
-
-}
+function Lib() {}
 
 _.mixin({
     isArrayLike: function(obj) {
@@ -34,6 +32,10 @@ Lib.prototype.areEqual = function (newValue, oldValue, valueEq) {
     }
 };
 
+Lib.prototype.isNull = function (value) {
+    return value === null;
+};
+
 
 
 
@@ -50,5 +52,7 @@ Lib.prototype.areEqual = function (newValue, oldValue, valueEq) {
 //TODO cloneDeep
 
 //TODO isArrayLike from the mixin
+
+//TODO isString
 
 module.exports = Lib;

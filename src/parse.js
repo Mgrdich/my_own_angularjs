@@ -397,7 +397,7 @@ ASTCompiler.prototype.recurse = function (ast) { //param is the ast structure no
 ASTCompiler.prototype.escape = function (value) {
     if (def.Lo.isString(value)) {
         return '\'' + value.replace(this.stringEscapeRegex, this.stringEscapeFn) + '\'';
-    } else if (def.Lo.isNull(value)) {
+    } else if (def.isNull(value)) {
         return 'null';
     } else {
         return value;
