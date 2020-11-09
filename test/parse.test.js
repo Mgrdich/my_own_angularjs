@@ -151,7 +151,7 @@ describe("Parse", function () {
     });
 
     it("will parse an object with identifier keys", function() {
-        let fn = parse( {a: 1, b: [2, 3], c: {d: 4}} );
+        let fn = parse('{a: 1, b: [2, 3], c: {d: 4}}');
         expect(fn()).toEqual({a: 1, b: [2, 3], c: {d: 4}});
     });
 });
