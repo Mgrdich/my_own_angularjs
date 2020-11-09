@@ -278,27 +278,12 @@ AST.prototype.constant = function () {
     return {type: AST.Literal, value: this.consume().value};
 };
 
-AST.prototype.expect = function (e) {
-    //Note that expect can also be called with no arguments, in which case it’ll process whatever token is next.
-    let token = this.peek(e);
-    if (token) {
-        return this.tokens.shift(); //remove it from the Token
-    }
-};
-
-AST.prototype.consume = function (e) {
-    let token = this.expect(e);
-    if (!token) {
-        throw `Unexpected. Expecting: ${e}`;
-    }
-    return token;
-};
 
 AST.prototype.arrayDeclaration = function () {
     let elements = [];
     if (!this.peek(']')) {
         do {
-            if (this.peek(']')) {
+            if (this.peek(']')) { //checking whether array is closed immediately empty array
                 break;
             }
             elements.push(this.primary());
@@ -320,6 +305,22 @@ AST.prototype.peek = function (e) {
             return this.tokens[0]
         }
     }
+};
+
+AST.prototype.expect = function (e) {
+    //Note that expect can also be called with no arguments, in which case it’ll process whatever token is next.
+    let token = this.peek(e);
+    if (token) {
+        return this.tokens.shift(); //remove it from the Token Consume the Token
+    }
+};
+
+AST.prototype.consume = function (e) {
+    let token = this.expect(e);
+    if (!token) {
+        throw `Unexpected. Expecting: ${e}`;
+    }
+    return token;
 };
 
 
