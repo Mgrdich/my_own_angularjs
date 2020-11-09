@@ -304,10 +304,10 @@ AST.prototype.object = function () {
     if (!this.peek('}')) {
         do {
             let property = {type: AST.Property};
-            if(this.peek().identifier){
+            if(this.peek().identifier){ //An object’s keys are not always strings.
                 property.key = this.identifier();
             } else {
-                property.key = this.constant();
+                property.key = this.constant(); //string case
             }
             this.consume(':');
             property.value = this.primary(); //if it is embedded object recursive else returns the Value
@@ -385,6 +385,7 @@ ASTCompiler.prototype.recurse = function (ast) { //param is the ast structure no
             return `[${elements.join(',')}]`;
         case AST.ObjectExpression:
             let properties = ast.properties.map((property) => {
+                //key string or an identifier
                let key = property.key.type === AST.Identifier ? property.key.name : this.escape(property.key.value);
                let value = this.recurse(property.value);
                return `${key}:${value}`;
