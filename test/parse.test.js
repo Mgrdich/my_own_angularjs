@@ -150,8 +150,16 @@ describe("Parse", function () {
         expect(fn()).toEqual({});
     });
 
+
     it("will parse an object with identifier keys", function() {
         let fn = parse('{a: 1, b: [2, 3], c: {d: 4}}');
         expect(fn()).toEqual({a: 1, b: [2, 3], c: {d: 4}});
+    });
+
+
+    it('looks up attribute in the scope', function () {
+        let fn = parse('aKey');
+        expect(fn({aKey:42})).toBe(42);
+        expect(fn({})).toBeUndefined();
     });
 });
