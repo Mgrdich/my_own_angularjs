@@ -272,6 +272,8 @@ AST.prototype.primary = function () {
         return  this.object();
     }if (this.constants.hasOwnProperty(this.tokens[0].text)) {
         return this.constants[this.consume().text];
+    } else if(this.peek().identifier){
+        return this.identifier();
     }
     return this.constant();
 };
@@ -317,7 +319,7 @@ AST.prototype.object = function () {
 
     this.consume('}');
     return {type: AST.ObjectExpression,properties:properties};
-}
+};
 
 AST.prototype.peek = function (e) {
     if (this.tokens.length > 0) {
@@ -368,7 +370,11 @@ ASTCompiler.prototype.compile = function (text) {
     this.state = {body: []};
     this.recurse(ast);
 
-    return new Function(this.state.body.join(''));
+    return new Function('s',this.state.body.join('')); //giving args
+};
+
+AST.prototype.nonComputedMember = function (left, right) {
+    return `(${left}).${right}`; //return s.Something
 };
 
 ASTCompiler.prototype.recurse = function (ast) { //param is the ast structure not the instructor
@@ -391,6 +397,8 @@ ASTCompiler.prototype.recurse = function (ast) { //param is the ast structure no
                return `${key}:${value}`;
             });
             return `{${properties.join(',')}}`;
+        case AST.Identifier:
+            return this.nonComputedMember('s',ast.name);
     }
 };
 
