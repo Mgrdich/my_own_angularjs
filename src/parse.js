@@ -373,7 +373,7 @@ ASTCompiler.prototype.compile = function (text) {
     return new Function('s',this.state.body.join('')); //giving args
 };
 
-AST.prototype.nonComputedMember = function (left, right) {
+ASTCompiler.prototype.nonComputedMember = function (left, right) {
     return `(${left}).${right}`; //return s.Something
 };
 

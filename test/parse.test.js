@@ -159,7 +159,13 @@ describe("Parse", function () {
 
     it('looks up attribute in the scope', function () {
         let fn = parse('aKey');
-        expect(fn({aKey:42})).toBe(42);
+        expect(fn({aKey:42})).toBe(42); //object as a parameter
         expect(fn({})).toBeUndefined();
+    });
+
+
+    it('returns undefined when looking attribute and is undefined', function () {
+        let fn = parse('aKey');
+        expect(fn()).toBeUndefined();
     });
 });
