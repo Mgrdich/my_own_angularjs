@@ -36,7 +36,9 @@ Lib.prototype.isNull = function (value) {
     return value === null;
 };
 
-
+Lib.prototype.isArray = function(arr) {
+  return  Array.isArray(arr);
+};
 
 
 //TODO forEach

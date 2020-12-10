@@ -303,7 +303,7 @@ Scope.prototype.$watchCollection = function (watchFn,listenerFn) {
 
         if (def.Lo.isObject(newValue)) {
             if (def.Lo.isArrayLike(newValue)) { //considers array like if its not a function and has a length
-                if(!def.Lo.isArray(oldValue)){ //if the previous is not array so it is changed
+                if(!def.isArray(oldValue)){ //if the previous is not array so it is changed
                     changeCount++;
                     oldValue = [];
                 }
