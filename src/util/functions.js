@@ -41,6 +41,11 @@ Lib.prototype.isArray = function(arr) {
 };
 
 
+Lib.prototype.isString = function (str) { //tODO check why is needed in our project for ASTCompiler
+    return typeof str === 'string';
+};
+
+
 //TODO forEach
 
 //TODO forEachRight
