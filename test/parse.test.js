@@ -167,6 +167,6 @@ describe("Parse", function () {
     it('returns undefined when looking attribute and is undefined', function () {
         let fn = parse('aKey');
         expect(fn({})).toBeUndefined();
-        // expect(fn()).toBeUndefined(); //no parameter fails TOdO check it out
+        expect(fn()).toBeUndefined(); //no parameter fails
     });
 });

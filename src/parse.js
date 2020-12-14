@@ -370,13 +370,15 @@ ASTCompiler.prototype.compile = function (text) {
     this.state = {body: [],nextId:0,vars:[]};
     this.recurse(ast);
 
-    let funArgs = '';
+    let funBody = '';
     if(this.state.vars.length) {
-        funArgs = `var ${this.state.vars.join(',')};`
+        funBody = `var ${this.state.vars.join(',')};`
     } else {
-        funArgs = this.state.body.join('');
+        funBody = '';
     }
-    return new Function('s',funArgs); //giving args
+    funBody+= this.state.body.join('');
+
+    return new Function('s',funBody); //giving args
 };
 
 ASTCompiler.prototype.nonComputedMember = function (left, right) {
