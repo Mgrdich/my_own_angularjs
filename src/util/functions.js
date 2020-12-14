@@ -41,7 +41,7 @@ Lib.prototype.isArray = function(arr) {
 };
 
 
-Lib.prototype.isString = function (str) { //tODO check why is needed in our project for ASTCompiler
+Lib.prototype.isString = function (str) { //tODO check why lodash checks extra stuff
     return typeof str === 'string';
 };
 
@@ -51,8 +51,6 @@ Lib.prototype.isString = function (str) { //tODO check why is needed in our proj
 //TODO forEachRight
 
 //TODO isObject
-
-//TODO isArray
 
 //TODO isEqual
 
