@@ -167,6 +167,28 @@ describe("Parse", function () {
     it('returns undefined when looking attribute and is undefined', function () {
         let fn = parse('aKey');
         expect(fn({})).toBeUndefined();
-        expect(fn()).toBeUndefined(); //no parameter fails
+        expect(fn()).toBeUndefined();
+    });
+
+
+    it('will parse this', function () {
+        let fn = parse('this');
+        let scope = {};
+        expect(fn(scope)).toBe(scope);
+        expect(fn()).toBeUndefined();
+    });
+
+
+    it('should looks up 2-part identifier path from the scope', function () {
+        let fn = parse('aKey.anotherKey');
+        expect(fn({aKey:{anotherKey:42}})).toBe(42);
+        expect(fn({aKey: {}})).toBeUndefined(); //we expect the expression to reach down or return undefined if not found
+        expect(fn({})).toBeUndefined();
+    });
+
+
+    it('should look a memeber from object parser itself', function () {
+        let fn = parse('{aKey:40}.aKey');
+        expect(fn()).toBe(40);
     });
 });

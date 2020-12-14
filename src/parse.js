@@ -110,7 +110,7 @@ Lexer.prototype.isString = function (ch) {
 };
 
 Lexer.prototype.isArrayOrObject = function () {
-   return this.is('[],{}:');
+   return this.is('[],{}:.');
 };
 
 Lexer.prototype.isIdentifier = function (ch) {
@@ -249,11 +249,14 @@ AST.Property = 'Property';
 AST.ArrayExpression = 'ArrayExpression';
 AST.ObjectExpression = 'ObjectExpression';
 AST.Identifier = 'Identifier';
+AST.ThisExpression = 'ThisExpression';
+AST.MemberExpression = 'MemberExpression';
 
 AST.prototype.constants = {
     'null': {type: AST.Literal, value: null},
     'true': {type: AST.Literal, value: true},
-    'false': {type: AST.Literal, value: false}
+    'false': {type: AST.Literal, value: false},
+    'this': {type: AST.ThisExpression}
 };
 
 AST.prototype.ast = function (text) {
@@ -266,16 +269,28 @@ AST.prototype.program = function () {
 };
 
 AST.prototype.primary = function () {
+    let primary;
     if (this.expect('[')) {
-        return this.arrayDeclaration();
-    } else if(this.expect('{')) {
-        return  this.object();
-    }if (this.constants.hasOwnProperty(this.tokens[0].text)) {
-        return this.constants[this.consume().text];
-    } else if(this.peek().identifier){
-        return this.identifier();
+        primary = this.arrayDeclaration();
+    } else if (this.expect('{')) {
+        primary = this.object();
+    } else if (this.constants.hasOwnProperty(this.tokens[0].text)) {
+        primary = this.constants[this.consume().text];
+    } else if (this.peek().identifier) {
+        primary = this.identifier();
+    } else {
+        primary = this.constant();
     }
-    return this.constant();
+
+    if (this.expect('.')) {
+        primary = {
+            type:AST.MemberExpression,
+            object:primary,
+            property: this.identifier()
+        };
+    }
+
+    return primary;
 };
 
 AST.prototype.constant = function () {
@@ -427,6 +442,9 @@ ASTCompiler.prototype.recurse = function (ast) { //param is the ast structure no
             let intoId = this.nextId();
             this.if_('s',`${this.assign(intoId,this.nonComputedMember('s',ast.name))}`);
             return intoId;
+        case AST.ThisExpression:
+            return 's';
+
     }
 };
 
