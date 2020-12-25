@@ -393,7 +393,11 @@ ASTCompiler.prototype.compile = function (text) {
     }
     funBody+= this.state.body.join('');
 
-    return new Function('s',funBody); //giving args
+    /**
+     * s stands for scope parameter
+     * l stands for local parameter
+     * */
+    return new Function('s','l',funBody); //giving args
 };
 
 ASTCompiler.prototype.nonComputedMember = function (left, right) {
@@ -408,6 +412,14 @@ ASTCompiler.prototype.nextId = function () {
 
 ASTCompiler.prototype.if_ = function (test, consequent) {
     this.state.body.push('if(', test, '){', consequent, '}');
+};
+
+ASTCompiler.prototype.not = function (e) {
+    return `!(${e})`;
+};
+
+ASTCompiler.prototype.getHasOwnProperty = function (object,property) {
+    return `${object} && (${this.escape(property)} in ${object})`;
 };
 
 ASTCompiler.prototype.assign = function (id, value) {
@@ -441,7 +453,11 @@ ASTCompiler.prototype.recurse = function (ast) { //param is the ast structure no
             return `{${properties.join(',')}}`;
         case AST.Identifier:
             intoId = this.nextId();
-            this.if_('s', `${this.assign(intoId, this.nonComputedMember('s', ast.name))}`);
+            //if local parameter exist
+            this.if_(this.getHasOwnProperty('l',ast.name), this.assign(intoId, this.nonComputedMember('l', ast.name)));
+
+            this.if_(`${this.not(this.getHasOwnProperty('l',ast.name))} && s`, this.assign(intoId, this.nonComputedMember('s', ast.name)));
+
             return intoId;
         case AST.MemberExpression:
             intoId = this.nextId();

@@ -224,6 +224,12 @@ describe("Parse", function () {
         expect(fn(scope, locals)).toBe(2);
     });
 
+    it('does not use locals instead of scope when no matching key', function () {
+        let fn = parse('aKey');
+        let scope = {aKey: 12};
+        let locals = {anotherKey: 2};
+        expect(fn(scope, locals)).toBe(12);
+    });
 
     it('it uses locals instead of scope when the first part matches', function () {
         let fn = parse('aKey.anotherKey');
