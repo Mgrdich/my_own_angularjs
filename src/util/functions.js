@@ -41,7 +41,7 @@ Lib.prototype.isArray = function(arr) {
 };
 
 
-Lib.prototype.isString = function (str) { //tODO check why lodash checks extra stuff
+Lib.prototype.isString = function (str) {
     return typeof str === 'string';
 };
 
@@ -57,7 +57,5 @@ Lib.prototype.isString = function (str) { //tODO check why lodash checks extra s
 //TODO cloneDeep
 
 //TODO isArrayLike from the mixin
-
-//TODO isString
 
 module.exports = Lib;
