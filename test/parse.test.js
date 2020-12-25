@@ -191,4 +191,30 @@ describe("Parse", function () {
         let fn = parse('{aKey:40}.aKey');
         expect(fn()).toBe(40);
     });
+
+
+    it("looks up 4 part identifier path from the scope",function () {
+        /*{
+            type: AST.Program,
+                body: {
+            type: AST.MemberExpression,
+                property: {type: AST.Identifier, name: !fourthKey!},
+            object: {
+                type: AST.MemberExpresion,
+                    property: {type: AST.Identifier, name: !thirdKey!},
+                object: {
+                    type: AST.MemberExpression,
+                        property: {type: AST.Identifier, name: !secondKey!},
+                    object: {type: AST.Identifier, name: !aKey!}
+                }
+            }
+        }*/
+
+
+        let fn = parse('aKey.secondKey.thirdKey.fourthKey');
+        expect(fn({aKey: {secondKey: {thirdKey: {fourthKey: 42}}}})).toBe(42);
+        expect(fn({aKey: {secondKey: {thirdKey: {}}}})).toBeUndefined();
+        expect(fn({aKey: {}})).toBeUndefined();
+        expect(fn()).toBeUndefined();
+    });
 });
