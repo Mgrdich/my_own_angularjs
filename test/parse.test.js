@@ -209,12 +209,27 @@ describe("Parse", function () {
                 }
             }
         }*/
-
-
         let fn = parse('aKey.secondKey.thirdKey.fourthKey');
         expect(fn({aKey: {secondKey: {thirdKey: {fourthKey: 42}}}})).toBe(42);
         expect(fn({aKey: {secondKey: {thirdKey: {}}}})).toBeUndefined();
         expect(fn({aKey: {}})).toBeUndefined();
         expect(fn()).toBeUndefined();
     });
+
+
+    it('look up in the locals instead of the scope when there is a matching key', function () {
+        let fn = parse('aKey');
+        let scope = {aKey: 1};
+        let locals = {aKey: 2};
+        expect(fn(scope, locals)).toBe(2);
+    });
+
+
+    it('it uses locals instead of scope when the first part matches', function () {
+        let fn = parse('aKey.anotherKey');
+        let scope = {aKey: {anotherKey:42}};
+        let locals = {aKey: {}};
+        expect(fn(scope, locals)).toBeUndefined();
+    });
+
 });
