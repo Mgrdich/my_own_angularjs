@@ -80,7 +80,7 @@ Lexer.prototype.lex = function (text) {
             this.readNumber();
         } else if (this.isString()) { //keep in mind this inside original string quote
             this.readString(this.ch);
-        } else if (this.isArrayOrObject()) {
+        } else if (this.isArrayOrObject()) { //todo check is it valid name
             this.tokens.push({
                 text: this.ch
             });
@@ -284,8 +284,8 @@ AST.prototype.primary = function () {
 
     if (this.expect('.')) {
         primary = {
-            type:AST.MemberExpression,
-            object:primary,
+            type: AST.MemberExpression,
+            object: primary,
             property: this.identifier()
         };
     }
@@ -382,7 +382,7 @@ ASTCompiler.prototype.stringEscapeFn = function (c) {
 ASTCompiler.prototype.compile = function (text) {
     let ast = this.astBuilder.ast(text);
     //AST compilation will be done here
-    this.state = {body: [],nextId:0,vars:[]};
+    this.state = {body: [], nextId: 0, vars: []};
     this.recurse(ast);
 
     let funBody = '';
@@ -419,6 +419,7 @@ ASTCompiler.prototype.nextId = function () {
 };
 
 ASTCompiler.prototype.recurse = function (ast) { //param is the ast structure not the instructor
+    let intoId;
     switch (ast.type) {
         case AST.Program:
             this.state.body.push('return ', this.recurse(ast.body), ';');
@@ -439,8 +440,13 @@ ASTCompiler.prototype.recurse = function (ast) { //param is the ast structure no
             });
             return `{${properties.join(',')}}`;
         case AST.Identifier:
-            let intoId = this.nextId();
-            this.if_('s',`${this.assign(intoId,this.nonComputedMember('s',ast.name))}`);
+            intoId = this.nextId();
+            this.if_('s', `${this.assign(intoId, this.nonComputedMember('s', ast.name))}`);
+            return intoId;
+        case AST.MemberExpression:
+            intoId = this.nextId();
+            let left = this.recurse(ast.object);
+            this.if_(left,this.assign(intoId, this.nonComputedMember(left, ast.property.name)));
             return intoId;
         case AST.ThisExpression:
             return 's';
