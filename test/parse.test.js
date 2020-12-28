@@ -224,12 +224,14 @@ describe("Parse", function () {
         expect(fn(scope, locals)).toBe(2);
     });
 
+
     it('does not use locals instead of scope when no matching key', function () {
         let fn = parse('aKey');
         let scope = {aKey: 12};
         let locals = {anotherKey: 2};
         expect(fn(scope, locals)).toBe(12);
     });
+
 
     it('it uses locals instead of scope when the first part matches', function () {
         let fn = parse('aKey.anotherKey');
@@ -238,4 +240,27 @@ describe("Parse", function () {
         expect(fn(scope, locals)).toBeUndefined();
     });
 
+
+    it('parses javascript object computed property', function () {
+        let fn = parse('aKey["a"]');
+        expect(fn({aKey:{a:10}})).toBe(40);
+    });
+
+
+    it('parses javascript array computed property', function () {
+        let fn = parse('aKey[1]');
+        expect(fn({aKey:[1,2,3]})).toBe(40);
+    });
+
+
+    it('parses a computed access with another key as property', function() {
+        let fn = parse('lock[key]');
+        expect(fn({key: 'theKey', lock: {theKey: 42}})).toBe(42);
+    });
+
+
+    it('!parses computed access with another access as property!', function() {
+        let fn = parse('lock[keys["aKey"]]');
+        expect(fn({keys: {aKey: 'theKey'}, lock: {theKey: 42}})).toBe(42);
+    });
 });
