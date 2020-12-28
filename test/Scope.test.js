@@ -1882,7 +1882,7 @@ describe("Scope", function () {
             };
             let scopeListener1 = function (evt) {
                 event1 = evt;
-            }
+            };
             scope.$on('someEvent', scopeListener);
             scope.$on('someEventForBroadcast', scopeListener1);
 

@@ -381,8 +381,10 @@ ASTCompiler.prototype.stringEscapeFn = function (c) {
 
 ASTCompiler.prototype.compile = function (text) {
     let ast = this.astBuilder.ast(text);
+
     //AST compilation will be done here
     this.state = {body: [], nextId: 0, vars: []};
+
     this.recurse(ast);
 
     let funBody = '';
