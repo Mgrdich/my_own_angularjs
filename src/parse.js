@@ -76,7 +76,7 @@ Lexer.prototype.lex = function (text) {
 
     while (this.index < this.text.length) { //where we will add different kind of characters
         this.ch = this.text.charAt(this.index);
-        if ( this.isNumber(this.ch) || (this.is('.') && this.isNumber(this.peek())) ) {
+        if (this.isNumber(this.ch) || (this.is('.') && this.isNumber(this.peek()))) {
             this.readNumber();
         } else if (this.isString()) { //keep in mind this inside original string quote
             this.readString(this.ch);
@@ -210,7 +210,7 @@ Lexer.prototype.readIdentifier = function () {
         }
         this.index++;
     }
-    let token = {text: text,identifier:true};
+    let token = {text: text, identifier: true};
     this.tokens.push(token);
 };
 
@@ -260,6 +260,7 @@ AST.prototype.constants = {
 };
 
 AST.prototype.ast = function (text) {
+    //array of instructions that were parsed
     this.tokens = this.lexer.lex(text); //taking token form the lexer
     return this.program();
 };
@@ -333,7 +334,7 @@ AST.prototype.object = function () {
     }
 
     this.consume('}');
-    return {type: AST.ObjectExpression,properties:properties};
+    return {type: AST.ObjectExpression, properties: properties};
 };
 
 AST.prototype.peek = function (e) {
