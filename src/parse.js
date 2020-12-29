@@ -283,12 +283,25 @@ AST.prototype.primary = function () {
         primary = this.constant();
     }
 
-    while (this.expect('.')) {
-        primary = {
-            type: AST.MemberExpression,
-            object: primary,
-            property: this.identifier()
-        };
+    let next;
+
+    while ((next = this.expect('.','['))) {
+        if(next.text === '[') {
+            primary = {
+                type: AST.MemberExpression,
+                object: primary,
+                property: this.identifier(),
+                computed:true
+            };
+            this.consume(']');
+        } else  {
+            primary = {
+                type: AST.MemberExpression,
+                object: primary,
+                property: this.identifier(),
+                computed:false
+            };
+        }
     }
 
     return primary;
@@ -337,18 +350,18 @@ AST.prototype.object = function () {
     return {type: AST.ObjectExpression, properties: properties};
 };
 
-AST.prototype.peek = function (e) {
+AST.prototype.peek = function (e1, e2, e3, e4) { //TODO do it with spread
     if (this.tokens.length > 0) {
         let text = this.tokens[0].text;
-        if (text === e || !e) { //peek the first character
+        if (text === e1 || text === e2 || text === e3 || text === e4 || !e1 || !e2 || !e3 || !e4) { //peek the first character
             return this.tokens[0]
         }
     }
 };
 
-AST.prototype.expect = function (e) {
+AST.prototype.expect = function (e1, e2, e3, e4) { //TODO do it with spread
     //Note that expect can also be called with no arguments, in which case it’ll process whatever token is next.
-    let token = this.peek(e);
+    let token = this.peek(e1, e2, e3, e4);
     if (token) {
         return this.tokens.shift(); //remove it from the Token Consume the Token
     }
@@ -405,6 +418,10 @@ ASTCompiler.prototype.compile = function (text) {
 
 ASTCompiler.prototype.nonComputedMember = function (left, right) {
     return `(${left}).${right}`; //return s.Something
+};
+
+ASTCompiler.prototype.computedMember = function (left, right) {
+    return `(${left})[${right}]`;
 };
 
 ASTCompiler.prototype.nextId = function () {
@@ -465,7 +482,12 @@ ASTCompiler.prototype.recurse = function (ast) { //param is the ast structure no
         case AST.MemberExpression:
             intoId = this.nextId();
             let left = this.recurse(ast.object);
-            this.if_(left,this.assign(intoId, this.nonComputedMember(left, ast.property.name)));
+            if(ast.computed) {
+                let right = this.recurse(ast.property);
+                this.if_(left, this.assign(intoId, this.computedMember(left, right)));
+            } else {
+                this.if_(left, this.assign(intoId, this.nonComputedMember(left, ast.property.name)));
+            }
             return intoId;
         case AST.ThisExpression:
             return 's';
