@@ -279,7 +279,7 @@ describe("Parse", function () {
 
     it('parses a function call with different args', function () {
         let fn = parse('aFunction(key)');
-        expect(fn({key:10,aFunction:function (n){return n}})).toBe(42);
+        expect(fn({key:10,aFunction:function (n){return n}})).toBe(10);
     });
 
 
@@ -288,11 +288,11 @@ describe("Parse", function () {
         expect(fn({
             argsFn:function(){return 40;}, //lodash _.constant
             aFunction:function (n){return n}
-        })).toBe(42);
+        })).toBe(40);
     });
 
 
-    it('should parse a function call with a single argument of a function call', function () {
+    it('should parse a function call with a single argument of a function call all possible combinations', function () {
         let fn = parse('aFunction(argsFn(),10,n)');
         expect(fn({
             n:3,

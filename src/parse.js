@@ -305,7 +305,8 @@ AST.prototype.primary = function () {
         } else {
             primary = {
                 type:AST.CallExpression,
-                callee:primary
+                callee:primary,
+                arguments:this.parseArguments()
             };
             this.consume(')');
         }
@@ -321,7 +322,6 @@ AST.prototype.constant = function () {
 AST.prototype.identifier = function () {
     return {type: AST.Identifier, name: this.consume().text};
 };
-
 
 AST.prototype.arrayDeclaration = function () {
     let elements = [];
@@ -382,6 +382,15 @@ AST.prototype.consume = function (e) {
     return token;
 };
 
+AST.prototype.parseArguments = function () {
+    let args = [];
+    if(!this.peek(')')){
+        do {
+            args.push(this.primary());
+        } while (this.expect(','))
+    }
+    return args;
+};
 
 /*------------------------------------------ ASTCompiler ------------------------------------------*/
 /**
@@ -499,7 +508,10 @@ ASTCompiler.prototype.recurse = function (ast) { //param is the ast structure no
 
         case AST.CallExpression:
             let callee = this.recurse(ast.callee);
-            return `${callee} && ${callee}()`; // fn && fn() not to throw error
+            let args = ast.arguments.map((arg) => {
+                  return this.recurse(arg)
+            });
+            return `${callee} && ${callee}(${args.join(',')})`; // fn && fn() not to throw error
         case AST.ThisExpression:
             return 's';
 
