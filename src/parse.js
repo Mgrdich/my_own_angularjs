@@ -110,7 +110,7 @@ Lexer.prototype.isString = function (ch) {
 };
 
 Lexer.prototype.isIdentifierSymboles = function () {
-   return this.is('[],{}:.()');
+    return this.is('[],{}:.()');
 };
 
 Lexer.prototype.isIdentifier = function (ch) {
@@ -286,22 +286,28 @@ AST.prototype.primary = function () {
 
     let next;
 
-    while ((next = this.expect('.','['))) {
-        if(next.text === '[') {
+    while ((next = this.expect('.', '[','('))) {
+        if (next.text === '[') {
             primary = {
                 type: AST.MemberExpression,
                 object: primary,
                 property: this.primary(),
-                computed:true
+                computed: true
             };
             this.consume(']');
-        } else  {
+        } else if (next.text === '.') {
             primary = {
                 type: AST.MemberExpression,
                 object: primary,
                 property: this.identifier(),
-                computed:false
+                computed: false
             };
+        } else {
+            primary = {
+                type:AST.CallExpression,
+                callee:primary
+            }
+            this.consume(')');
         }
     }
 
@@ -312,7 +318,7 @@ AST.prototype.constant = function () {
     return {type: AST.Literal, value: this.consume().value};
 };
 
-AST.prototype.identifier = function() {
+AST.prototype.identifier = function () {
     return {type: AST.Identifier, name: this.consume().text};
 };
 
@@ -403,18 +409,18 @@ ASTCompiler.prototype.compile = function (text) {
     this.recurse(ast);
 
     let funBody = '';
-    if(this.state.vars.length) {
+    if (this.state.vars.length) {
         funBody = `var ${this.state.vars.join(',')};`
     } else {
         funBody = '';
     }
-    funBody+= this.state.body.join('');
+    funBody += this.state.body.join('');
 
     /**
      * s stands for scope parameter
      * l stands for local parameter
      * */
-    return new Function('s','l',funBody); //giving args
+    return new Function('s', 'l', funBody); //giving args
 };
 
 ASTCompiler.prototype.nonComputedMember = function (left, right) {
@@ -439,7 +445,7 @@ ASTCompiler.prototype.not = function (e) {
     return `!(${e})`;
 };
 
-ASTCompiler.prototype.getHasOwnProperty = function (object,property) {
+ASTCompiler.prototype.getHasOwnProperty = function (object, property) {
     return `${object} && (${this.escape(property)} in ${object})`;
 };
 
@@ -448,7 +454,7 @@ ASTCompiler.prototype.assign = function (id, value) {
 };
 
 ASTCompiler.prototype.nextId = function () {
-    return  `v${this.state.nextId++}`;
+    return `v${this.state.nextId++}`;
 };
 
 ASTCompiler.prototype.recurse = function (ast) { //param is the ast structure not the instructor
@@ -467,29 +473,33 @@ ASTCompiler.prototype.recurse = function (ast) { //param is the ast structure no
         case AST.ObjectExpression:
             let properties = ast.properties.map((property) => {
                 //key string or an identifier
-               let key = property.key.type === AST.Identifier ? property.key.name : this.escape(property.key.value);
-               let value = this.recurse(property.value);
-               return `${key}:${value}`;
+                let key = property.key.type === AST.Identifier ? property.key.name : this.escape(property.key.value);
+                let value = this.recurse(property.value);
+                return `${key}:${value}`;
             });
             return `{${properties.join(',')}}`;
         case AST.Identifier:
             intoId = this.nextId();
             //if local parameter exist
-            this.if_(this.getHasOwnProperty('l',ast.name), this.assign(intoId, this.nonComputedMember('l', ast.name)));
+            this.if_(this.getHasOwnProperty('l', ast.name), this.assign(intoId, this.nonComputedMember('l', ast.name)));
 
-            this.if_(`${this.not(this.getHasOwnProperty('l',ast.name))} && s`, this.assign(intoId, this.nonComputedMember('s', ast.name)));
+            this.if_(`${this.not(this.getHasOwnProperty('l', ast.name))} && s`, this.assign(intoId, this.nonComputedMember('s', ast.name)));
 
             return intoId;
         case AST.MemberExpression:
             intoId = this.nextId();
             let left = this.recurse(ast.object);
-            if(ast.computed) {
+            if (ast.computed) {
                 let right = this.recurse(ast.property);
                 this.if_(left, this.assign(intoId, this.computedMember(left, right)));
             } else {
                 this.if_(left, this.assign(intoId, this.nonComputedMember(left, ast.property.name)));
             }
             return intoId;
+
+        case AST.CallExpression:
+            let callee = this.recurse(ast.callee);
+            return `${callee} && ${callee}()`; // fn && fn() not to throw error
         case AST.ThisExpression:
             return 's';
 
