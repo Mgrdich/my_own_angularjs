@@ -306,7 +306,7 @@ AST.prototype.primary = function () {
             primary = {
                 type:AST.CallExpression,
                 callee:primary
-            }
+            };
             this.consume(')');
         }
     }

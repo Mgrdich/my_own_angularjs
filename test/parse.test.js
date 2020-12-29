@@ -269,4 +269,35 @@ describe("Parse", function () {
         let fn = parse('aFunction()');
         expect(fn({aFunction:function (){return 42}})).toBe(42);
     });
+
+
+    it('parses a function call with param', function () {
+        let fn = parse('aFunction(42)');
+        expect(fn({aFunction:function (n){return n}})).toBe(42);
+    });
+
+
+    it('parses a function call with different args', function () {
+        let fn = parse('aFunction(key)');
+        expect(fn({key:10,aFunction:function (n){return n}})).toBe(42);
+    });
+
+
+    it('should parse a function call with a single argument of a function call', function () {
+        let fn = parse('aFunction(argsFn())');
+        expect(fn({
+            argsFn:function(){return 40;}, //lodash _.constant
+            aFunction:function (n){return n}
+        })).toBe(42);
+    });
+
+
+    it('should parse a function call with a single argument of a function call', function () {
+        let fn = parse('aFunction(argsFn(),10,n)');
+        expect(fn({
+            n:3,
+            argsFn:function(){return 40;}, //lodash _.constant
+            aFunction:function (a1,a2,a3){return a1+a2+a3}
+        })).toBe(53);
+    });
 });

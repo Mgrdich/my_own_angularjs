@@ -58,4 +58,6 @@ Lib.prototype.isString = function (str) {
 
 //TODO isArrayLike from the mixin
 
+//TODO constant easy
+
 module.exports = Lib;
