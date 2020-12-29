@@ -290,7 +290,7 @@ AST.prototype.primary = function () {
             primary = {
                 type: AST.MemberExpression,
                 object: primary,
-                property: this.identifier(),
+                property: this.primary(),
                 computed:true
             };
             this.consume(']');
@@ -353,7 +353,7 @@ AST.prototype.object = function () {
 AST.prototype.peek = function (e1, e2, e3, e4) { //TODO do it with spread
     if (this.tokens.length > 0) {
         let text = this.tokens[0].text;
-        if (text === e1 || text === e2 || text === e3 || text === e4 || !e1 || !e2 || !e3 || !e4) { //peek the first character
+        if (text === e1 || text === e2 || text === e3 || text === e4 || (!e1 && !e2 && !e3 && !e4)) { //peek the first character
             return this.tokens[0]
         }
     }

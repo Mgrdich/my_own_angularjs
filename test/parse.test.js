@@ -243,13 +243,13 @@ describe("Parse", function () {
 
     it('parses javascript object computed property', function () {
         let fn = parse('aKey["a"]');
-        expect(fn({aKey:{a:10}})).toBe(40);
+        expect(fn({aKey:{a:10}})).toBe(10);
     });
 
 
     it('parses javascript array computed property', function () {
         let fn = parse('aKey[1]');
-        expect(fn({aKey:[1,2,3]})).toBe(40);
+        expect(fn({aKey:[1,2,3]})).toBe(2);
     });
 
 
