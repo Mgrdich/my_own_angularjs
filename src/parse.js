@@ -80,7 +80,7 @@ Lexer.prototype.lex = function (text) {
             this.readNumber();
         } else if (this.isString()) { //keep in mind this inside original string quote
             this.readString(this.ch);
-        } else if (this.isArrayOrObject()) { //todo check is it valid name
+        } else if (this.isIdentifierSymboles()) { //todo check is it valid name
             this.tokens.push({
                 text: this.ch
             });
@@ -109,8 +109,8 @@ Lexer.prototype.isString = function (ch) {
     return this.is('\'"');
 };
 
-Lexer.prototype.isArrayOrObject = function () {
-   return this.is('[],{}:.');
+Lexer.prototype.isIdentifierSymboles = function () {
+   return this.is('[],{}:.()');
 };
 
 Lexer.prototype.isIdentifier = function (ch) {
@@ -251,6 +251,7 @@ AST.ObjectExpression = 'ObjectExpression';
 AST.Identifier = 'Identifier';
 AST.ThisExpression = 'ThisExpression';
 AST.MemberExpression = 'MemberExpression';
+AST.CallExpression = 'CallExpression';
 
 AST.prototype.constants = {
     'null': {type: AST.Literal, value: null},
