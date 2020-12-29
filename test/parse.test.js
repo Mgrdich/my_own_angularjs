@@ -300,4 +300,32 @@ describe("Parse", function () {
             aFunction:function (a1,a2,a3){return a1+a2+a3}
         })).toBe(53);
     });
+
+
+    it('method calls and the call context non computed', function () {
+        let scope = {
+            anObject:{
+                n: 10,
+                aFunction: function () {
+                    return this.n;
+                }
+            }
+        };
+        let fn = parse('anObject["aFunction"](n)');
+        expect(fn(scope)).expect(10);
+    });
+
+
+    it('method calls and the call context computed', function () {
+        let scope = {
+            anObject:{
+                n: 10,
+                aFunction: function () {
+                    return this.n;
+                }
+            }
+        };
+        let fn = parse('anObject.aFunction(n)');
+        expect(fn(scope)).expect(10);
+    })
 });

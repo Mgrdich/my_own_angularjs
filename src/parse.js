@@ -466,7 +466,7 @@ ASTCompiler.prototype.nextId = function () {
     return `v${this.state.nextId++}`;
 };
 
-ASTCompiler.prototype.recurse = function (ast) { //param is the ast structure not the instructor
+ASTCompiler.prototype.recurse = function (ast,context) { //param is the ast structure not the instructor
     let intoId;
     switch (ast.type) {
         case AST.Program:
@@ -498,19 +498,38 @@ ASTCompiler.prototype.recurse = function (ast) { //param is the ast structure no
         case AST.MemberExpression:
             intoId = this.nextId();
             let left = this.recurse(ast.object);
+            if(context){
+                context.context = left;
+            }
             if (ast.computed) {
                 let right = this.recurse(ast.property);
                 this.if_(left, this.assign(intoId, this.computedMember(left, right)));
+                if (context) {
+                    context.name = right;
+                    context.computed = true;
+                }
             } else {
                 this.if_(left, this.assign(intoId, this.nonComputedMember(left, ast.property.name)));
+                if (context) {
+                    context.name = ast.property.name;
+                    context.computed = false;
+                }
             }
             return intoId;
 
         case AST.CallExpression:
-            let callee = this.recurse(ast.callee);
+            let callContext = {};
+            let callee = this.recurse(ast.callee,callContext);
             let args = ast.arguments.map((arg) => {
                   return this.recurse(arg)
             });
+            if(callContext.name) {
+                if(callContext.computed) {
+                    callee = this.computedMember(callContext.context, callContext.name);
+                } else {
+                    callee = this.nonComputedMember(callContext.context, callContext.name);
+                }
+            }
             return `${callee} && ${callee}(${args.join(',')})`; // fn && fn() not to throw error
         case AST.ThisExpression:
             return 's';
