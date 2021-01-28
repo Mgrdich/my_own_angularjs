@@ -68,7 +68,7 @@ function Lexer() {
 }
 
 Lexer.prototype.lex = function (text) {
-    //Tokenization will be done here
+    //Tokenizing will be done here
     this.text = text;
     this.index = 0; //out current character index in string
     this.ch = undefined; //current character but why not a local variable?
