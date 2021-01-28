@@ -327,5 +327,29 @@ describe("Parse", function () {
         };
         let fn = parse('anObject.aFunction(n)');
         expect(fn(scope)).toBe(10);
-    })
+    });
+
+
+    it('binds a bare functions to the scope', function () {
+        let scope = {
+            aFunction:function () {
+                return this;
+            }
+        };
+
+        let fn = parse('aFunction()');
+        expect(fn(scope)).toBe(scope);
+    });
+
+
+    it('binds a bare function on locals to the locals', function () {
+        let scope = {};
+        let locals = {
+            aFunction: function () {
+                return this
+            }
+        };
+        let fn = parse('aFunction()');
+        expect(fn(scope,locals)).toBe(locals);
+    });
 });
