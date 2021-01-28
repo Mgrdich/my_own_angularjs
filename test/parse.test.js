@@ -312,7 +312,7 @@ describe("Parse", function () {
             }
         };
         let fn = parse('anObject["aFunction"](n)');
-        expect(fn(scope)).expect(10);
+        expect(fn(scope)).toBe(10);
     });
 
 
@@ -326,6 +326,6 @@ describe("Parse", function () {
             }
         };
         let fn = parse('anObject.aFunction(n)');
-        expect(fn(scope)).expect(10);
+        expect(fn(scope)).toBe(10);
     })
 });
