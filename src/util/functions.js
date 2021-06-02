@@ -20,10 +20,16 @@ Lib.prototype.Lo = _; //extending Lodash Mgo Style :)
 
 Lib.prototype.noop = function () {};
 
+/**
+ * @description check whether parameter is a number
+ * */
 Lib.prototype.isNumber = function (num) {
     return typeof num === 'number';
 };
 
+/**
+ * @description check whether two values are equal
+ * */
 Lib.prototype.areEqual = function (newValue, oldValue, valueEq) {
     if (valueEq) {
         return _.isEqual(newValue, oldValue);//recursive
@@ -32,15 +38,23 @@ Lib.prototype.areEqual = function (newValue, oldValue, valueEq) {
     }
 };
 
+/**
+ * @description check whether parameter is a null
+ * */
 Lib.prototype.isNull = function (value) {
     return value === null;
 };
 
+/**
+ * @description check whether parameter is a array
+ * */
 Lib.prototype.isArray = function(arr) {
   return  Array.isArray(arr);
 };
 
-
+/**
+ * @description check whether parameter is a string
+ * */
 Lib.prototype.isString = function (str) {
     return typeof str === 'string';
 };
