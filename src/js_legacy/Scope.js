@@ -1,4 +1,4 @@
-const Lib = require("../src/util/functions");
+const Lib = require("util/functions");
 const def = new Lib();
 
 function Scope() {

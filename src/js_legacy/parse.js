@@ -5,7 +5,7 @@
  * be a scope object using the JavaScript with statement.
  */
 
-const Lib = require("../src/util/functions");
+const Lib = require("util/functions");
 const def = new Lib();
 
 let ESCAPES = {
@@ -105,7 +105,7 @@ Lexer.prototype.isNumber = function (ch) {
     return '0' <= ch && ch <= '9';
 };
 
-Lexer.prototype.isString = function (ch) {
+Lexer.prototype.isString = function () {
     return this.is('\'"');
 };
 
@@ -417,7 +417,7 @@ ASTCompiler.prototype.compile = function (text) {
 
     this.recurse(ast);
 
-    let funBody = '';
+    let funBody;
     if (this.state.vars.length) {
         funBody = `var ${this.state.vars.join(',')};`
     } else {

@@ -1,5 +1,5 @@
-const Scope = require("../src/Scope");
-const Lib = require("../src/util/functions");
+const Scope = require("js_legacy/Scope");
+const Lib = require("util/functions");
 const def = new Lib();
 
 describe("Scope", function () {
@@ -496,7 +496,7 @@ describe("Scope", function () {
 
             scope.$watch(function () {
                 return scope.aValue;
-            },function (newValue,oldValue,scope) {
+            },function () {
                 throw "error";
             });
 
@@ -521,7 +521,7 @@ describe("Scope", function () {
                 scope.counter++;
             });
 
-            scope.$evalAsync(function (scope) {
+            scope.$evalAsync(function () {
                 throw "Error";
             });
 
@@ -611,7 +611,7 @@ describe("Scope", function () {
                 return scope.aValue;
             });
 
-            let destroyWatch = scope.$watch(function (scope) {
+            let destroyWatch = scope.$watch(function () {
                 watchCalls.push('second');
                 destroyWatch(); //this should not trick the order and the shifting order of the watcher so they won't budge
             });
@@ -632,7 +632,7 @@ describe("Scope", function () {
 
             scope.$watch(function () {
                 return scope.aValue;
-            },function (newValue,oldValue,scope) {
+            },function () {
                 destroyWatch();
             });
 
@@ -694,7 +694,7 @@ describe("Scope", function () {
                function (scope) {
                    return scope.anotherValue;
                }
-           ],function (newValues,oldValues,scope) {
+           ],function (newValues,oldValues) {
                gotNewValue = newValues;
                gotOldValue = oldValues;
            });
@@ -718,7 +718,7 @@ describe("Scope", function () {
                 function (scope) {
                     return scope.anotherValue;
                 }
-            ], function (newValue, oldValue, scope) {
+            ], function () {
                 counter++;
             });
             scope.$digest();
@@ -741,7 +741,7 @@ describe("Scope", function () {
                 function (scope) {
                     return scope.anotherValue;
                 }
-            ], function (newValues, oldValues, scope) {
+            ], function (newValues, oldValues) {
                gotNewValues = newValues;
                gotOldValues = oldValues;
             });
@@ -761,7 +761,7 @@ describe("Scope", function () {
            let gotNewsValues = null;
            let gotOldValues = null;
 
-           scope.$watchGroup([],function (newValues,oldValues,scope) {
+           scope.$watchGroup([],function (newValues,oldValues) {
                gotOldValues = oldValues;
                gotNewsValues = newValues;
            });
@@ -786,7 +786,7 @@ describe("Scope", function () {
                 function (scope) {
                     return scope.anotherValue;
                 }
-            ],function (newValue,oldValues,scope) {
+            ],function () {
                 counter++;
             });
 

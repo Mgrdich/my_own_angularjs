@@ -1,6 +1,4 @@
-const parse = require("../src/parse");
-const Lib = require("../src/util/functions");
-
+const parse = require("js_legacy/parse");
 
 describe("Parse", function () {
 
