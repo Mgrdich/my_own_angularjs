@@ -379,7 +379,7 @@ describe('Scope', function () {
         },
       );
 
-      scope.$evalAsync(function (scope) {}); //trigger a digest if none is running
+      scope.$evalAsync(function () {}); //trigger a digest if none is running
 
       expect(scope.counter).toBe(0);
 
