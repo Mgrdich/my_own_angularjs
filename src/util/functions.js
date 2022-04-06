@@ -1,19 +1,19 @@
 /**
  * @description a list pf utility pure functions with no side effects and Lodash Library
  * */
+// eslint-disable-next-line @typescript-eslint/no-var-requires
 const _ = require('lodash');
 
 function Lib() {}
 
 _.mixin({
-    isArrayLike: function(obj) {
-        if (_.isNull(obj) || _.isUndefined(obj)) {
-            return false;
-        }
-        let length = obj.length;
-        return length === 0 ||
-            (_.isNumber(length) && length > 0 && (length - 1) in obj);
+  isArrayLike: function (obj) {
+    if (_.isNull(obj) || _.isUndefined(obj)) {
+      return false;
     }
+    let length = obj.length;
+    return length === 0 || (_.isNumber(length) && length > 0 && length - 1 in obj);
+  },
 });
 
 Lib.prototype.Lo = _; //extending Lodash Mgo Style :)
@@ -24,41 +24,44 @@ Lib.prototype.noop = function () {};
  * @description check whether parameter is a number
  * */
 Lib.prototype.isNumber = function (num) {
-    return typeof num === 'number';
+  return typeof num === 'number';
 };
 
 /**
  * @description check whether two values are equal
  * */
 Lib.prototype.areEqual = function (newValue, oldValue, valueEq) {
-    if (valueEq) {
-        return _.isEqual(newValue, oldValue);//recursive
-    } else { //both NaN then they are equal
-        return newValue === oldValue || (this.isNumber(newValue) && this.isNumber(oldValue) && isNaN(newValue) && isNaN(oldValue));
-    }
+  if (valueEq) {
+    return _.isEqual(newValue, oldValue); //recursive
+  } else {
+    //both NaN then they are equal
+    return (
+      newValue === oldValue ||
+      (this.isNumber(newValue) && this.isNumber(oldValue) && isNaN(newValue) && isNaN(oldValue))
+    );
+  }
 };
 
 /**
  * @description check whether parameter is a null
  * */
 Lib.prototype.isNull = function (value) {
-    return value === null;
+  return value === null;
 };
 
 /**
- * @description check whether parameter is a array
+ * @description check whether parameter is an array
  * */
-Lib.prototype.isArray = function(arr) {
-  return  Array.isArray(arr);
+Lib.prototype.isArray = function (arr) {
+  return Array.isArray(arr);
 };
 
 /**
  * @description check whether parameter is a string
  * */
 Lib.prototype.isString = function (str) {
-    return typeof str === 'string';
+  return typeof str === 'string';
 };
-
 
 //TODO forEach
 
