@@ -1,14 +1,20 @@
 {
   "compilerOptions": {
-    "target": "es2018",
     "module": "commonjs",
-    "outDir": "dist",
+    "noImplicitAny": true,
+    "removeComments": true,
+    "preserveConstEnums": true,
     "sourceMap": true,
-    "baseUrl": "src",
-    "include": [
-      "src"
-    ]
+    "declaration": true,
+    "moduleResolution": "node",
+    "outDir": "./dist",
+    "rootDir": ".",
+    "baseUrl": "src"
   },
-  "include": ["src/**/*.ts"],
-  "exclude": ["node_modules"]
+  "include": [
+    "src"
+  ],
+  "exclude": [
+    "node_modules"
+  ]
 }
