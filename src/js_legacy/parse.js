@@ -5,8 +5,7 @@
  * be a scope object using the JavaScript with statement.
  */
 
-// eslint-disable-next-line @typescript-eslint/no-var-requires
-const Lib = require('util/functions');
+import Lib from 'util/functions';
 const def = new Lib();
 
 let ESCAPES = {
@@ -19,7 +18,7 @@ let ESCAPES = {
   '"': '"',
 };
 
-function parse(expr) {
+export default function parse(expr) {
   let lexer = new Lexer();
   let parser = new Parser(lexer);
   return parser.parse(expr);
@@ -567,5 +566,3 @@ ASTCompiler.prototype.escape = function (value) {
     return value;
   }
 };
-
-module.exports = parse;

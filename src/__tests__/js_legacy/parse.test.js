@@ -1,5 +1,5 @@
 // eslint-disable-next-line @typescript-eslint/no-var-requires
-const parse = require('js_legacy/parse');
+import parse from '../../js_legacy/parse';
 
 describe('Parse', function () {
   it('can parse an integer', function () {

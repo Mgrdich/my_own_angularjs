@@ -1,8 +1,7 @@
 /**
  * @description a list pf utility pure functions with no side effects and Lodash Library
  * */
-// eslint-disable-next-line @typescript-eslint/no-var-requires
-const _ = require('lodash');
+import _ from 'lodash';
 
 function Lib() {}
 
@@ -16,7 +15,7 @@ _.mixin({
   },
 });
 
-Lib.prototype.Lo = _; //extending Lodash Mgo Style :)
+Lib.prototype.Lo = _;
 
 Lib.prototype.noop = function () {};
 
@@ -77,4 +76,4 @@ Lib.prototype.isString = function (str) {
 
 //TODO constant easy
 
-module.exports = Lib;
+export default Lib;
