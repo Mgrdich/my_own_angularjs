@@ -1,8 +1,8 @@
 // eslint-disable-next-line @typescript-eslint/no-var-requires
-const Lib = require('util/functions');
+import Lib from 'util/functions';
 const def = new Lib();
 
-function Scope() {
+export default function Scope() {
   this.$$watchers = [];
   this.$$lastDirtyWatch = null;
   this.$$asyncQueue = [];
@@ -271,7 +271,7 @@ Scope.prototype.$watchGroup = function (watchFns, listenerFn) {
   });
 
   return function () {
-    def.Lo._.forEach(destroyFunctions, function (destroyFunction) {
+    def.Lo.forEach(destroyFunctions, function (destroyFunction) {
       destroyFunction();
     });
   };
@@ -486,5 +486,3 @@ Scope.prototype.$$fireEventsOnScope = function (eventName, listenerArgs) {
  * @description first time undefined equality not to be satisfied
  * */
 function initWatchVal() {}
-
-module.exports = Scope;
