@@ -1,4 +1,4 @@
-import Scope from '../../js_legacy/Scope';
+import Scope from 'js_legacy/Scope';
 import Lib from 'util/functions';
 const def = new Lib();
 
