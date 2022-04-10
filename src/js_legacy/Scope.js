@@ -89,7 +89,7 @@ Scope.prototype.$new = function (isolated, parent) {
   parent = parent || this; //is the scope whom we push childrens into
   if (isolated) {
     child = new Scope();
-    //since isolated Scope is not root it should not be circular referencing it should reference root scope
+    //since isolated Index is not root it should not be circular referencing it should reference root scope
     child.$root = parent.$root;
     child.$$asyncQueue = parent.$$asyncQueue; //to not get attribute shadowing and block root we want to pick up the root
     child.$$postDigestQueue = parent.$$postDigestQueue; //to not get attribute shadowing and block root we want to pick up the root
@@ -158,7 +158,7 @@ Scope.prototype.$$digestOnce = function () {
 };
 
 Scope.prototype.$eval = function (expr, locals) {
-  return expr(this, locals); //passing in the Scope with this
+  return expr(this, locals); //passing in the Index with this
 };
 
 Scope.prototype.$apply = function (expr) {
@@ -199,7 +199,7 @@ Scope.prototype.$evalAsync = function (expr) {
       }
     });
   }
-  this.$$asyncQueue.push({ scope: this, expression: expr }); //Scope related to inheritance
+  this.$$asyncQueue.push({ scope: this, expression: expr }); //Index related to inheritance
 };
 
 Scope.prototype.$$flushApplyAsync = function () {
