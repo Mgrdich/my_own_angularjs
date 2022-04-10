@@ -1,7 +1,7 @@
 import LibHelper from 'util/LibHelper';
 
 describe('LibHelper', () => {
-  it('should test isNumber Function', function () {
+  it('should test isNumber Function', () => {
     expect(LibHelper.isNumber(4)).toBeTruthy();
     expect(LibHelper.isNumber(-1)).toBeTruthy();
     expect(LibHelper.isNumber('4')).toBeFalsy();
@@ -12,7 +12,7 @@ describe('LibHelper', () => {
     expect(LibHelper.isNumber(false)).toBeFalsy();
   });
 
-  it('should test isString Function', function () {
+  it('should test isString Function', () => {
     expect(LibHelper.isString('STRING')).toBeTruthy();
     expect(LibHelper.isString(4)).toBeFalsy();
     expect(LibHelper.isString(-1)).toBeFalsy();
@@ -23,7 +23,7 @@ describe('LibHelper', () => {
     expect(LibHelper.isString(false)).toBeFalsy();
   });
 
-  it('should test isFunction Function', function () {
+  it('should test isFunction Function', () => {
     expect(LibHelper.isFunction(function () {})).toBeTruthy();
     expect(LibHelper.isFunction(new Function())).toBeTruthy();
     expect(LibHelper.isFunction(4)).toBeFalsy();
@@ -35,7 +35,7 @@ describe('LibHelper', () => {
     expect(LibHelper.isFunction(false)).toBeFalsy();
   });
 
-  it('should test isNull Function', function () {
+  it('should test isNull Function', () => {
     expect(LibHelper.isNull(null)).toBeTruthy();
     expect(LibHelper.isNull(4)).toBeFalsy();
     expect(LibHelper.isNull(-1)).toBeFalsy();
