@@ -86,5 +86,32 @@ describe('LibHelper', () => {
     expect(LibHelper.isUndefined({})).toBeFalsy();
   });
 
+  it('should test isRegExp Function', () => {
+    expect(LibHelper.isRegExp(new RegExp(''))).toBeTruthy();
+    expect(LibHelper.isRegExp(/name/i)).toBeTruthy();
+    expect(LibHelper.isRegExp(undefined)).toBeFalsy();
+    expect(LibHelper.isRegExp(null)).toBeFalsy();
+    expect(LibHelper.isRegExp(4)).toBeFalsy();
+    expect(LibHelper.isRegExp(-1)).toBeFalsy();
+    expect(LibHelper.isRegExp('4')).toBeFalsy();
+    expect(LibHelper.isRegExp(function () {})).toBeFalsy();
+    expect(LibHelper.isRegExp(true)).toBeFalsy();
+    expect(LibHelper.isRegExp(false)).toBeFalsy();
+    expect(LibHelper.isRegExp({})).toBeFalsy();
+  });
+
+  it('should test isDate Function', () => {
+    expect(LibHelper.isDate(new Date())).toBeTruthy();
+    expect(LibHelper.isDate(undefined)).toBeFalsy();
+    expect(LibHelper.isDate(null)).toBeFalsy();
+    expect(LibHelper.isDate(4)).toBeFalsy();
+    expect(LibHelper.isDate(-1)).toBeFalsy();
+    expect(LibHelper.isDate('4')).toBeFalsy();
+    expect(LibHelper.isDate(function () {})).toBeFalsy();
+    expect(LibHelper.isDate(true)).toBeFalsy();
+    expect(LibHelper.isDate(false)).toBeFalsy();
+    expect(LibHelper.isDate({})).toBeFalsy();
+  });
+
   describe('Loops and forEach-es', () => {});
 });

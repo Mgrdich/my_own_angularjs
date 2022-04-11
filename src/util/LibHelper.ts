@@ -33,6 +33,14 @@ export default class LibHelper {
     return typeof element === 'undefined';
   }
 
+  static isRegExp(element: unknown): boolean {
+    return toString.call(element) === '[object RegExp]';
+  }
+
+  static isDate(element: unknown) {
+    return toString.call(element) === '[object Date]';
+  }
+
   static arrayEach<T>(arr: T[], callback: (item: T, index: number, arr: T[]) => unknown): T[] {
     let index = -1;
     const length: number = arr.length;
@@ -58,8 +66,8 @@ export default class LibHelper {
   }
 
   static forEach<T = unknown>(
-    collection: unknown[] | Dictionary<T>,
-    callback: (item: T) => unknown,
+    collection: T[] | Dictionary<T>,
+    callback: (item: T, curr: string | number, collectionSelf: typeof collection) => unknown,
   ): unknown[] | Dictionary<T> {
     if (Array.isArray(collection)) {
       return LibHelper.arrayEach(collection, callback);
