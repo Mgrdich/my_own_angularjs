@@ -85,4 +85,6 @@ describe('LibHelper', () => {
     expect(LibHelper.isUndefined(false)).toBeFalsy();
     expect(LibHelper.isUndefined({})).toBeFalsy();
   });
+
+  describe('Loops and forEach-es', () => {});
 });

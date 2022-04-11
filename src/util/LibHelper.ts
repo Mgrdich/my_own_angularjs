@@ -33,11 +33,34 @@ export default class LibHelper {
     return typeof element === 'undefined';
   }
 
-  static arrayEach<T>(element: T[], callback: (item: T) => unknown): void {}
+  static arrayEach<T>(arr: T[], callback: (item: T, index: number, arr: T[]) => unknown): T[] {
+    let index = -1;
+    const length: number = arr.length;
 
-  static baseEach<T = unknown>(element: Dictionary<T>, callback: (item: T) => unknown): void {}
+    while (++index < length) {
+      if (callback(arr[index], index, arr) === false) {
+        break;
+      }
+    }
+    return arr;
+  }
 
-  static forEach<T = unknown>(collection: unknown[] | Dictionary<T>, callback: (item: T) => unknown): void {
+  static baseEach<T = unknown>(
+    obj: Dictionary<T>,
+    callback: (value: T, key: string, obj: Dictionary<T>) => unknown,
+  ): Dictionary<T> {
+    for (const key in obj) {
+      if (callback(obj[key], key, obj) === false) {
+        break;
+      }
+    }
+    return obj;
+  }
+
+  static forEach<T = unknown>(
+    collection: unknown[] | Dictionary<T>,
+    callback: (item: T) => unknown,
+  ): unknown[] | Dictionary<T> {
     if (Array.isArray(collection)) {
       return LibHelper.arrayEach(collection, callback);
     }
