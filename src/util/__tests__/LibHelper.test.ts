@@ -21,6 +21,7 @@ describe('LibHelper', () => {
     expect(LibHelper.isString(undefined)).toBeFalsy();
     expect(LibHelper.isString(true)).toBeFalsy();
     expect(LibHelper.isString(false)).toBeFalsy();
+    expect(LibHelper.isString({})).toBeFalsy();
   });
 
   it('should test isFunction Function', () => {
@@ -33,6 +34,7 @@ describe('LibHelper', () => {
     expect(LibHelper.isFunction(undefined)).toBeFalsy();
     expect(LibHelper.isFunction(true)).toBeFalsy();
     expect(LibHelper.isFunction(false)).toBeFalsy();
+    expect(LibHelper.isFunction({})).toBeFalsy();
   });
 
   it('should test isNull Function', () => {
@@ -44,5 +46,43 @@ describe('LibHelper', () => {
     expect(LibHelper.isNull(undefined)).toBeFalsy();
     expect(LibHelper.isNull(true)).toBeFalsy();
     expect(LibHelper.isNull(false)).toBeFalsy();
+    expect(LibHelper.isNull({})).toBeFalsy();
+  });
+
+  it('should test isObject Function', () => {
+    expect(LibHelper.isObject({})).toBeTruthy();
+    expect(LibHelper.isObject(new Object({}))).toBeTruthy();
+    expect(LibHelper.isObject(null)).toBeFalsy();
+    expect(LibHelper.isObject(4)).toBeFalsy();
+    expect(LibHelper.isObject(-1)).toBeFalsy();
+    expect(LibHelper.isObject('4')).toBeFalsy();
+    expect(LibHelper.isObject(function () {})).toBeFalsy();
+    expect(LibHelper.isObject(undefined)).toBeFalsy();
+    expect(LibHelper.isObject(true)).toBeFalsy();
+    expect(LibHelper.isObject(false)).toBeFalsy();
+  });
+
+  it('should test isDefined Function', () => {
+    expect(LibHelper.isDefined(null)).toBeTruthy();
+    expect(LibHelper.isDefined(4)).toBeTruthy();
+    expect(LibHelper.isDefined(-1)).toBeTruthy();
+    expect(LibHelper.isDefined('4')).toBeTruthy();
+    expect(LibHelper.isDefined(function () {})).toBeTruthy();
+    expect(LibHelper.isDefined(undefined)).toBeFalsy();
+    expect(LibHelper.isDefined(true)).toBeTruthy();
+    expect(LibHelper.isDefined(false)).toBeTruthy();
+    expect(LibHelper.isDefined({})).toBeTruthy();
+  });
+
+  it('should test isUndefined Function', () => {
+    expect(LibHelper.isUndefined(undefined)).toBeTruthy();
+    expect(LibHelper.isUndefined(null)).toBeFalsy();
+    expect(LibHelper.isUndefined(4)).toBeFalsy();
+    expect(LibHelper.isUndefined(-1)).toBeFalsy();
+    expect(LibHelper.isUndefined('4')).toBeFalsy();
+    expect(LibHelper.isUndefined(function () {})).toBeFalsy();
+    expect(LibHelper.isUndefined(true)).toBeFalsy();
+    expect(LibHelper.isUndefined(false)).toBeFalsy();
+    expect(LibHelper.isUndefined({})).toBeFalsy();
   });
 });
