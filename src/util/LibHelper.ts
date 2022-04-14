@@ -41,7 +41,7 @@ export default class LibHelper {
     return toString.call(element) === '[object Date]';
   }
 
-  static arrayEach<T>(arr: T[], callback: (item: T, index: number, arr: T[]) => unknown): T[] {
+  static arrayEach<T = unknown>(arr: T[], callback: (item: T, index: number, arr: T[]) => unknown): T[] {
     let index = -1;
     const length: number = arr.length;
 

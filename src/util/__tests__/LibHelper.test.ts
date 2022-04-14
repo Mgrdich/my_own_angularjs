@@ -113,5 +113,47 @@ describe('LibHelper', () => {
     expect(LibHelper.isDate({})).toBeFalsy();
   });
 
-  describe('Loops and forEach-es', () => {});
+  describe('Loops and forEach-es', () => {
+    const emptyArray: unknown[] = [];
+    const emptyObject = {};
+
+    const dataCheckArray = ['string', 1, null, undefined];
+    const dataObject = {
+      a: 1,
+      b: 'string',
+      c: function () {
+        return 'functionCall';
+      },
+    };
+
+    it('should test empty case of object iteration for baseEach', () => {
+      const mockFn = jest.fn();
+      LibHelper.baseEach(emptyObject, mockFn);
+      expect(mockFn).not.toHaveBeenCalled();
+    });
+
+    it('should test empty case of array iteration for arrayEach', () => {
+      const mockFn = jest.fn();
+      LibHelper.arrayEach(emptyArray, mockFn);
+      expect(mockFn).not.toHaveBeenCalled();
+    });
+
+    it('should test data based case of object iteration for baseEach', () => {
+      const mockFn = jest.fn();
+      LibHelper.baseEach(dataObject, mockFn);
+      expect(mockFn).toHaveBeenCalledTimes(Object.keys(dataObject).length);
+      // TODO write tests for parameter
+    });
+
+    it('should test data based case of object iteration for arrayEach', () => {
+      const mockFn = jest.fn();
+      LibHelper.arrayEach(dataCheckArray, mockFn);
+      expect(mockFn).toHaveBeenCalledTimes(dataCheckArray.length);
+      // TODO write tests for parameter
+    });
+
+    it('should check the short circuit optimization option in the baseEach', () => {});
+
+    it('should check the short circuit optimization option in the arrayEach', () => {});
+  });
 });
