@@ -1,4 +1,5 @@
 import LibHelper from 'util/LibHelper';
+import { Dictionary } from '../../Types';
 
 describe('LibHelper', () => {
   it('should test isNumber Function', () => {
@@ -118,7 +119,7 @@ describe('LibHelper', () => {
     const emptyObject = {};
 
     const dataCheckArray = ['string', 1, null, undefined];
-    const dataObject = {
+    const dataObject: Dictionary = {
       a: 1,
       b: 'string',
       c: function () {
@@ -141,15 +142,20 @@ describe('LibHelper', () => {
     it('should test data based case of object iteration for baseEach', () => {
       const mockFn = jest.fn();
       LibHelper.baseEach(dataObject, mockFn);
-      expect(mockFn).toHaveBeenCalledTimes(Object.keys(dataObject).length);
-      // TODO write tests for parameter
+      const objectKeys: string[] = Object.keys(dataObject);
+      expect(mockFn).toHaveBeenCalledTimes(objectKeys.length);
+      for (let i = 0; i < objectKeys.length; i++) {
+        expect(mockFn).toHaveBeenNthCalledWith(i + 1, dataObject[objectKeys[i]], objectKeys[i], dataObject);
+      }
     });
 
     it('should test data based case of object iteration for arrayEach', () => {
       const mockFn = jest.fn();
       LibHelper.arrayEach(dataCheckArray, mockFn);
       expect(mockFn).toHaveBeenCalledTimes(dataCheckArray.length);
-      // TODO write tests for parameter
+      for (let i = 0; i < dataCheckArray.length; i++) {
+        expect(mockFn).toHaveBeenNthCalledWith(i + 1, dataCheckArray[i], i, dataCheckArray);
+      }
     });
 
     it('should check the short circuit optimization option in the baseEach', () => {});

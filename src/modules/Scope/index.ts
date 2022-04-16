@@ -7,9 +7,9 @@ export interface IRootScope extends Record<string, unknown> {
   $$watchers: watcherObjType[];
 }
 
-export default class Index implements IRootScope {
+export default class Scope implements IRootScope {
   $$watchers: watcherObjType[];
-  [x: string]: unknown;
+  [x: string]: unknown; // to let add any property on the object
 
   constructor() {
     this.$$watchers = [];
