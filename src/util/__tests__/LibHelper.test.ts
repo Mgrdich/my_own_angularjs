@@ -118,13 +118,14 @@ describe('LibHelper', () => {
     const emptyArray: unknown[] = [];
     const emptyObject = {};
 
-    const dataCheckArray = ['string', 1, null, undefined];
+    const dataCheckArray = ['string', 1, null, undefined, 'something else'];
     const dataObject: Dictionary = {
       a: 1,
       b: 'string',
       c: function () {
         return 'functionCall';
       },
+      d: undefined,
     };
 
     it('should test empty case of object iteration for baseEach', () => {
@@ -158,8 +159,18 @@ describe('LibHelper', () => {
       }
     });
 
-    it('should check the short circuit optimization option in the baseEach', () => {});
+    it('should check the short circuit optimization option in the baseEach', () => {
+      const mockFn = jest.fn();
+      mockFn.mockReturnValueOnce(true).mockReturnValueOnce(null).mockReturnValueOnce(false);
+      LibHelper.arrayEach(dataCheckArray, mockFn);
+      expect(mockFn).toHaveBeenCalledTimes(3);
+    });
 
-    it('should check the short circuit optimization option in the arrayEach', () => {});
+    it('should check the short circuit optimization option in the arrayEach', () => {
+      const mockFn = jest.fn();
+      mockFn.mockReturnValueOnce(true).mockReturnValueOnce('').mockReturnValueOnce(false);
+      LibHelper.arrayEach(dataCheckArray, mockFn);
+      expect(mockFn).toHaveBeenCalledTimes(3);
+    });
   });
 });
