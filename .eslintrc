@@ -5,7 +5,9 @@
   "rules": {
     "@typescript-eslint/no-empty-function": "off",
     "no-duplicate-imports": "error",
-    "import/no-relative-packages": "error"
+    "no-restricted-imports": ["error", {
+      "patterns": [".*"]
+    }]
   },
   "settings": {
     "import/resolver": {

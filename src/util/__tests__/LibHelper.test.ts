@@ -1,5 +1,5 @@
 import LibHelper from 'util/LibHelper';
-import { Dictionary } from '../../Types';
+import { Dictionary } from 'types';
 
 describe('LibHelper', () => {
   it('should test isNumber Function', () => {

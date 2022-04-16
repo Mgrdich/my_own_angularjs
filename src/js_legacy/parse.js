@@ -4,7 +4,6 @@
  * the expression by evaluating it as JavaScript code. It also sets the context of the code to
  * be a scope object using the JavaScript with statement.
  */
-
 import Lib from 'util/functions';
 const def = new Lib();
 

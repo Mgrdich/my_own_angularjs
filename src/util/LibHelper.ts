@@ -1,4 +1,4 @@
-import { Dictionary } from 'Types';
+import { Dictionary } from 'types';
 
 export default class LibHelper {
   static isNumber(element: unknown): boolean {
