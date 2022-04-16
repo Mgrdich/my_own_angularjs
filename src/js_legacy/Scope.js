@@ -1,4 +1,3 @@
-// eslint-disable-next-line @typescript-eslint/no-var-requires
 import Lib from 'util/functions';
 const def = new Lib();
 

@@ -27,6 +27,8 @@
     "copy-webpack-plugin": "^10.2.4",
     "declaration-bundler-webpack-plugin": "^1.0.3",
     "eslint": "^8.12.0",
+    "eslint-import-resolver-typescript": "^2.7.1",
+    "eslint-plugin-import": "^2.26.0",
     "jest": "^27.5.1",
     "prettier": "^2.6.2",
     "ts-jest": "^27.1.4",

@@ -23,7 +23,8 @@ export default class Scope implements IRootScope {
   }
 
   $digest() {
-    Lib.forEach(this.$$watchers, function (watcher) {
+    Lib.forEach(this.$$watchers, (watcher) => {
+      watcher.watchFn(this);
       watcher.listenerFn();
     });
   }
