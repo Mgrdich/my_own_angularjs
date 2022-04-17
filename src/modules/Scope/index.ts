@@ -1,15 +1,18 @@
 import Lib from 'util/LibHelper';
 import { watcherObjType } from 'modules/Scope/types';
 
-export interface IRootScope extends Record<string, unknown> {
+export interface IRootScope {
   $watch(watchFn: watcherObjType['watchFn'], listenerFn: watcherObjType['listenerFn']): void;
   $digest(): void;
   $$watchers: watcherObjType[];
 }
 
-export default class Scope implements IRootScope {
+export type IScope = IRootScope;
+
+export default class Scope implements IScope {
   $$watchers: watcherObjType[];
-  [x: string]: unknown; // to let add any property on the object
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  [x: string]: any; // to let add any property on the object'
 
   constructor() {
     this.$$watchers = [];

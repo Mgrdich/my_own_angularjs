@@ -32,5 +32,32 @@ describe('Scope', () => {
       scope.$digest();
       expect(watchFn).toHaveBeenCalledWith(scope);
     });
+
+    it('should call the listener when the variable value changes', () => {
+      scope.aVariable = 10;
+      scope.counter = 0;
+      const listenerMock = jest.fn(() => {
+        scope.counter++;
+      });
+
+      scope.$watch(function (scope) {
+        return scope.someValue;
+      }, listenerMock);
+
+      expect(scope.counter).toBe(0);
+      expect(listenerMock).not.toHaveBeenCalled();
+
+      scope.$digest();
+      expect(scope.counter).toBe(1);
+      expect(listenerMock).toHaveBeenCalledTimes(1);
+
+      scope.$digest();
+      expect(scope.counter).toBe(2);
+      expect(listenerMock).toHaveBeenCalledTimes(2);
+
+      scope.$digest();
+      expect(scope.counter).toBe(3);
+      expect(listenerMock).toHaveBeenCalledTimes(3);
+    });
   });
 });
