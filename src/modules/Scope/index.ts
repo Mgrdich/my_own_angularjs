@@ -26,9 +26,15 @@ export default class Scope implements IScope {
   }
 
   $digest() {
+    let newValue;
+    let oldValue;
     Lib.forEach(this.$$watchers, (watcher) => {
-      watcher.watchFn(this);
-      watcher.listenerFn();
+      newValue = watcher.watchFn(this);
+      oldValue = watcher.last;
+      if (newValue !== oldValue) {
+        watcher.last = newValue;
+        watcher.listenerFn(newValue, oldValue, this);
+      }
     });
   }
 }

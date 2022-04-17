@@ -36,12 +36,12 @@ describe('Scope', () => {
     it('should call the listener when the variable value changes', () => {
       scope.aVariable = 10;
       scope.counter = 0;
-      const listenerMock = jest.fn(() => {
+      const listenerMock = jest.fn((newValue: unknown, oldValue: unknown, scope: Scope) => {
         scope.counter++;
       });
 
       scope.$watch(function (scope) {
-        return scope.someValue;
+        return scope.aVariable;
       }, listenerMock);
 
       expect(scope.counter).toBe(0);
@@ -52,9 +52,15 @@ describe('Scope', () => {
       expect(listenerMock).toHaveBeenCalledTimes(1);
 
       scope.$digest();
+      expect(scope.counter).toBe(1);
+      expect(listenerMock).toHaveBeenCalledTimes(1);
+
+      scope.aVariable = 11;
+      scope.$digest();
       expect(scope.counter).toBe(2);
       expect(listenerMock).toHaveBeenCalledTimes(2);
 
+      scope.aVariable = 12;
       scope.$digest();
       expect(scope.counter).toBe(3);
       expect(listenerMock).toHaveBeenCalledTimes(3);
