@@ -103,5 +103,34 @@ describe('Scope', () => {
       scope.$digest();
       expect(watchFn).toHaveBeenCalled();
     });
+
+    it('should trigger chained watchers in the same digest', () => {
+      scope.name = 'jane';
+
+      scope.$watch(
+        () => scope.nameUpper,
+        (newValue: string) => {
+          if (newValue) {
+            scope.initial = `${newValue.substring(0, 1)}.`;
+          }
+        },
+      );
+
+      scope.$watch(
+        () => scope.name,
+        (newValue: string) => {
+          if (newValue) {
+            scope.nameUpper = newValue.toUpperCase();
+          }
+        },
+      );
+
+      scope.$digest();
+      expect(scope.initial).toBe(`${scope.name[0].toUpperCase()}.`);
+
+      scope.name = 'bob';
+      scope.$digest();
+      expect(scope.initial).toBe(`${scope.name[0].toUpperCase()}.`);
+    });
   });
 });
