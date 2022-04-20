@@ -4,15 +4,16 @@ import { watcherObjType } from 'modules/Scope/types';
 export interface IRootScope {
   $watch(watchFn: watcherObjType['watchFn'], listenerFn: watcherObjType['listenerFn']): void;
   $digest(): void;
-  $$watchers: watcherObjType[];
 }
 
 export type IScope = IRootScope;
 
 export default class Scope implements IScope {
-  $$watchers: watcherObjType[];
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   [x: string]: any; // to let add any property on the object'
+
+  private readonly $$watchers: watcherObjType[];
+  private $$lastDirtyWatch: null | watcherObjType;
 
   constructor() {
     this.$$watchers = [];
@@ -31,6 +32,7 @@ export default class Scope implements IScope {
   $digest() {
     let dirty: boolean;
     let ttl = 10;
+    this.$$lastDirtyWatch = null;
     do {
       dirty = this.$$digestOnce();
       if (dirty && !ttl--) {
@@ -45,10 +47,14 @@ export default class Scope implements IScope {
       const newValue = watcher.watchFn(this);
       const oldValue = watcher.last;
       if (newValue !== oldValue) {
+        this.$$lastDirtyWatch = watcher;
         watcher.last = newValue;
         const oldShownValue: unknown = oldValue === Scope.initWatchValue ? newValue : oldValue;
         watcher.listenerFn(newValue, oldShownValue, this);
         dirty = true;
+      } else if (this.$$lastDirtyWatch === watcher) {
+        // same so return not dirty
+        return false;
       }
     });
     return dirty;

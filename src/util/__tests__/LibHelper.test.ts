@@ -137,6 +137,16 @@ describe('LibHelper', () => {
     expect(LibHelper.nativeMax(3.4, -1, 2, 4, 5)).toBe(Math.max(3.4, -1, 2, 4, 5));
   });
 
+  it('should test the range array with only one parameter', () => {
+    expect(LibHelper.range(5)).toEqual([0, 1, 2, 3, 4]);
+    expect(LibHelper.range(-5)).toEqual([0, -1, -2, -3, -4]);
+    expect(LibHelper.range(1, 5)).toEqual([1, 2, 3, 4]);
+    expect(LibHelper.range(0, 20, 5)).toEqual([0, 5, 10, 15]);
+    expect(LibHelper.range(0, -4, -1)).toEqual([0, -1, -2, -3]);
+    expect(LibHelper.range(1, 4, 0)).toEqual([1, 1, 1]);
+    expect(LibHelper.range(0)).toEqual([]);
+  });
+
   describe('Loops and forEach-es', () => {
     const emptyArray: unknown[] = [];
     const emptyObject = {};

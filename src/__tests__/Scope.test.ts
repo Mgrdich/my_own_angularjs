@@ -1,4 +1,5 @@
 import Scope from 'modules/Scope';
+import LibHelper from 'util/LibHelper';
 
 describe('Scope', () => {
   it('should check whether properties can bind to it', function () {
@@ -154,6 +155,25 @@ describe('Scope', () => {
       expect(() => {
         scope.$digest();
       }).toThrow();
+    });
+
+    it('should ends the digest when the last watch is clean', () => {
+      scope.array = LibHelper.range(100);
+      let watchExecutions = 0;
+
+      for (let i = 0; i < scope.array.length; i++) {
+        scope.$watch(() => {
+          watchExecutions++;
+          return scope.array[i];
+        });
+      }
+
+      scope.$digest();
+      expect(watchExecutions).toBe(200);
+
+      scope.array[0] = 420;
+      scope.$digest();
+      expect(watchExecutions).toBe(301);
     });
   });
 });

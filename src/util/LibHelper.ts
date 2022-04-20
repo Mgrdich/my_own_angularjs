@@ -1,6 +1,9 @@
 import { Dictionary } from 'types';
 
 export default class LibHelper {
+  static MAX_INTEGER = 1.7976931348623157e308;
+  static INFINITY = 1 / 0;
+
   static isNumber(element: unknown): boolean {
     return typeof element === 'number';
   }
@@ -87,7 +90,19 @@ export default class LibHelper {
     return function () {};
   }
 
-  private static baseRange(start: number, end: number, step: number, fromRight?: boolean): number[] {
+  private static toFinite(value: number): number {
+    if (!value) {
+      return value === 0 ? value : 0;
+    }
+
+    if (value === this.INFINITY || value === -this.INFINITY) {
+      const sign: number = value < 0 ? -1 : 1;
+      return sign * this.MAX_INTEGER;
+    }
+    return value === value ? value : 0;
+  }
+
+  private static baseRange(start: number, end: number, step?: number, fromRight?: boolean): number[] {
     let index = -1;
     let length = this.nativeMax(this.nativeCeil((end - start) / (step || 1)), 0);
     const result = Array(length);
@@ -99,7 +114,17 @@ export default class LibHelper {
     return result;
   }
 
-  static range(start: number, end: number, step: number): number[] {
+  static range(start: number, end?: number, step?: number): number[] {
+    // Ensure the sign of `-0` is preserved.
+    start = this.toFinite(start);
+    if (end === undefined) {
+      end = start;
+      start = 0;
+    } else {
+      end = this.toFinite(end);
+    }
+    step = step === undefined ? (start < end ? 1 : -1) : this.toFinite(step);
+
     return this.baseRange(start, end, step);
   }
 }
