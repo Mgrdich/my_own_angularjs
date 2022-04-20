@@ -114,6 +114,16 @@ describe('LibHelper', () => {
     expect(LibHelper.isDate({})).toBeFalsy();
   });
 
+  it('should test getNoopFunction', function () {
+    const fn = LibHelper.getNoopFunction();
+    expect(LibHelper.isFunction(fn)).toBeTruthy();
+
+    const fn1 = LibHelper.getNoopFunction();
+    expect(LibHelper.isFunction(fn1)).toBeTruthy();
+
+    expect(fn).not.toEqual(fn1);
+  });
+
   describe('Loops and forEach-es', () => {
     const emptyArray: unknown[] = [];
     const emptyObject = {};

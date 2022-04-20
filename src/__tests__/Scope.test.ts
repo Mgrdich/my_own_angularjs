@@ -96,5 +96,12 @@ describe('Scope', () => {
       scope.$digest();
       expect(oldGlobalValue).toBe(scope.someValue);
     });
+
+    it('should call the watchers even if omit the listener function', () => {
+      const watchFn = jest.fn().mockReturnValueOnce('Something');
+      scope.$watch(watchFn);
+      scope.$digest();
+      expect(watchFn).toHaveBeenCalled();
+    });
   });
 });

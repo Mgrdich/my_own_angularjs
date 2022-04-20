@@ -74,4 +74,8 @@ export default class LibHelper {
     }
     return LibHelper.baseEach(collection, callback);
   }
+
+  static getNoopFunction(): () => void {
+    return function () {};
+  }
 }

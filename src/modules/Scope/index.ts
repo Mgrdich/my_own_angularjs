@@ -23,7 +23,7 @@ export default class Scope implements IScope {
   $watch(watchFn: watcherObjType['watchFn'], listenerFn?: watcherObjType['listenerFn']) {
     this.$$watchers.push({
       watchFn,
-      listenerFn,
+      listenerFn: listenerFn || Lib.getNoopFunction(),
       last: initWatchValue,
     });
   }
