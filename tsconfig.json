@@ -23,6 +23,8 @@
     "dist",
     "scripts",
     "webpack",
-    "jest"
+    "jest",
+    "src/**/*.spec.ts",
+    "src/**/*.test.ts"
   ]
 }

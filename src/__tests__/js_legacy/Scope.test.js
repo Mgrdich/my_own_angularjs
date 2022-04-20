@@ -1908,7 +1908,7 @@ describe('Scope', function () {
       expect(currentScopeOnChild).toBe(child);
     });
 
-    it('sets current Scope null after propagation is over', function () {
+    it('sets current Index null after propagation is over', function () {
       let event = null;
       let event1 = null;
       let scopeListener = function (evt) {
