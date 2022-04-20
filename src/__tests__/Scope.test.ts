@@ -132,5 +132,28 @@ describe('Scope', () => {
       scope.$digest();
       expect(scope.initial).toBe(`${scope.name[0].toUpperCase()}.`);
     });
+
+    it('should throw an error during unstable digest', () => {
+      scope.counter1 = 0;
+      scope.counter2 = 0;
+
+      scope.$watch(
+        () => scope.counter1,
+        () => {
+          scope.counter2++;
+        },
+      );
+
+      scope.$watch(
+        () => scope.counter2,
+        () => {
+          scope.counter1++;
+        },
+      );
+
+      expect(() => {
+        scope.$digest();
+      }).toThrow();
+    });
   });
 });

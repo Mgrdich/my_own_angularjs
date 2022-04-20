@@ -30,8 +30,12 @@ export default class Scope implements IScope {
 
   $digest() {
     let dirty: boolean;
+    let ttl = 10;
     do {
       dirty = this.$$digestOnce();
+      if (dirty && !ttl--) {
+        throw '10 digest iterations reached';
+      }
     } while (dirty);
   }
 
