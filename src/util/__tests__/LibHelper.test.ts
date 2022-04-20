@@ -124,6 +124,19 @@ describe('LibHelper', () => {
     expect(fn).not.toEqual(fn1);
   });
 
+  it('should test nativeCeil gives the same result as Math.ceil', () => {
+    expect(LibHelper.nativeCeil(0)).toBe(Math.ceil(0));
+    expect(LibHelper.nativeCeil(3.4)).toBe(Math.ceil(3.4));
+    expect(LibHelper.nativeCeil(-3.4)).toBe(Math.ceil(-3.4));
+    expect(LibHelper.nativeCeil(3.7)).toBe(Math.ceil(3.7));
+    expect(LibHelper.nativeCeil(-3.7)).toBe(Math.ceil(-3.7));
+  });
+
+  it('should test nativeMax gives the same result as Math.Max', () => {
+    expect(LibHelper.nativeMax(0, 2, 3)).toBe(Math.max(0, 2, 3));
+    expect(LibHelper.nativeMax(3.4, -1, 2, 4, 5)).toBe(Math.max(3.4, -1, 2, 4, 5));
+  });
+
   describe('Loops and forEach-es', () => {
     const emptyArray: unknown[] = [];
     const emptyObject = {};
@@ -138,21 +151,21 @@ describe('LibHelper', () => {
       d: undefined,
     };
 
-    it('should test empty case of object iteration for baseEach', () => {
+    it('should test empty case of object iteration for foreach', () => {
       const mockFn = jest.fn();
-      LibHelper.baseEach(emptyObject, mockFn);
+      LibHelper.forEach(emptyObject, mockFn);
       expect(mockFn).not.toHaveBeenCalled();
     });
 
     it('should test empty case of array iteration for arrayEach', () => {
       const mockFn = jest.fn();
-      LibHelper.arrayEach(emptyArray, mockFn);
+      LibHelper.forEach(emptyArray, mockFn);
       expect(mockFn).not.toHaveBeenCalled();
     });
 
     it('should test data based case of object iteration for baseEach', () => {
       const mockFn = jest.fn();
-      LibHelper.baseEach(dataObject, mockFn);
+      LibHelper.forEach(dataObject, mockFn);
       const objectKeys: string[] = Object.keys(dataObject);
       expect(mockFn).toHaveBeenCalledTimes(objectKeys.length);
       for (let i = 0; i < objectKeys.length; i++) {
@@ -162,7 +175,7 @@ describe('LibHelper', () => {
 
     it('should test data based case of object iteration for arrayEach', () => {
       const mockFn = jest.fn();
-      LibHelper.arrayEach(dataCheckArray, mockFn);
+      LibHelper.forEach(dataCheckArray, mockFn);
       expect(mockFn).toHaveBeenCalledTimes(dataCheckArray.length);
       for (let i = 0; i < dataCheckArray.length; i++) {
         expect(mockFn).toHaveBeenNthCalledWith(i + 1, dataCheckArray[i], i, dataCheckArray);
@@ -172,14 +185,14 @@ describe('LibHelper', () => {
     it('should check the short circuit optimization option in the baseEach', () => {
       const mockFn = jest.fn();
       mockFn.mockReturnValueOnce(true).mockReturnValueOnce(null).mockReturnValueOnce(false);
-      LibHelper.arrayEach(dataCheckArray, mockFn);
+      LibHelper.forEach(dataCheckArray, mockFn);
       expect(mockFn).toHaveBeenCalledTimes(3);
     });
 
     it('should check the short circuit optimization option in the arrayEach', () => {
       const mockFn = jest.fn();
       mockFn.mockReturnValueOnce(true).mockReturnValueOnce('').mockReturnValueOnce(false);
-      LibHelper.arrayEach(dataCheckArray, mockFn);
+      LibHelper.forEach(dataCheckArray, mockFn);
       expect(mockFn).toHaveBeenCalledTimes(3);
     });
   });

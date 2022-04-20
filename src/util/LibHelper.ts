@@ -41,7 +41,15 @@ export default class LibHelper {
     return toString.call(element) === '[object Date]';
   }
 
-  static arrayEach<T = unknown>(arr: T[], callback: (item: T, index: number, arr: T[]) => unknown): T[] {
+  static nativeMax(...values: number[]): number {
+    return Math.max(...values);
+  }
+
+  static nativeCeil(value: number): number {
+    return Math.ceil(value);
+  }
+
+  private static arrayEach<T = unknown>(arr: T[], callback: (item: T, index: number, arr: T[]) => unknown): T[] {
     let index = -1;
     const length: number = arr.length;
 
@@ -53,7 +61,7 @@ export default class LibHelper {
     return arr;
   }
 
-  static baseEach<T = unknown>(
+  private static baseEach<T = unknown>(
     obj: Dictionary<T>,
     callback: (value: T, key: string, obj: Dictionary<T>) => unknown,
   ): Dictionary<T> {
@@ -77,5 +85,21 @@ export default class LibHelper {
 
   static getNoopFunction(): () => void {
     return function () {};
+  }
+
+  private static baseRange(start: number, end: number, step: number, fromRight?: boolean): number[] {
+    let index = -1;
+    let length = this.nativeMax(this.nativeCeil((end - start) / (step || 1)), 0);
+    const result = Array(length);
+
+    while (length--) {
+      result[fromRight ? length : ++index] = start;
+      start += step;
+    }
+    return result;
+  }
+
+  static range(start: number, end: number, step: number): number[] {
+    return this.baseRange(start, end, step);
   }
 }
