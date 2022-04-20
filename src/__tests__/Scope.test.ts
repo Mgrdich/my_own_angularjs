@@ -27,7 +27,7 @@ describe('Scope', () => {
 
     it('should call the watch function with the scope as the argument', () => {
       const watchFn = jest.fn();
-      const listenerFn = function () {};
+      const listenerFn = () => {};
       scope.$watch(watchFn, listenerFn);
       scope.$digest();
       expect(watchFn).toHaveBeenCalledWith(scope);
@@ -40,7 +40,7 @@ describe('Scope', () => {
         scope.counter++;
       });
 
-      scope.$watch(function (scope) {
+      scope.$watch((scope) => {
         return scope.aVariable;
       }, listenerMock);
 
@@ -64,6 +64,37 @@ describe('Scope', () => {
       scope.$digest();
       expect(scope.counter).toBe(3);
       expect(listenerMock).toHaveBeenCalledTimes(3);
+    });
+
+    it('should call the $watch on initialization point', () => {
+      scope.counter = 0;
+
+      const listenerMock = jest.fn((newValue: unknown, oldValue: unknown, scope: Scope) => {
+        scope.counter++;
+      });
+
+      scope.$watch(function (scope) {
+        return scope.someUndefined;
+      }, listenerMock);
+
+      scope.$digest();
+      expect(listenerMock).toHaveBeenCalledTimes(1);
+      expect(scope.counter).toBe(1);
+    });
+
+    it('should call listener with new value as old value the first time', () => {
+      scope.someValue = 'someValue';
+      let oldGlobalValue: string;
+
+      scope.$watch(
+        (scope) => scope.someValue,
+        (newValue: string, oldValue: string) => {
+          oldGlobalValue = oldValue;
+        },
+      );
+
+      scope.$digest();
+      expect(oldGlobalValue).toBe(scope.someValue);
     });
   });
 });

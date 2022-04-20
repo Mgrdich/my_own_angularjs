@@ -1,6 +1,8 @@
 import Lib from 'util/LibHelper';
 import { watcherObjType } from 'modules/Scope/types';
 
+function initWatchValue() {}
+
 export interface IRootScope {
   $watch(watchFn: watcherObjType['watchFn'], listenerFn: watcherObjType['listenerFn']): void;
   $digest(): void;
@@ -18,22 +20,22 @@ export default class Scope implements IScope {
     this.$$watchers = [];
   }
 
-  $watch(watchFn: watcherObjType['watchFn'], listenerFn: watcherObjType['listenerFn']) {
+  $watch(watchFn: watcherObjType['watchFn'], listenerFn?: watcherObjType['listenerFn']) {
     this.$$watchers.push({
       watchFn,
       listenerFn,
+      last: initWatchValue,
     });
   }
 
   $digest() {
-    let newValue;
-    let oldValue;
     Lib.forEach(this.$$watchers, (watcher) => {
-      newValue = watcher.watchFn(this);
-      oldValue = watcher.last;
+      const newValue = watcher.watchFn(this);
+      const oldValue = watcher.last;
       if (newValue !== oldValue) {
         watcher.last = newValue;
-        watcher.listenerFn(newValue, oldValue, this);
+        const oldShownValue: unknown = oldValue === initWatchValue ? newValue : oldValue;
+        watcher.listenerFn(newValue, oldShownValue, this);
       }
     });
   }
