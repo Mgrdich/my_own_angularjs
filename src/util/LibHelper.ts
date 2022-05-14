@@ -127,4 +127,8 @@ export default class LibHelper {
 
     return this.baseRange(start, end, step);
   }
+
+  // static isEqual(value: unknown, anotherValue: unknown): boolean {
+  //   return true;
+  // }
 }

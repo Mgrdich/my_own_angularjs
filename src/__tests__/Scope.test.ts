@@ -175,5 +175,25 @@ describe('Scope', () => {
       scope.$digest();
       expect(watchExecutions).toBe(301);
     });
+
+    it('should not end digest so that new watches are not in run', () => {
+      scope.AValue = 'aValue';
+      scope.counter = 0;
+
+      const embeddedWatcherMock = jest.fn(() => {
+        scope.counter++;
+      });
+
+      scope.$watch(
+        (scope) => scope.aValue,
+        (newValue, oldValue, scope) => {
+          scope.$watch((scope) => scope.aValue, embeddedWatcherMock);
+        },
+      );
+
+      scope.$digest();
+      expect(scope.counter).toBe(1);
+      expect(embeddedWatcherMock).toHaveBeenCalledTimes(1);
+    });
   });
 });

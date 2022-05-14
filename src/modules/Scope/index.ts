@@ -27,6 +27,7 @@ export default class Scope implements IScope {
       listenerFn: listenerFn || Lib.getNoopFunction(),
       last: Scope.initWatchValue,
     });
+    this.$$lastDirtyWatch = null; // resetting for embedded case
   }
 
   $digest() {
@@ -53,7 +54,7 @@ export default class Scope implements IScope {
         watcher.listenerFn(newValue, oldShownValue, this);
         dirty = true;
       } else if (this.$$lastDirtyWatch === watcher) {
-        // same so return not dirty
+        // same so return not dirty and forEach will short circuit
         return false;
       }
     });
