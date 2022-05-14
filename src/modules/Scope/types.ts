@@ -4,4 +4,5 @@ export type watcherObjType = {
   watchFn: (scope: Scope) => unknown;
   listenerFn: (newValue: unknown, oldValue: unknown, scope: Scope) => void;
   last?: unknown;
+  valueEq: boolean;
 };

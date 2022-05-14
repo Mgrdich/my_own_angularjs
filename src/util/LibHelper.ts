@@ -40,8 +40,16 @@ export default class LibHelper {
     return toString.call(element) === '[object RegExp]';
   }
 
-  static isDate(element: unknown) {
+  static isDate(element: unknown): boolean {
     return toString.call(element) === '[object Date]';
+  }
+
+  static isScope(element?: { $evalAsync?: () => void; $watch?: () => void }): boolean {
+    return element && '$evalAsync' in element && '$watch' in element;
+  }
+
+  static isWindow(element: { window?: Window }): boolean {
+    return element && element.window === element;
   }
 
   static nativeMax(...values: number[]): number {
@@ -128,7 +136,77 @@ export default class LibHelper {
     return this.baseRange(start, end, step);
   }
 
-  // static isEqual(value: unknown, anotherValue: unknown): boolean {
-  //   return true;
-  // }
+  private static createMap(): Dictionary {
+    return Object.create(null);
+  }
+
+  private static simpleCompare(o1: unknown, o2: unknown): boolean {
+    return o1 === o1 || (o1 !== o1 && o2 !== o2);
+  }
+
+  static isEqual(o1: unknown, o2: unknown): boolean {
+    if (o1 === o2) return true;
+    if (o1 === null || o2 === null) return false;
+
+    // eslint-disable-next-line no-self-compare
+    if (o1 !== o1 && o2 !== o2) return true; // NaN === NaN
+
+    const t1 = typeof o1;
+    const t2 = typeof o2;
+    let length: number;
+
+    if (t1 === t2 && t1 === 'object') {
+      if (LibHelper.isArray(o1)) {
+        if (!LibHelper.isArray(o2)) return false;
+
+        if ((length = (o1 as []).length) === (o2 as []).length) {
+          for (let key = 0; key < length; key++) {
+            if (!LibHelper.isEqual((o1 as [])[key], (o2 as [])[key])) return false;
+          }
+          return true;
+        }
+      } else if (LibHelper.isDate(o1)) {
+        if (!LibHelper.isDate(o2)) return false;
+
+        return LibHelper.simpleCompare((o1 as Date).getTime(), (o2 as Date).getTime());
+      } else if (LibHelper.isRegExp(o1)) {
+        if (!LibHelper.isRegExp(o2)) return false;
+        return o1.toString() === o2.toString();
+      } else {
+        if (
+          LibHelper.isScope(o1) ||
+          LibHelper.isScope(o2) ||
+          LibHelper.isWindow(o1) ||
+          LibHelper.isWindow(o2) ||
+          LibHelper.isArray(o2) ||
+          LibHelper.isDate(o2) ||
+          LibHelper.isRegExp(o2)
+        )
+          return false;
+
+        const keySet: Dictionary = LibHelper.createMap();
+
+        for (const key in o1 as Dictionary) {
+          if (key.charAt(0) === '$' || LibHelper.isFunction((o1 as Dictionary)[key])) continue;
+
+          if (!LibHelper.isEqual((o1 as Dictionary)[key], (o2 as Dictionary)[key])) return false;
+          keySet[key] = true;
+        }
+
+        for (const key in o2 as Dictionary) {
+          if (
+            !(key in keySet) &&
+            key.charAt(0) !== '$' &&
+            LibHelper.isDefined((o2 as Dictionary)[key]) &&
+            !LibHelper.isFunction((o2 as Dictionary)[key])
+          )
+            return false;
+        }
+
+        return true;
+      }
+    }
+
+    return false;
+  }
 }

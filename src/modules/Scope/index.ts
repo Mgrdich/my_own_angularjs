@@ -21,16 +21,29 @@ export default class Scope implements IScope {
 
   private static initWatchValue() {}
 
-  $watch(watchFn: watcherObjType['watchFn'], listenerFn?: watcherObjType['listenerFn']) {
+  private static $$areEqual(value: unknown, anotherValue: unknown, valueEq: boolean): boolean {
+    if (valueEq) {
+      return Lib.isEqual(value, anotherValue);
+    }
+
+    return value === anotherValue;
+  }
+
+  $watch(
+    watchFn: watcherObjType['watchFn'],
+    listenerFn?: watcherObjType['listenerFn'],
+    valueEq?: watcherObjType['valueEq'],
+  ): void {
     this.$$watchers.push({
       watchFn,
       listenerFn: listenerFn || Lib.getNoopFunction(),
       last: Scope.initWatchValue,
+      valueEq: !!valueEq,
     });
     this.$$lastDirtyWatch = null; // resetting for embedded case
   }
 
-  $digest() {
+  $digest(): void {
     let dirty: boolean;
     let ttl = 10;
     this.$$lastDirtyWatch = null;
