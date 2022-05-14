@@ -141,7 +141,7 @@ export default class LibHelper {
   }
 
   private static simpleCompare(o1: unknown, o2: unknown): boolean {
-    return o1 === o1 || (o1 !== o1 && o2 !== o2);
+    return o1 === o2 || (o1 !== o1 && o2 !== o2);
   }
 
   static isEqual(o1: unknown, o2: unknown): boolean {
