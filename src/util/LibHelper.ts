@@ -52,6 +52,10 @@ export default class LibHelper {
     return element && element.window === element;
   }
 
+  static isNaN(element: unknown): boolean {
+    return LibHelper.isNumber(element) && isNaN(element as number);
+  }
+
   static nativeMax(...values: number[]): number {
     return Math.max(...values);
   }
