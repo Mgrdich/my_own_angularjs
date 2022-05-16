@@ -13,8 +13,8 @@
     "format-prettier": "prettier --write 'src/**/*.{js,ts}' --config ./.prettierrc"
   },
   "engines": {
-    "node": "14.17.1",
-    "npm": "6.14.13"
+    "node": "v16.15.0",
+    "npm": "8.5.5"
   },
   "devDependencies": {
     "@types/jest": "^27.4.1",
