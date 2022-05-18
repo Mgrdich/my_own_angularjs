@@ -26,7 +26,10 @@ export default class Scope implements IScope {
       return Lib.isEqual(value, anotherValue);
     }
 
-    return value === anotherValue;
+    return (
+      value === anotherValue ||
+      (Lib.isNumber(value) && Lib.isNumber(anotherValue) && Lib.isNaN(value) && Lib.isNaN(value))
+    );
   }
 
   $watch(
@@ -60,7 +63,7 @@ export default class Scope implements IScope {
     Lib.forEach(this.$$watchers, (watcher) => {
       const newValue = watcher.watchFn(this);
       const oldValue = watcher.last;
-      if (newValue !== oldValue) {
+      if (!Scope.$$areEqual(newValue, oldValue, watcher.valueEq)) {
         this.$$lastDirtyWatch = watcher;
         watcher.last = newValue;
         const oldShownValue: unknown = oldValue === Scope.initWatchValue ? newValue : oldValue;
