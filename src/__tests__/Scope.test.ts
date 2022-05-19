@@ -1,4 +1,5 @@
 import Scope from 'modules/Scope';
+import LibHelper from 'util/LibHelper';
 
 describe('Scope', () => {
   it('should check whether properties can bind to it', function () {
@@ -154,6 +155,78 @@ describe('Scope', () => {
       expect(() => {
         scope.$digest();
       }).toThrow();
+    });
+
+    it('should ends the digest when the last watch is clean', () => {
+      scope.array = LibHelper.range(100);
+      let watchExecutions = 0;
+
+      for (let i = 0; i < scope.array.length; i++) {
+        scope.$watch(() => {
+          watchExecutions++;
+          return scope.array[i];
+        });
+      }
+
+      scope.$digest();
+      expect(watchExecutions).toBe(200);
+
+      scope.array[0] = 420;
+      scope.$digest();
+      expect(watchExecutions).toBe(301);
+    });
+
+    it('should not end digest so that new watches are not in run', () => {
+      scope.AValue = 'aValue';
+      scope.counter = 0;
+
+      const embeddedWatcherMock = jest.fn(() => {
+        scope.counter++;
+      });
+
+      scope.$watch(
+        (scope) => scope.aValue,
+        (newValue, oldValue, scope) => {
+          scope.$watch((scope) => scope.aValue, embeddedWatcherMock);
+        },
+      );
+
+      scope.$digest();
+      expect(scope.counter).toBe(1);
+      expect(embeddedWatcherMock).toHaveBeenCalledTimes(1);
+    });
+
+    it('should make a digest if the content of an array is changed', () => {
+      scope.aValue = [1, 2, 3];
+      scope.counter = 0;
+
+      const watcherMock = jest.fn((newValue, oldValue, scope) => {
+        scope.counter++;
+      });
+
+      scope.$watch((scope) => scope.aValue, watcherMock, true);
+
+      scope.$digest();
+      expect(scope.counter).toBe(1);
+      expect(watcherMock).toHaveBeenCalledTimes(1);
+
+      scope.aValue.push(4);
+      scope.$digest();
+      expect(scope.counter).toBe(2);
+      expect(watcherMock).toHaveBeenCalledTimes(2);
+    });
+
+    it('correctly handles NaNs', () => {
+      scope.number = 0 / 0; // NaN
+      scope.counter = 0;
+      const watcherMock = jest.fn((newValue, oldValue, scope) => {
+        scope.counter++;
+      });
+      scope.$watch((scope) => scope.number, watcherMock);
+      scope.$digest();
+      expect(scope.counter).toBe(1);
+      scope.$digest();
+      expect(scope.counter).toBe(1);
     });
   });
 });

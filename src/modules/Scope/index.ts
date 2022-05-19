@@ -4,15 +4,16 @@ import { watcherObjType } from 'modules/Scope/types';
 export interface IRootScope {
   $watch(watchFn: watcherObjType['watchFn'], listenerFn: watcherObjType['listenerFn']): void;
   $digest(): void;
-  $$watchers: watcherObjType[];
 }
 
 export type IScope = IRootScope;
 
 export default class Scope implements IScope {
-  $$watchers: watcherObjType[];
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   [x: string]: any; // to let add any property on the object'
+
+  private readonly $$watchers: watcherObjType[];
+  private $$lastDirtyWatch: null | watcherObjType;
 
   constructor() {
     this.$$watchers = [];
@@ -20,17 +21,36 @@ export default class Scope implements IScope {
 
   private static initWatchValue() {}
 
-  $watch(watchFn: watcherObjType['watchFn'], listenerFn?: watcherObjType['listenerFn']) {
+  private static $$areEqual(value: unknown, anotherValue: unknown, valueEq: boolean): boolean {
+    if (valueEq) {
+      console.log(value, anotherValue, Lib.isEqual(value, anotherValue));
+      return Lib.isEqual(value, anotherValue);
+    }
+
+    return (
+      value === anotherValue ||
+      (Lib.isNumber(value) && Lib.isNumber(anotherValue) && Lib.isNaN(value) && Lib.isNaN(value))
+    );
+  }
+
+  $watch(
+    watchFn: watcherObjType['watchFn'],
+    listenerFn?: watcherObjType['listenerFn'],
+    valueEq?: watcherObjType['valueEq'],
+  ): void {
     this.$$watchers.push({
       watchFn,
       listenerFn: listenerFn || Lib.getNoopFunction(),
       last: Scope.initWatchValue,
+      valueEq: !!valueEq,
     });
+    this.$$lastDirtyWatch = null; // resetting for embedded case
   }
 
-  $digest() {
+  $digest(): void {
     let dirty: boolean;
     let ttl = 10;
+    this.$$lastDirtyWatch = null;
     do {
       dirty = this.$$digestOnce();
       if (dirty && !ttl--) {
@@ -44,11 +64,15 @@ export default class Scope implements IScope {
     Lib.forEach(this.$$watchers, (watcher) => {
       const newValue = watcher.watchFn(this);
       const oldValue = watcher.last;
-      if (newValue !== oldValue) {
-        watcher.last = newValue;
+      if (!Scope.$$areEqual(newValue, oldValue, watcher.valueEq)) {
+        this.$$lastDirtyWatch = watcher;
+        watcher.last = watcher.valueEq ? Lib.cloneDeep(newValue) : newValue;
         const oldShownValue: unknown = oldValue === Scope.initWatchValue ? newValue : oldValue;
         watcher.listenerFn(newValue, oldShownValue, this);
         dirty = true;
+      } else if (this.$$lastDirtyWatch === watcher) {
+        // same so return not dirty and forEach will short circuit
+        return false;
       }
     });
     return dirty;
