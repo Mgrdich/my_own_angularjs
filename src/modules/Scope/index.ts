@@ -23,6 +23,7 @@ export default class Scope implements IScope {
 
   private static $$areEqual(value: unknown, anotherValue: unknown, valueEq: boolean): boolean {
     if (valueEq) {
+      console.log(value, anotherValue, Lib.isEqual(value, anotherValue));
       return Lib.isEqual(value, anotherValue);
     }
 
@@ -65,7 +66,7 @@ export default class Scope implements IScope {
       const oldValue = watcher.last;
       if (!Scope.$$areEqual(newValue, oldValue, watcher.valueEq)) {
         this.$$lastDirtyWatch = watcher;
-        watcher.last = newValue;
+        watcher.last = watcher.valueEq ? Lib.cloneDeep(newValue) : newValue;
         const oldShownValue: unknown = oldValue === Scope.initWatchValue ? newValue : oldValue;
         watcher.listenerFn(newValue, oldShownValue, this);
         dirty = true;

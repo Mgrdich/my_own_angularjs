@@ -3,6 +3,7 @@ import { Dictionary } from 'types';
 export default class LibHelper {
   static MAX_INTEGER = 1.7976931348623157e308;
   static INFINITY = 1 / 0;
+  static TYPED_ARRAY_REGEXP = /^\[object (?:Uint8|Uint8Clamped|Uint16|Uint32|Int8|Int16|Int32|Float32|Float64)Array]$/;
 
   static isNumber(element: unknown): boolean {
     return typeof element === 'number';
@@ -24,6 +25,14 @@ export default class LibHelper {
     return Array.isArray(element);
   }
 
+  static isTypedArray(element: unknown): unknown {
+    return element && this.isNumber((element as []).length) && this.TYPED_ARRAY_REGEXP.test(toString.call(element));
+  }
+
+  static isArrayBuffer(element: unknown): boolean {
+    return toString.call(element) === '[object ArrayBuffer]';
+  }
+
   static isObject(element: unknown): boolean {
     return element !== null && typeof element === 'object';
   }
@@ -37,6 +46,7 @@ export default class LibHelper {
   }
 
   static isRegExp(element: unknown): boolean {
+    // TODO store this as enum or in the static for further use-cases
     return toString.call(element) === '[object RegExp]';
   }
 
@@ -54,6 +64,10 @@ export default class LibHelper {
 
   static isNaN(element: unknown): boolean {
     return LibHelper.isNumber(element) && isNaN(element as number);
+  }
+
+  static isBlankObject(element: unknown) {
+    return element !== null && typeof element === 'object' && !Object.getPrototypeOf(element);
   }
 
   static nativeMax(...values: number[]): number {
@@ -92,10 +106,10 @@ export default class LibHelper {
     collection: T[] | Dictionary<T>,
     callback: (item: T, curr: string | number, collectionSelf: typeof collection) => unknown,
   ): unknown[] | Dictionary<T> {
-    if (Array.isArray(collection)) {
-      return LibHelper.arrayEach(collection, callback);
+    if (LibHelper.isArray(collection)) {
+      return LibHelper.arrayEach(collection as T[], callback);
     }
-    return LibHelper.baseEach(collection, callback);
+    return LibHelper.baseEach(collection as Dictionary<T>, callback);
   }
 
   static getNoopFunction(): () => void {
@@ -212,5 +226,9 @@ export default class LibHelper {
     }
 
     return false;
+  }
+
+  static cloneDeep<T>(o: T): T {
+    return JSON.parse(JSON.stringify(o));
   }
 }

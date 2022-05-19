@@ -195,5 +195,25 @@ describe('Scope', () => {
       expect(scope.counter).toBe(1);
       expect(embeddedWatcherMock).toHaveBeenCalledTimes(1);
     });
+
+    it('should make a digest if the content of an array is changed', () => {
+      scope.aValue = [1, 2, 3];
+      scope.counter = 0;
+
+      const watcherMock = jest.fn((newValue, oldValue, scope) => {
+        scope.counter++;
+      });
+
+      scope.$watch((scope) => scope.aValue, watcherMock, true);
+
+      scope.$digest();
+      expect(scope.counter).toBe(1);
+      expect(watcherMock).toHaveBeenCalledTimes(1);
+
+      scope.aValue.push(4);
+      scope.$digest();
+      expect(scope.counter).toBe(2);
+      expect(watcherMock).toHaveBeenCalledTimes(2);
+    });
   });
 });
