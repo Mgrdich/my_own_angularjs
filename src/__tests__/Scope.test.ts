@@ -215,5 +215,18 @@ describe('Scope', () => {
       expect(scope.counter).toBe(2);
       expect(watcherMock).toHaveBeenCalledTimes(2);
     });
+
+    it('correctly handles NaNs', () => {
+      scope.number = 0 / 0; // NaN
+      scope.counter = 0;
+      const watcherMock = jest.fn((newValue, oldValue, scope) => {
+        scope.counter++;
+      });
+      scope.$watch((scope) => scope.number, watcherMock);
+      scope.$digest();
+      expect(scope.counter).toBe(1);
+      scope.$digest();
+      expect(scope.counter).toBe(1);
+    });
   });
 });
