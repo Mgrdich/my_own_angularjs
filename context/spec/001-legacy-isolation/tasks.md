@@ -48,11 +48,11 @@ _After this slice: `pnpm lint` passes on the empty placeholder modules._
 
 _After this slice: `pnpm test` passes (no tests yet, but zero errors). `pnpm dev` starts watch mode._
 
-- [ ] **Slice 4: Set up Vitest with jsdom**
-  - [ ] Install `vitest@^4.1.3` and `jsdom@^29.0.2` via pnpm **[Agent: vitest-testing]**
-  - [ ] Create `vitest.config.ts` with jsdom environment, include `src/**/*.test.ts`, exclude `legacy/**`, coverage provider v8, threshold 90% lines **[Agent: vitest-testing]**
-  - [ ] Add `test`, `test:watch`, and `dev` scripts to `package.json` **[Agent: vitest-testing]**
-  - [ ] **Verify:** Run `pnpm test` — passes with zero errors (no test files, clean exit). Run `pnpm dev` — starts Vitest watch mode without errors (ctrl+c to exit). **[Agent: vitest-testing]**
+- [x] **Slice 4: Set up Vitest with jsdom**
+  - [x] Install `vitest@^4.1.3` and `jsdom@^29.0.2` via pnpm **[Agent: vitest-testing]**
+  - [x] Create `vitest.config.ts` with jsdom environment, include `src/**/*.test.ts`, exclude `legacy/**`, coverage provider v8, threshold 90% lines **[Agent: vitest-testing]**
+  - [x] Add `test`, `test:watch`, and `dev` scripts to `package.json` **[Agent: vitest-testing]**
+  - [x] **Verify:** Run `pnpm test` — passes with zero errors (no test files, clean exit). Run `pnpm dev` — starts Vitest watch mode without errors (ctrl+c to exit). **[Agent: vitest-testing]**
 
 ---
 
