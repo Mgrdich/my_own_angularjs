@@ -36,11 +36,11 @@ _After this slice: `pnpm typecheck` and `pnpm format:check` pass on the empty pl
 
 _After this slice: `pnpm lint` passes on the empty placeholder modules._
 
-- [ ] **Slice 3: Set up ESLint with flat config**
-  - [ ] Install `eslint@^10.2.0` and `typescript-eslint@^8.58.1` via pnpm **[Agent: typescript-framework]**
-  - [ ] Create `eslint.config.js` with flat config: `tseslint.configs.strictTypeChecked`, ignores for `dist/`, `legacy/`, `node_modules/`, carry forward `no-duplicate-imports: error` **[Agent: typescript-framework]**
-  - [ ] Add `lint` script to `package.json`: `eslint src/` **[Agent: typescript-framework]**
-  - [ ] **Verify:** Run `pnpm lint` — passes with zero errors. **[Agent: typescript-framework]**
+- [x] **Slice 3: Set up ESLint with flat config**
+  - [x] Install `eslint@^10.2.0` and `typescript-eslint@^8.58.1` via pnpm **[Agent: typescript-framework]**
+  - [x] Create `eslint.config.js` with flat config: `tseslint.configs.strictTypeChecked`, ignores for `dist/`, `legacy/`, `node_modules/`, carry forward `no-duplicate-imports: error` **[Agent: typescript-framework]**
+  - [x] Add `lint` script to `package.json`: `eslint src/` **[Agent: typescript-framework]**
+  - [x] **Verify:** Run `pnpm lint` — passes with zero errors. **[Agent: typescript-framework]**
 
 ---
 

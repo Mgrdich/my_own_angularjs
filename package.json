@@ -11,11 +11,16 @@
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "format:check": "prettier --check 'src/**/*.ts'"
+    "format": "prettier --write",
+    "format:check": "prettier --check 'src/**/*.ts'",
+    "lint:fix": "eslint --fix",
+    "lint": "eslint src/"
   },
   "devDependencies": {
+    "eslint": "^10.2.0",
     "prettier": "^3.8.1",
     "tslib": "^2.8.1",
-    "typescript": "^6.0.2"
+    "typescript": "^6.0.2",
+    "typescript-eslint": "^8.58.1"
   }
 }
