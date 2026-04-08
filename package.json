@@ -1,50 +1,65 @@
 {
   "name": "my_own_angularjs",
   "version": "1.0.0",
-  "main": "src/index.js",
+  "main": "./dist/cjs/index.cjs",
+  "module": "./dist/esm/index.mjs",
+  "types": "./dist/types/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/esm/index.mjs",
+      "require": "./dist/cjs/index.cjs",
+      "types": "./dist/types/index.d.ts"
+    },
+    "./core": {
+      "import": "./dist/esm/core/index.mjs",
+      "require": "./dist/cjs/core/index.cjs",
+      "types": "./dist/types/core/index.d.ts"
+    },
+    "./di": {
+      "import": "./dist/esm/di/index.mjs",
+      "require": "./dist/cjs/di/index.cjs",
+      "types": "./dist/types/di/index.d.ts"
+    },
+    "./compiler": {
+      "import": "./dist/esm/compiler/index.mjs",
+      "require": "./dist/cjs/compiler/index.cjs",
+      "types": "./dist/types/compiler/index.d.ts"
+    },
+    "./parser": {
+      "import": "./dist/esm/parser/index.mjs",
+      "require": "./dist/cjs/parser/index.cjs",
+      "types": "./dist/types/parser/index.d.ts"
+    }
+  },
   "repository": "https://github.com/Mgrdich/my_own_angularjs.git",
   "author": "Mgrdich <mgotm13@gmail.com>",
   "license": "MIT",
-  "scripts": {
-    "build": "webpack",
-    "test": "jest --env=node --colors --coverage test",
-    "lint": "eslint src/**/*.{js,ts}",
-    "format-lint": "eslint src/**/*.{js,ts} --fix",
-    "format-prettier": "prettier --write 'src/**/*.{js,ts}' --config ./.prettierrc"
-  },
+  "packageManager": "pnpm@10.6.2",
   "engines": {
-    "node": "v16.15.0",
-    "npm": "8.5.5"
+    "node": ">=22.0.0"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "format": "prettier --write",
+    "format:check": "prettier --check 'src/**/*.ts'",
+    "lint:fix": "eslint --fix",
+    "lint": "eslint src/",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "dev": "vitest",
+    "build": "rollup -c"
   },
   "devDependencies": {
-    "@types/jest": "^27.4.1",
-    "@types/node": "^17.0.23",
-    "@types/webpack": "^5.28.0",
-    "@typescript-eslint/eslint-plugin": "^5.18.0",
-    "@typescript-eslint/parser": "^5.18.0",
-    "@webpack-cli/generators": "^2.4.2",
-    "clean-webpack-plugin": "^4.0.0",
-    "copy-webpack-plugin": "^10.2.4",
-    "declaration-bundler-webpack-plugin": "^1.0.3",
-    "eslint": "^8.12.0",
-    "eslint-import-resolver-typescript": "^2.7.1",
-    "eslint-plugin-import": "^2.26.0",
-    "jest": "^27.5.1",
-    "prettier": "^2.6.2",
-    "ts-jest": "^27.1.4",
-    "ts-loader": "^9.2.8",
-    "typescript": "^4.6.3",
-    "webpack": "^5.72.0",
-    "webpack-cli": "^4.9.2"
-  },
-  "lint-staged": {
-    "src/**/*.{js,ts}": [
-      "npm run format-prettier",
-      "npm run format-lint",
-      "npm run test"
-    ]
-  },
-  "dependencies": {
-    "lodash": "^4.17.21"
+    "@rollup/plugin-node-resolve": "^16.0.3",
+    "@rollup/plugin-typescript": "^12.3.0",
+    "eslint": "^10.2.0",
+    "jsdom": "^29.0.2",
+    "prettier": "^3.8.1",
+    "rollup": "^4.60.1",
+    "rollup-plugin-dts": "^6.4.1",
+    "tslib": "^2.8.1",
+    "typescript": "^6.0.2",
+    "typescript-eslint": "^8.58.1",
+    "vitest": "^4.1.3"
   }
 }
