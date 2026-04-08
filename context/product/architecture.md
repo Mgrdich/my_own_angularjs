@@ -4,7 +4,7 @@
 
 ## 1. Application & Technology Stack
 
-- **Language:** TypeScript 5.x with strict mode (`strict`, `strictNullChecks`, `noImplicitAny`, `noUncheckedIndexedAccess`)
+- **Language:** TypeScript 6.x with strict mode (`strict`, `strictNullChecks`, `noImplicitAny`, `noUncheckedIndexedAccess`)
 - **Module System:** Dual ESM + CommonJS output for maximum consumer compatibility
 - **Bundler:** Rollup — mature library bundler with excellent tree-shaking and multi-format output support
 - **Runtime Target:** Modern evergreen browsers (Chrome, Firefox, Safari, Edge — latest 2 versions)
