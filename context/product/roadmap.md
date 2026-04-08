@@ -13,6 +13,10 @@ _Move existing code to a legacy folder, reimplement from scratch in clean TypeSc
   - [ ] **Move Existing Tests:** Relocate current test files (`src/__tests__/`) into `legacy/` alongside the source they test.
   - [ ] **Set Up Fresh Project Structure:** Initialize a clean `src/` directory with the new TypeScript strict configuration, Vitest, and Rollup build pipeline.
 
+- [ ] **Basic CI Pipeline**
+  - [ ] **GitHub Actions Workflow:** Set up a CI workflow that runs on every push and pull request.
+  - [ ] **CI Steps:** Lint (ESLint) → Format Check (Prettier) → Type Check (tsc) → Test (Vitest) — all must pass before merge.
+
 - [ ] **Reimplement Existing Features (from scratch)**
   - [ ] **Scopes & Digest Cycle:** Rewrite the full Scope module in clean TypeScript — `$watch`, `$watchGroup`, `$watchCollection`, `$digest`, `$apply`, `$eval`, `$evalAsync`, `$applyAsync`, scope hierarchy, events (`$on`, `$emit`, `$broadcast`), and lifecycle (`$new`, `$destroy`).
   - [ ] **Expression Parser:** Rewrite the lexer, AST builder, and expression compiler in TypeScript with full type safety.
