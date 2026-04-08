@@ -74,10 +74,10 @@ _After this slice: `pnpm build` produces `dist/esm/` and `dist/cjs/` with valid 
 
 _After this slice: pushing to the repo triggers a CI workflow that runs lint, format check, type check, and tests._
 
-- [ ] **Slice 6: Set up GitHub Actions CI pipeline**
+- [x] **Slice 6: Set up GitHub Actions CI pipeline**
   - [x] Create `.github/workflows/ci.yml` — triggers on `push` and `pull_request`, runs on `ubuntu-latest` with Node 22 LTS, uses `pnpm/action-setup@v4` **[Agent: ci-tooling]**
   - [x] Configure CI steps: Install (`pnpm install`) → Lint (`pnpm lint`) → Format Check (`pnpm format:check`) → Type Check (`pnpm typecheck`) → Test (`pnpm test`) **[Agent: ci-tooling]**
-  - [ ] **Verify:** Push a commit and confirm the CI workflow triggers and passes all steps on GitHub. **[Agent: ci-tooling]**
+  - [x] **Verify:** Push a commit and confirm the CI workflow triggers and passes all steps on GitHub. **[Agent: ci-tooling]**
 
 ---
 
@@ -85,9 +85,9 @@ _After this slice: pushing to the repo triggers a CI workflow that runs lint, fo
 
 _After this slice: end-to-end verification that everything works together._
 
-- [ ] **Slice 7: End-to-end validation**
-  - [ ] Run full command sequence locally: `pnpm install` → `pnpm lint` → `pnpm format:check` → `pnpm typecheck` → `pnpm test` → `pnpm build` — all pass **[Agent: general-purpose]**
-  - [ ] Verify `legacy/` files are excluded from lint, test, and build output **[Agent: general-purpose]**
-  - [ ] Verify `dist/` contains ESM, CJS, and type declarations **[Agent: general-purpose]**
-  - [ ] Add `dist/` to `.gitignore` if not already present **[Agent: general-purpose]**
-  - [ ] Verify CI workflow passes on GitHub **[Agent: ci-tooling]**
+- [x] **Slice 7: End-to-end validation**
+  - [x] Run full command sequence locally: `pnpm install` → `pnpm lint` → `pnpm format:check` → `pnpm typecheck` → `pnpm test` → `pnpm build` — all pass **[Agent: general-purpose]**
+  - [x] Verify `legacy/` files are excluded from lint, test, and build output **[Agent: general-purpose]**
+  - [x] Verify `dist/` contains ESM, CJS, and type declarations **[Agent: general-purpose]**
+  - [x] Add `dist/` to `.gitignore` if not already present **[Agent: general-purpose]**
+  - [x] Verify CI workflow passes on GitHub **[Agent: ci-tooling]**

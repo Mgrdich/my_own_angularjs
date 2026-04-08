@@ -1,7 +1,7 @@
 # Technical Specification: Legacy Isolation & Fresh Project Setup
 
 - **Functional Specification:** `context/spec/001-legacy-isolation/functional-spec.md`
-- **Status:** Draft
+- **Status:** Completed
 - **Author(s):** Poe (AI Assistant)
 
 ---
