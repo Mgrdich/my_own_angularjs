@@ -60,13 +60,13 @@ _After this slice: `pnpm test` passes (no tests yet, but zero errors). `pnpm dev
 
 _After this slice: `pnpm build` produces `dist/esm/` and `dist/cjs/` with valid output and `.d.ts` declarations._
 
-- [ ] **Slice 5: Set up Rollup build and package exports**
-  - [ ] Install `rollup@^4.60.1`, `@rollup/plugin-typescript@^12.3.0`, `@rollup/plugin-node-resolve@^16.0.3`, `rollup-plugin-dts@^6.4.1` via pnpm **[Agent: rollup-build]**
-  - [ ] Create `rollup.config.mjs` with dual ESM (`dist/esm/index.mjs`) + CJS (`dist/cjs/index.cjs`) output, TypeScript and node-resolve plugins, separate dts config **[Agent: rollup-build]**
-  - [ ] Add `build` script to `package.json`: `rollup -c` **[Agent: rollup-build]**
-  - [ ] Configure `package.json` exports map with `.`, `./core`, `./di`, `./compiler`, `./parser` subpaths — each with `import`, `require`, and `types` conditions **[Agent: rollup-build]**
-  - [ ] Add `main`, `module`, `types` top-level fields to `package.json` for legacy consumers **[Agent: rollup-build]**
-  - [ ] **Verify:** Run `pnpm build` — produces `dist/esm/`, `dist/cjs/`, and `dist/types/` with valid files. Verify `.d.ts` declarations exist. **[Agent: rollup-build]**
+- [x] **Slice 5: Set up Rollup build and package exports**
+  - [x] Install `rollup@^4.60.1`, `@rollup/plugin-typescript@^12.3.0`, `@rollup/plugin-node-resolve@^16.0.3`, `rollup-plugin-dts@^6.4.1` via pnpm **[Agent: rollup-build]**
+  - [x] Create `rollup.config.mjs` with dual ESM (`dist/esm/index.mjs`) + CJS (`dist/cjs/index.cjs`) output, TypeScript and node-resolve plugins, separate dts config **[Agent: rollup-build]**
+  - [x] Add `build` script to `package.json`: `rollup -c` **[Agent: rollup-build]**
+  - [x] Configure `package.json` exports map with `.`, `./core`, `./di`, `./compiler`, `./parser` subpaths — each with `import`, `require`, and `types` conditions **[Agent: rollup-build]**
+  - [x] Add `main`, `module`, `types` top-level fields to `package.json` for legacy consumers **[Agent: rollup-build]**
+  - [x] **Verify:** Run `pnpm build` — produces `dist/esm/`, `dist/cjs/`, and `dist/types/` with valid files. Verify `.d.ts` declarations exist. **[Agent: rollup-build]**
 
 ---
 
@@ -75,8 +75,8 @@ _After this slice: `pnpm build` produces `dist/esm/` and `dist/cjs/` with valid 
 _After this slice: pushing to the repo triggers a CI workflow that runs lint, format check, type check, and tests._
 
 - [ ] **Slice 6: Set up GitHub Actions CI pipeline**
-  - [ ] Create `.github/workflows/ci.yml` — triggers on `push` and `pull_request`, runs on `ubuntu-latest` with Node 22 LTS, uses `pnpm/action-setup@v4` **[Agent: ci-tooling]**
-  - [ ] Configure CI steps: Install (`pnpm install`) → Lint (`pnpm lint`) → Format Check (`pnpm format:check`) → Type Check (`pnpm typecheck`) → Test (`pnpm test`) **[Agent: ci-tooling]**
+  - [x] Create `.github/workflows/ci.yml` — triggers on `push` and `pull_request`, runs on `ubuntu-latest` with Node 22 LTS, uses `pnpm/action-setup@v4` **[Agent: ci-tooling]**
+  - [x] Configure CI steps: Install (`pnpm install`) → Lint (`pnpm lint`) → Format Check (`pnpm format:check`) → Type Check (`pnpm typecheck`) → Test (`pnpm test`) **[Agent: ci-tooling]**
   - [ ] **Verify:** Push a commit and confirm the CI workflow triggers and passes all steps on GitHub. **[Agent: ci-tooling]**
 
 ---
