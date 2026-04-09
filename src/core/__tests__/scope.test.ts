@@ -1,15 +1,10 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { Scope } from '../index.js';
+import { describe, it, expect, vi } from 'vitest';
+import { Scope } from '../index';
 
 describe('Scope', () => {
-  let scope: Scope;
-
-  beforeEach(() => {
-    scope = new Scope();
-  });
-
   describe('$digest', () => {
     it('calls the listener function of a watch on first $digest', () => {
+      const scope = new Scope();
       const watchFn = vi.fn().mockReturnValue('someValue');
       const listenerFn = vi.fn();
 
@@ -20,6 +15,7 @@ describe('Scope', () => {
     });
 
     it('calls the watch function with the scope as argument', () => {
+      const scope = new Scope();
       const watchFn = vi.fn().mockReturnValue('someValue');
       const listenerFn = vi.fn();
 
@@ -30,11 +26,12 @@ describe('Scope', () => {
     });
 
     it('calls the listener when the watched value changes', () => {
-      scope['someValue'] = 'a';
+      const scope = Scope.create<{ someValue: string }>();
+      scope.someValue = 'a';
       let counter = 0;
 
       scope.$watch(
-        (s: Scope) => s['someValue'] as string,
+        () => scope.someValue,
         () => {
           counter++;
         },
@@ -48,7 +45,7 @@ describe('Scope', () => {
       scope.$digest();
       expect(counter).toBe(1);
 
-      scope['someValue'] = 'b';
+      scope.someValue = 'b';
       expect(counter).toBe(1);
 
       scope.$digest();
@@ -56,49 +53,51 @@ describe('Scope', () => {
     });
 
     it('may have watchers that are triggered by other watchers (chained watchers)', () => {
-      scope['name'] = 'Jane';
+      const scope = Scope.create<{ name: string; nameUpper: string; initial: string }>();
+      scope.name = 'Jane';
 
       scope.$watch(
-        (s: Scope) => s['nameUpper'] as string,
+        () => scope.nameUpper,
         (newValue: string) => {
           if (newValue) {
-            scope['initial'] = newValue.substring(0, 1) + '.';
+            scope.initial = newValue.substring(0, 1) + '.';
           }
         },
       );
 
       scope.$watch(
-        (s: Scope) => s['name'] as string,
+        () => scope.name,
         (newValue: string) => {
           if (newValue) {
-            scope['nameUpper'] = newValue.toUpperCase();
+            scope.nameUpper = newValue.toUpperCase();
           }
         },
       );
 
       scope.$digest();
-      expect(scope['initial']).toBe('J.');
+      expect(scope.initial).toBe('J.');
 
-      scope['name'] = 'Bob';
+      scope.name = 'Bob';
       scope.$digest();
-      expect(scope['initial']).toBe('B.');
+      expect(scope.initial).toBe('B.');
     });
 
     it('gives up after 10 (TTL) digest iterations and throws', () => {
-      scope['counterA'] = 0;
-      scope['counterB'] = 0;
+      const scope = Scope.create<{ counterA: number; counterB: number }>();
+      scope.counterA = 0;
+      scope.counterB = 0;
 
       scope.$watch(
-        (s: Scope) => s['counterA'] as number,
+        () => scope.counterA,
         () => {
-          scope['counterB'] = (scope['counterB'] as number) + 1;
+          scope.counterB = scope.counterB + 1;
         },
       );
 
       scope.$watch(
-        (s: Scope) => s['counterB'] as number,
+        () => scope.counterB,
         () => {
-          scope['counterA'] = (scope['counterA'] as number) + 1;
+          scope.counterA = scope.counterA + 1;
         },
       );
 
@@ -108,11 +107,12 @@ describe('Scope', () => {
     });
 
     it('handles NaN correctly (NaN === NaN for dirty checking)', () => {
-      scope['number'] = 0 / 0; // NaN
+      const scope = Scope.create<{ nanValue: number }>();
+      scope.nanValue = 0 / 0; // NaN
       let counter = 0;
 
       scope.$watch(
-        (s: Scope) => s['number'] as number,
+        () => scope.nanValue,
         () => {
           counter++;
         },
@@ -126,18 +126,19 @@ describe('Scope', () => {
     });
 
     it('uses short-circuit optimization: ends digest early when last dirty watcher is clean', () => {
+      const scope = new Scope();
       const watchExecs: number[] = [];
 
-      // Set up 100 watchers on scope properties
+      // Set up 100 watchers on scope properties (dynamic keys require bracket notation)
       for (let i = 0; i < 100; i++) {
         scope[`val_${String(i)}`] = i;
       }
 
       for (let i = 0; i < 100; i++) {
         scope.$watch(
-          (s: Scope) => {
+          () => {
             watchExecs.push(i);
-            return s[`val_${String(i)}`];
+            return scope[`val_${String(i)}`];
           },
           () => {
             /* noop */
@@ -146,31 +147,25 @@ describe('Scope', () => {
       }
 
       scope.$digest();
-      // After the first digest, all watchers have been evaluated at least once.
-      // Reset to count evaluations on the next digest.
       watchExecs.length = 0;
 
-      // Change only the first value (watchers iterate in reverse)
       scope['val_0'] = 'changed';
       scope.$digest();
 
-      // With short-circuit, not all 200 (2 * 100) evaluations should run.
-      // The second pass should short-circuit after seeing watcher 0 is now clean.
-      // Reverse iteration: pass 1 evaluates 100..0, finds val_0 dirty (last dirty = watcher 0).
+      // Reverse iteration: pass 1 evaluates 100..0, finds val_0 dirty.
       // Pass 2 evaluates 100..0, watcher 0 is clean and equals lastDirtyWatch, short-circuits.
-      // Total: 200 evaluations.
       expect(watchExecs.length).toBe(200);
     });
 
     it('does not end digest on short-circuit when new watchers are added', () => {
-      scope['aValue'] = 'abc';
+      const scope = Scope.create<{ aValue: string }>();
+      scope.aValue = 'abc';
       let counter = 0;
 
       scope.$watch(
-        (s: Scope) => s['aValue'] as string,
+        () => scope.aValue,
         (newValue: string) => {
           if (newValue) {
-            // Register a new watcher from within a listener
             scope.$watch(
               () => newValue,
               () => {
@@ -182,42 +177,43 @@ describe('Scope', () => {
       );
 
       scope.$digest();
-      // The newly added watcher should fire during the same digest cycle
       expect(counter).toBe(1);
     });
   });
 
   describe('$watch', () => {
     it('returns a deregistration function', () => {
+      const scope = new Scope();
       const deregister = scope.$watch(() => 'value', vi.fn());
       expect(typeof deregister).toBe('function');
     });
 
     it('calling deregistration function removes the watcher', () => {
-      scope['aValue'] = 'initial';
+      const scope = Scope.create<{ aValue: string }>();
+      scope.aValue = 'initial';
       const listenerFn = vi.fn();
 
-      const deregister = scope.$watch((s: Scope) => s['aValue'] as string, listenerFn);
+      const deregister = scope.$watch(() => scope.aValue, listenerFn);
 
       scope.$digest();
       expect(listenerFn).toHaveBeenCalledTimes(1);
 
-      scope['aValue'] = 'changed';
+      scope.aValue = 'changed';
       deregister();
       scope.$digest();
 
-      // Listener should not have been called again after deregistration
       expect(listenerFn).toHaveBeenCalledTimes(1);
     });
 
     it('allows deregistering a watcher during a digest', () => {
-      scope['aValue'] = 'abc';
+      const scope = Scope.create<{ aValue: string }>();
+      scope.aValue = 'abc';
       const watchCalls: string[] = [];
 
       const deregisterFirst = scope.$watch(
-        (s: Scope) => {
+        () => {
           watchCalls.push('first');
-          return s['aValue'] as string;
+          return scope.aValue;
         },
         () => {
           deregisterFirst();
@@ -225,9 +221,9 @@ describe('Scope', () => {
       );
 
       scope.$watch(
-        (s: Scope) => {
+        () => {
           watchCalls.push('second');
-          return s['aValue'] as string;
+          return scope.aValue;
         },
         () => {
           /* noop */
@@ -235,9 +231,9 @@ describe('Scope', () => {
       );
 
       scope.$watch(
-        (s: Scope) => {
+        () => {
           watchCalls.push('third');
-          return s['aValue'] as string;
+          return scope.aValue;
         },
         () => {
           /* noop */
@@ -246,16 +242,14 @@ describe('Scope', () => {
 
       scope.$digest();
 
-      // All three watchers should still have run despite the first one deregistering itself.
-      // Because watchers iterate in reverse, deregistering the first watcher mid-iteration
-      // (by setting it to null) should not skip any watchers.
       expect(watchCalls).toContain('first');
       expect(watchCalls).toContain('second');
       expect(watchCalls).toContain('third');
     });
 
     it('allows a watcher to deregister another watcher during digest', () => {
-      scope['aValue'] = 'abc';
+      const scope = Scope.create<{ aValue: string }>();
+      scope.aValue = 'abc';
       let counter = 0;
 
       const deregisterSecond = scope.$watch(
@@ -268,7 +262,7 @@ describe('Scope', () => {
       );
 
       scope.$watch(
-        (s: Scope) => s['aValue'] as string,
+        () => scope.aValue,
         () => {
           counter++;
         },
@@ -279,18 +273,20 @@ describe('Scope', () => {
     });
 
     it('does not throw when registering without a listener function', () => {
+      const scope = new Scope();
       expect(() => {
-        scope.$watch((s: Scope) => s['someValue']);
+        scope.$watch(() => 'someValue');
         scope.$digest();
       }).not.toThrow();
     });
 
     it('uses initWatchVal as oldValue on first listener invocation (oldValue === newValue)', () => {
-      scope['aValue'] = 123;
+      const scope = Scope.create<{ aValue: number }>();
+      scope.aValue = 123;
       let oldValueGiven: unknown;
 
       scope.$watch(
-        (s: Scope) => s['aValue'] as number,
+        () => scope.aValue,
         (_newValue: number, oldValue: number) => {
           oldValueGiven = oldValue;
         },
@@ -298,16 +294,14 @@ describe('Scope', () => {
 
       scope.$digest();
 
-      // On first invocation, the listener should receive newValue as oldValue
-      // (not the internal initWatchVal sentinel)
       expect(oldValueGiven).toBe(123);
     });
 
     it('catches exceptions in watch functions and continues', () => {
-      scope['aValue'] = 'abc';
+      const scope = Scope.create<{ aValue: string }>();
+      scope.aValue = 'abc';
       let counter = 0;
 
-      // Suppress console.error output during this test
       const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
       scope.$watch(
@@ -320,7 +314,7 @@ describe('Scope', () => {
       );
 
       scope.$watch(
-        (s: Scope) => s['aValue'] as string,
+        () => scope.aValue,
         () => {
           counter++;
         },
@@ -333,21 +327,21 @@ describe('Scope', () => {
     });
 
     it('catches exceptions in listener functions and continues', () => {
-      scope['aValue'] = 'abc';
+      const scope = Scope.create<{ aValue: string }>();
+      scope.aValue = 'abc';
       let counter = 0;
 
-      // Suppress console.error output during this test
       const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
       scope.$watch(
-        (s: Scope) => s['aValue'] as string,
+        () => scope.aValue,
         () => {
           throw new Error('listener error');
         },
       );
 
       scope.$watch(
-        (s: Scope) => s['aValue'] as string,
+        () => scope.aValue,
         () => {
           counter++;
         },
@@ -362,20 +356,23 @@ describe('Scope', () => {
 
   describe('$eval', () => {
     it("executes $eval'd function and returns result", () => {
-      scope['aValue'] = 42;
+      const scope = Scope.create<{ aValue: number }>();
+      scope.aValue = 42;
 
-      const result = scope.$eval((s: Scope) => s['aValue'] as number);
+      const result = scope.$eval(() => scope.aValue);
 
       expect(result).toBe(42);
     });
 
     it('passes the scope as first argument', () => {
+      const scope = new Scope();
       const fn = vi.fn();
       scope.$eval(fn);
       expect(fn).toHaveBeenCalledWith(scope, undefined);
     });
 
     it('passes locals as second argument', () => {
+      const scope = new Scope();
       const locals = { extra: 'data' };
       const fn = vi.fn();
 
@@ -385,6 +382,7 @@ describe('Scope', () => {
     });
 
     it('returns undefined when called without arguments', () => {
+      const scope = new Scope();
       const result = scope.$eval();
       expect(result).toBeUndefined();
     });
@@ -392,11 +390,12 @@ describe('Scope', () => {
 
   describe('$apply', () => {
     it("executes $apply'd function and triggers digest", () => {
-      scope['aValue'] = 'someValue';
+      const scope = Scope.create<{ aValue: string }>();
+      scope.aValue = 'someValue';
       let counter = 0;
 
       scope.$watch(
-        (s: Scope) => s['aValue'] as string,
+        () => scope.aValue,
         () => {
           counter++;
         },
@@ -405,16 +404,17 @@ describe('Scope', () => {
       scope.$digest();
       expect(counter).toBe(1);
 
-      scope.$apply((s: Scope) => {
-        s['aValue'] = 'otherValue';
+      scope.$apply(() => {
+        scope.aValue = 'otherValue';
       });
       expect(counter).toBe(2);
     });
 
     it("sets $$phase to '$apply' during $apply", () => {
-      let phaseInApply: string | null = null;
+      const scope = new Scope();
+      let phaseInApply: unknown = null;
 
-      scope.$apply((s: Scope) => {
+      scope.$apply((s) => {
         phaseInApply = s.$$phase;
       });
 
@@ -422,11 +422,12 @@ describe('Scope', () => {
     });
 
     it('triggers digest even if expression throws', () => {
-      scope['aValue'] = 'someValue';
+      const scope = Scope.create<{ aValue: string }>();
+      scope.aValue = 'someValue';
       let counter = 0;
 
       scope.$watch(
-        (s: Scope) => s['aValue'] as string,
+        () => scope.aValue,
         () => {
           counter++;
         },
@@ -434,20 +435,20 @@ describe('Scope', () => {
 
       expect(() => {
         scope.$apply(() => {
-          scope['aValue'] = 'otherValue';
+          scope.aValue = 'otherValue';
           throw new Error('apply error');
         });
       }).toThrow('apply error');
 
-      // The digest should still have run despite the error
       expect(counter).toBe(1);
     });
 
     it('throws when $apply is called during $digest (phase conflict)', () => {
-      scope['aValue'] = 'someValue';
+      const scope = Scope.create<{ aValue: string }>();
+      scope.aValue = 'someValue';
 
       scope.$watch(
-        (s: Scope) => s['aValue'] as string,
+        () => scope.aValue,
         () => {
           expect(() => scope.$apply(() => {})).toThrow('$digest already in progress');
         },
@@ -459,19 +460,20 @@ describe('Scope', () => {
 
   describe('$$phase', () => {
     it('has $$phase as null initially', () => {
+      const scope = new Scope();
       expect(scope.$$phase).toBeNull();
     });
 
     it("has $$phase as '$digest' during $digest", () => {
-      let phaseInWatch: string | null = null;
-      let phaseInListener: string | null = null;
-
-      scope['aValue'] = 'someValue';
+      const scope = Scope.create<{ aValue: string }>();
+      scope.aValue = 'someValue';
+      let phaseInWatch: unknown = null;
+      let phaseInListener: unknown = null;
 
       scope.$watch(
-        (s: Scope) => {
+        (s) => {
           phaseInWatch = s.$$phase;
-          return s['aValue'] as string;
+          return scope.aValue;
         },
         () => {
           phaseInListener = scope.$$phase;
@@ -485,9 +487,10 @@ describe('Scope', () => {
     });
 
     it("has $$phase as '$apply' during $apply", () => {
-      let phaseInApply: string | null = null;
+      const scope = new Scope();
+      let phaseInApply: unknown = null;
 
-      scope.$apply((s: Scope) => {
+      scope.$apply((s) => {
         phaseInApply = s.$$phase;
       });
 

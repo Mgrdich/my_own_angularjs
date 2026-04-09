@@ -1,4 +1,4 @@
-export { initWatchVal, Scope } from './core/index.js';
+export { initWatchVal, Scope } from './core/index';
 export type {
   AsyncTask,
   DeregisterFn,
@@ -7,6 +7,7 @@ export type {
   ListenerFn,
   ScopeEvent,
   ScopePhase,
+  TypedScope,
   Watcher,
   WatchFn,
-} from './core/index.js';
+} from './core/index';

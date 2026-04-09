@@ -10,15 +10,14 @@ export const initWatchVal: unique symbol = Symbol('initWatchVal');
 /** The type of the {@link initWatchVal} sentinel. */
 export type InitWatchVal = typeof initWatchVal;
 
+/** A Scope instance with typed user properties via intersection. */
+export type TypedScope<T extends Record<string, unknown> = Record<string, unknown>> = Scope & T;
+
 /** Watch function passed to `$watch` -- evaluated on every digest cycle. */
 export type WatchFn<T> = (scope: Scope) => T;
 
 /** Listener called when a watch value changes. */
-export type ListenerFn<T> = (
-  newValue: T,
-  oldValue: T,
-  scope: Scope,
-) => void;
+export type ListenerFn<T> = (newValue: T, oldValue: T, scope: Scope) => void;
 
 /** Cleanup function returned by `$watch`, `$watchGroup`, and `$on`. */
 export type DeregisterFn = () => void;

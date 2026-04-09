@@ -6,9 +6,10 @@ import {
   type InitWatchVal,
   type ListenerFn,
   type ScopePhase,
+  type TypedScope,
   type Watcher,
   type WatchFn,
-} from './scope-types.js';
+} from './scope-types';
 
 /** Maximum number of digest iterations before throwing. */
 const TTL = 10;
@@ -24,12 +25,14 @@ let nextId = 0;
 /**
  * Core Scope class implementing dirty-checking and digest cycle.
  *
- * The generic parameter allows typing the properties stored on the scope,
- * while the index signature permits arbitrary property assignment at runtime
- * (matching AngularJS behavior where users set properties directly on scopes).
+ * Use {@link Scope.create} for typed property access:
+ *
+ * ```ts
+ * const scope = Scope.create<{ count: number }>();
+ * scope.count = 0;   // typed as number
+ * ```
  */
-// eslint-disable-next-line @typescript-eslint/no-unused-vars -- T will be used in future slices for typed scope properties
-export class Scope<T extends Record<string, unknown> = Record<string, unknown>> {
+export class Scope {
   [key: string]: unknown;
 
   readonly $id: number;
@@ -58,6 +61,11 @@ export class Scope<T extends Record<string, unknown> = Record<string, unknown>> 
     this.$$lastDirtyWatch = null;
     this.$$applyAsyncId = null;
     this.$$phase = null;
+  }
+
+  /** Create a typed Scope instance with compile-time property access. */
+  static create<T extends Record<string, unknown> = Record<string, unknown>>(): TypedScope<T> {
+    return new Scope() as TypedScope<T>;
   }
 
   /**

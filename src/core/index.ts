@@ -1,4 +1,4 @@
-export { Scope } from './scope.js';
+export { Scope } from './scope';
 export type {
   AsyncTask,
   DeregisterFn,
@@ -7,7 +7,8 @@ export type {
   ListenerFn,
   ScopeEvent,
   ScopePhase,
+  TypedScope,
   Watcher,
   WatchFn,
-} from './scope-types.js';
-export { initWatchVal } from './scope-types.js';
+} from './scope-types';
+export { initWatchVal } from './scope-types';
