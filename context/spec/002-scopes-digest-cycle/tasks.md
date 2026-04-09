@@ -6,12 +6,12 @@
 
 _After this slice: a root Scope can be created, watchers registered, and a digest cycle runs dirty checking with TTL protection. Tests pass._
 
-- [ ] **Slice 1: Root Scope, `$watch`, and `$digest`**
-  - [ ] Create `src/core/scope-types.ts` with core types: `WatchFn`, `ListenerFn`, `DeregisterFn`, `Watcher`, `ScopePhase`, `AsyncTask` **[Agent: typescript-framework]**
-  - [ ] Create `src/core/scope.ts` with `Scope<T>` class — constructor initializing all internal properties, `$watch` (reference equality only), `$$digestOnce`, `$digest` with TTL=10, `$eval`, `$apply` **[Agent: typescript-framework]**
-  - [ ] Update `src/core/index.ts` and `src/index.ts` barrel exports to re-export `Scope` and public types **[Agent: typescript-framework]**
-  - [ ] Create `src/core/__tests__/scope.test.ts` with tests for: watch registration, listener invocation, dirty checking, chained watchers, TTL exception, NaN handling, short-circuit optimization, watcher deregistration, deregistration during digest, `$eval`, `$apply` with phase management **[Agent: vitest-testing]**
-  - [ ] **Verify:** `pnpm lint` + `pnpm typecheck` + `pnpm test` all pass. `pnpm build` produces output including Scope exports. **[Agent: typescript-framework]**
+- [x] **Slice 1: Root Scope, `$watch`, and `$digest`**
+  - [x] Create `src/core/scope-types.ts` with core types: `WatchFn`, `ListenerFn`, `DeregisterFn`, `Watcher`, `ScopePhase`, `AsyncTask` **[Agent: typescript-framework]**
+  - [x] Create `src/core/scope.ts` with `Scope<T>` class — constructor initializing all internal properties, `$watch` (reference equality only), `$$digestOnce`, `$digest` with TTL=10, `$eval`, `$apply` **[Agent: typescript-framework]**
+  - [x] Update `src/core/index.ts` and `src/index.ts` barrel exports to re-export `Scope` and public types **[Agent: typescript-framework]**
+  - [x] Create `src/core/__tests__/scope.test.ts` with tests for: watch registration, listener invocation, dirty checking, chained watchers, TTL exception, NaN handling, short-circuit optimization, watcher deregistration, deregistration during digest, `$eval`, `$apply` with phase management **[Agent: vitest-testing]**
+  - [x] **Verify:** `pnpm lint` + `pnpm typecheck` + `pnpm test` all pass. `pnpm build` produces output including Scope exports. **[Agent: typescript-framework]**
 
 ---
 

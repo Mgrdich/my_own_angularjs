@@ -1,0 +1,264 @@
+import {
+  initWatchVal,
+  type AsyncTask,
+  type DeregisterFn,
+  type EventListener,
+  type InitWatchVal,
+  type ListenerFn,
+  type ScopePhase,
+  type Watcher,
+  type WatchFn,
+} from './scope-types.js';
+
+/** Maximum number of digest iterations before throwing. */
+const TTL = 10;
+
+/** No-op listener used when $watch is called without a listenerFn. */
+const noop: ListenerFn<unknown> = () => {
+  /* intentionally empty */
+};
+
+/** Auto-incrementing counter for unique scope IDs. */
+let nextId = 0;
+
+/**
+ * Core Scope class implementing dirty-checking and digest cycle.
+ *
+ * The generic parameter allows typing the properties stored on the scope,
+ * while the index signature permits arbitrary property assignment at runtime
+ * (matching AngularJS behavior where users set properties directly on scopes).
+ */
+// eslint-disable-next-line @typescript-eslint/no-unused-vars -- T will be used in future slices for typed scope properties
+export class Scope<T extends Record<string, unknown> = Record<string, unknown>> {
+  [key: string]: unknown;
+
+  readonly $id: number;
+  $root: Scope;
+  $parent: Scope | null;
+  $$watchers: (Watcher<unknown> | null)[] | null;
+  $$children: Scope[];
+  $$listeners: Record<string, (EventListener | null)[]>;
+  $$asyncQueue: AsyncTask[];
+  $$applyAsyncQueue: AsyncTask[];
+  $$postDigestQueue: (() => void)[];
+  $$lastDirtyWatch: Watcher<unknown> | null;
+  $$applyAsyncId: ReturnType<typeof setTimeout> | null;
+  $$phase: ScopePhase;
+
+  constructor() {
+    this.$id = nextId++;
+    this.$root = this;
+    this.$parent = null;
+    this.$$watchers = [];
+    this.$$children = [];
+    this.$$listeners = {};
+    this.$$asyncQueue = [];
+    this.$$applyAsyncQueue = [];
+    this.$$postDigestQueue = [];
+    this.$$lastDirtyWatch = null;
+    this.$$applyAsyncId = null;
+    this.$$phase = null;
+  }
+
+  /**
+   * Register a watcher on this scope.
+   *
+   * @param watchFn - Expression evaluated on every digest cycle
+   * @param listenerFn - Called when the watched value changes
+   * @param valueEq - Whether to use deep equality (not implemented in Slice 1)
+   * @returns A function that deregisters the watcher when called
+   */
+  $watch<W>(watchFn: WatchFn<W>, listenerFn?: ListenerFn<W>, valueEq?: boolean): DeregisterFn {
+    const watcher: Watcher<W> = {
+      watchFn,
+      listenerFn: listenerFn ?? (noop as ListenerFn<W>),
+      last: initWatchVal as W | InitWatchVal,
+      valueEq: valueEq ?? false,
+    };
+
+    if (this.$$watchers === null) {
+      // Scope has been destroyed; silently ignore
+      return () => {
+        /* noop for destroyed scope */
+      };
+    }
+
+    this.$$watchers.push(watcher as Watcher<unknown>);
+
+    // Reset short-circuit optimization on root to prevent stale references
+    this.$root.$$lastDirtyWatch = null;
+
+    return (): void => {
+      const index = this.$$watchers?.indexOf(watcher as Watcher<unknown>);
+      if (index !== undefined && index >= 0 && this.$$watchers !== null) {
+        this.$$watchers[index] = null;
+        this.$root.$$lastDirtyWatch = null;
+      }
+    };
+  }
+
+  /**
+   * Execute a single digest pass over all watchers.
+   * Iterates in reverse order for safe deregistration during iteration.
+   *
+   * @returns true if any watcher was dirty during this pass
+   */
+  $$digestOnce(): boolean {
+    let dirty = false;
+    const watchers = this.$$watchers;
+
+    if (watchers === null) {
+      return false;
+    }
+
+    const length = watchers.length;
+    for (let i = length - 1; i >= 0; i--) {
+      const watcher = watchers[i];
+
+      if (watcher === null || watcher === undefined) {
+        continue;
+      }
+
+      try {
+        const newValue = watcher.watchFn(this);
+        const oldValue = watcher.last;
+
+        if (!this.$$areEqual(newValue, oldValue, watcher.valueEq)) {
+          this.$root.$$lastDirtyWatch = watcher;
+          watcher.last = newValue;
+
+          const listenerOldValue = oldValue === initWatchVal ? newValue : oldValue;
+
+          try {
+            watcher.listenerFn(newValue, listenerOldValue, this);
+          } catch (e: unknown) {
+            // Log listener errors but do not abort the digest
+            console.error('Error in watch listener:', e);
+          }
+
+          dirty = true;
+        } else if (this.$root.$$lastDirtyWatch === watcher) {
+          // Short-circuit: no more dirty watchers after this point
+          return false;
+        }
+      } catch (e: unknown) {
+        // Log watch function errors but do not abort the digest
+        console.error('Error in watch function:', e);
+      }
+    }
+
+    return dirty;
+  }
+
+  /**
+   * Run the full digest cycle, looping until all watchers are clean
+   * or the TTL is exceeded.
+   *
+   * @throws When the digest does not stabilize within TTL iterations
+   */
+  $digest(): void {
+    let ttl = TTL;
+    let dirty: boolean;
+
+    this.$root.$$lastDirtyWatch = null;
+    this.$beginPhase('$digest');
+
+    try {
+      do {
+        // Drain the async queue
+        while (this.$$asyncQueue.length > 0) {
+          const asyncTask = this.$$asyncQueue.shift();
+          if (asyncTask) {
+            try {
+              asyncTask.scope.$eval(asyncTask.expression);
+            } catch (e: unknown) {
+              console.error('Error in $evalAsync expression:', e);
+            }
+          }
+        }
+
+        dirty = this.$$digestOnce();
+
+        if ((dirty || this.$$asyncQueue.length > 0) && --ttl <= 0) {
+          this.$clearPhase();
+          throw new Error('10 digest iterations reached');
+        }
+      } while (dirty || this.$$asyncQueue.length > 0);
+    } finally {
+      this.$clearPhase();
+    }
+
+    // Drain the post-digest queue
+    while (this.$$postDigestQueue.length > 0) {
+      const fn = this.$$postDigestQueue.shift();
+      if (fn) {
+        try {
+          fn();
+        } catch (e: unknown) {
+          console.error('Error in $$postDigest function:', e);
+        }
+      }
+    }
+  }
+
+  /**
+   * Execute an expression in the context of this scope.
+   *
+   * @param expr - Function to evaluate with this scope as first argument
+   * @param locals - Optional locals object passed as second argument
+   * @returns The result of the expression, or undefined if no expr provided
+   */
+  $eval<R>(expr?: (scope: Scope, locals?: unknown) => R, locals?: unknown): R | undefined {
+    if (expr) {
+      return expr(this, locals);
+    }
+    return undefined;
+  }
+
+  /**
+   * Execute an expression and then trigger a digest cycle from the root.
+   *
+   * @param expr - Optional expression to evaluate before digesting
+   * @returns The result of the expression
+   */
+  $apply<R>(expr?: WatchFn<R>): R | undefined {
+    this.$beginPhase('$apply');
+    try {
+      return this.$eval(expr);
+    } finally {
+      this.$clearPhase();
+      this.$root.$digest();
+    }
+  }
+
+  /**
+   * Compare two values for equality. Uses reference equality for Slice 1.
+   * Handles NaN === NaN as equal (unlike JavaScript's default behavior).
+   */
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- valueEq will be used in Slice 2 for deep comparison
+  private $$areEqual(newValue: unknown, oldValue: unknown, _valueEq: boolean): boolean {
+    // NaN check: NaN !== NaN in JS, but we want to treat NaN as equal to NaN
+    if (typeof newValue === 'number' && isNaN(newValue) && typeof oldValue === 'number' && isNaN(oldValue)) {
+      return true;
+    }
+
+    return newValue === oldValue;
+  }
+
+  /**
+   * Set the current phase, throwing if a phase is already active.
+   */
+  private $beginPhase(phase: '$digest' | '$apply'): void {
+    if (this.$$phase !== null) {
+      throw new Error(`${this.$$phase} already in progress`);
+    }
+    this.$$phase = phase;
+  }
+
+  /**
+   * Clear the current phase.
+   */
+  private $clearPhase(): void {
+    this.$$phase = null;
+  }
+}
