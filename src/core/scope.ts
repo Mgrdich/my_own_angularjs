@@ -3,7 +3,6 @@ import {
   type AsyncTask,
   type DeregisterFn,
   type EventListener,
-  type InitWatchVal,
   type ListenerFn,
   type ScopePhase,
   type TypedScope,
@@ -79,8 +78,8 @@ export class Scope {
   $watch<W>(watchFn: WatchFn<W>, listenerFn?: ListenerFn<W>, valueEq?: boolean): DeregisterFn {
     const watcher: Watcher<W> = {
       watchFn,
-      listenerFn: listenerFn ?? (noop as ListenerFn<W>),
-      last: initWatchVal as W | InitWatchVal,
+      listenerFn: listenerFn ?? noop,
+      last: initWatchVal,
       valueEq: valueEq ?? false,
     };
 
@@ -111,7 +110,7 @@ export class Scope {
    *
    * @returns true if any watcher was dirty during this pass
    */
-  $$digestOnce(): boolean {
+  $$digestOnce() {
     let dirty = false;
     const watchers = this.$$watchers;
 
@@ -244,7 +243,7 @@ export class Scope {
    * Handles NaN === NaN as equal (unlike JavaScript's default behavior).
    */
   // eslint-disable-next-line @typescript-eslint/no-unused-vars -- valueEq will be used in Slice 2 for deep comparison
-  private $$areEqual(newValue: unknown, oldValue: unknown, _valueEq: boolean): boolean {
+  private $$areEqual(newValue: unknown, oldValue: unknown, _valueEq: boolean) {
     // NaN check: NaN !== NaN in JS, but we want to treat NaN as equal to NaN
     if (typeof newValue === 'number' && isNaN(newValue) && typeof oldValue === 'number' && isNaN(oldValue)) {
       return true;
@@ -256,7 +255,7 @@ export class Scope {
   /**
    * Set the current phase, throwing if a phase is already active.
    */
-  private $beginPhase(phase: '$digest' | '$apply'): void {
+  private $beginPhase(phase: '$digest' | '$apply') {
     if (this.$$phase !== null) {
       throw new Error(`${this.$$phase} already in progress`);
     }
@@ -266,7 +265,7 @@ export class Scope {
   /**
    * Clear the current phase.
    */
-  private $clearPhase(): void {
+  private $clearPhase() {
     this.$$phase = null;
   }
 }
