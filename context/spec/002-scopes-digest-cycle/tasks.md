@@ -95,7 +95,7 @@ _After this slice: the full event system works with upward/downward propagation,
 
 _After this slice: full integration verified, build output includes all Scope exports with types._
 
-- [ ] **Slice 8: End-to-end validation**
-  - [ ] Run full command sequence: `pnpm lint` → `pnpm typecheck` → `pnpm test` → `pnpm build` — all pass **[Agent: general-purpose]**
-  - [ ] Verify `dist/types/` contains Scope type declarations **[Agent: general-purpose]**
-  - [ ] Verify test coverage meets 90% threshold on `src/core/` files **[Agent: vitest-testing]**
+- [x] **Slice 8: End-to-end validation**
+  - [x] Run full command sequence: `pnpm lint` → `pnpm typecheck` → `pnpm test` → `pnpm build` — all pass **[Agent: general-purpose]**
+  - [x] Verify `dist/types/` contains Scope type declarations **[Agent: general-purpose]**
+  - [x] Verify test coverage meets 90% threshold on `src/core/` files **[Agent: vitest-testing]**

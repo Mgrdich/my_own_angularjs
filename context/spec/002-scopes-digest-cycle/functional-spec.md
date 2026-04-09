@@ -1,7 +1,7 @@
 # Functional Specification: Scopes & Digest Cycle
 
 - **Roadmap Item:** Phase 0 — Legacy Migration & Fresh Start > Reimplement Existing Features > Scopes & Digest Cycle
-- **Status:** Draft
+- **Status:** Completed
 - **Author:** Poe (AI Assistant)
 
 ---

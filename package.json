@@ -52,6 +52,7 @@
   "devDependencies": {
     "@rollup/plugin-node-resolve": "^16.0.3",
     "@rollup/plugin-typescript": "^12.3.0",
+    "@vitest/coverage-v8": "^4.1.4",
     "eslint": "^10.2.0",
     "jsdom": "^29.0.2",
     "prettier": "^3.8.1",

@@ -1,7 +1,7 @@
 # Technical Specification: Scopes & Digest Cycle
 
 - **Functional Specification:** `context/spec/002-scopes-digest-cycle/functional-spec.md`
-- **Status:** Draft
+- **Status:** Completed
 - **Author(s):** Poe (AI Assistant)
 
 ---
