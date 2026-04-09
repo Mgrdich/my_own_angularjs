@@ -1,7 +1,7 @@
 # Functional Specification: Expression Parser
 
 - **Roadmap Item:** Phase 0 — Legacy Migration & Fresh Start > Reimplement Existing Features > Expression Parser
-- **Status:** Draft
+- **Status:** Completed
 - **Author:** Poe (AI Assistant)
 
 ---

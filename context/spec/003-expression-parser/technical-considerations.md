@@ -1,7 +1,7 @@
 # Technical Specification: Expression Parser
 
 - **Functional Specification:** `context/spec/003-expression-parser/functional-spec.md`
-- **Status:** Draft
+- **Status:** Completed
 - **Author(s):** Poe (AI Assistant)
 
 ---

@@ -21,11 +21,11 @@ _After this slice: `parse('42')`, `parse('"hello"')`, `parse('true')`, `parse('n
 
 _After this slice: `parse('[1, "two", [3]]')` and `parse('{a: 1, b: "two"}')` work correctly._
 
-- [ ] **Slice 2: Array and object literal parsing**
-  - [ ] Extend `ast.ts` — add `parseArrayExpression` (with trailing comma support) and `parseObjectExpression` (identifier and string keys) to `primary` **[Agent: typescript-framework]**
-  - [ ] Extend `interpreter.ts` — add `ArrayExpression` and `ObjectExpression` evaluation (map elements, build object from key-value pairs) **[Agent: typescript-framework]**
-  - [ ] Add tests for: empty arrays, nested arrays, trailing commas, empty objects, identifier keys, string keys **[Agent: vitest-testing]**
-  - [ ] **Verify:** `pnpm lint` + `pnpm typecheck` + `pnpm test` all pass **[Agent: typescript-framework]**
+- [x] **Slice 2: Array and object literal parsing**
+  - [x] Extend `ast.ts` — add `parseArrayExpression` (with trailing comma support) and `parseObjectExpression` (identifier and string keys) to `primary` **[Agent: typescript-framework]**
+  - [x] Extend `interpreter.ts` — add `ArrayExpression` and `ObjectExpression` evaluation (map elements, build object from key-value pairs) **[Agent: typescript-framework]**
+  - [x] Add tests for: empty arrays, nested arrays, trailing commas, empty objects, identifier keys, string keys **[Agent: vitest-testing]**
+  - [x] **Verify:** `pnpm lint` + `pnpm typecheck` + `pnpm test` all pass **[Agent: typescript-framework]**
 
 ---
 
@@ -33,11 +33,11 @@ _After this slice: `parse('[1, "two", [3]]')` and `parse('{a: 1, b: "two"}')` wo
 
 _After this slice: `parse('a.b.c')`, `parse('a["key"]')`, and locals override all work._
 
-- [ ] **Slice 3: Member expressions and property access**
-  - [ ] Extend `ast.ts` — add `parseCallOrMember` to chain `.property` (dot notation) and `[computed]` (bracket notation) after primary expressions **[Agent: typescript-framework]**
-  - [ ] Extend `interpreter.ts` — add `MemberExpression` evaluation with safe access (return `undefined` for nullish intermediates), locals-first resolution for root identifiers **[Agent: typescript-framework]**
-  - [ ] Add tests for: dot notation, computed access, deeply chained access, undefined intermediates, nested computed (`lock[keys["aKey"]]`), locals override, scope fallback when locals lack property, correct source object throughout chain **[Agent: vitest-testing]**
-  - [ ] **Verify:** `pnpm lint` + `pnpm typecheck` + `pnpm test` all pass **[Agent: typescript-framework]**
+- [x] **Slice 3: Member expressions and property access**
+  - [x] Extend `ast.ts` — add `parseCallOrMember` to chain `.property` (dot notation) and `[computed]` (bracket notation) after primary expressions **[Agent: typescript-framework]**
+  - [x] Extend `interpreter.ts` — add `MemberExpression` evaluation with safe access (return `undefined` for nullish intermediates), locals-first resolution for root identifiers **[Agent: typescript-framework]**
+  - [x] Add tests for: dot notation, computed access, deeply chained access, undefined intermediates, nested computed (`lock[keys["aKey"]]`), locals override, scope fallback when locals lack property, correct source object throughout chain **[Agent: vitest-testing]**
+  - [x] **Verify:** `pnpm lint` + `pnpm typecheck` + `pnpm test` all pass **[Agent: typescript-framework]**
 
 ---
 
@@ -45,11 +45,11 @@ _After this slice: `parse('a.b.c')`, `parse('a["key"]')`, and locals override al
 
 _After this slice: `parse('fn()')`, `parse('fn(42)')`, `parse('obj.method()')` all work with correct `this` binding._
 
-- [ ] **Slice 4: Function call expressions**
-  - [ ] Extend `ast.ts` — add `(args)` parsing to `parseCallOrMember` for `CallExpression` nodes **[Agent: typescript-framework]**
-  - [ ] Extend `interpreter.ts` — add `CallExpression` evaluation: resolve callee, evaluate arguments, preserve `this` binding for method calls via `.call()` **[Agent: typescript-framework]**
-  - [ ] Add tests for: simple calls, calls with literal arguments, calls with identifier arguments, nested function arguments, multiple arguments, method `this` binding (dot and computed), deeply nested method binding **[Agent: vitest-testing]**
-  - [ ] **Verify:** `pnpm lint` + `pnpm typecheck` + `pnpm test` all pass **[Agent: typescript-framework]**
+- [x] **Slice 4: Function call expressions**
+  - [x] Extend `ast.ts` — add `(args)` parsing to `parseCallOrMember` for `CallExpression` nodes **[Agent: typescript-framework]**
+  - [x] Extend `interpreter.ts` — add `CallExpression` evaluation: resolve callee, evaluate arguments, preserve `this` binding for method calls via `.call()` **[Agent: typescript-framework]**
+  - [x] Add tests for: simple calls, calls with literal arguments, calls with identifier arguments, nested function arguments, multiple arguments, method `this` binding (dot and computed), deeply nested method binding **[Agent: vitest-testing]**
+  - [x] **Verify:** `pnpm lint` + `pnpm typecheck` + `pnpm test` all pass **[Agent: typescript-framework]**
 
 ---
 
@@ -57,8 +57,8 @@ _After this slice: `parse('fn()')`, `parse('fn(42)')`, `parse('obj.method()')` a
 
 _After this slice: `parse` and types are exported, build output includes parser, coverage meets threshold._
 
-- [ ] **Slice 5: Exports, build, and validation**
-  - [ ] Update `src/core/index.ts` and `src/index.ts` barrel exports to re-export `parse` and public types (`ExpressionFn`, AST node types, `Token`) **[Agent: typescript-framework]**
-  - [ ] Run full command sequence: `pnpm lint` → `pnpm typecheck` → `pnpm test` → `pnpm build` — all pass **[Agent: general-purpose]**
-  - [ ] Verify `dist/types/` contains parse type declarations **[Agent: general-purpose]**
-  - [ ] Verify test coverage meets 90% threshold on `src/core/` parser files **[Agent: vitest-testing]**
+- [x] **Slice 5: Exports, build, and validation**
+  - [x] Update `src/core/index.ts` and `src/index.ts` barrel exports to re-export `parse` and public types (`ExpressionFn`, AST node types, `Token`) **[Agent: typescript-framework]**
+  - [x] Run full command sequence: `pnpm lint` → `pnpm typecheck` → `pnpm test` → `pnpm build` — all pass **[Agent: general-purpose]**
+  - [x] Verify `dist/types/` contains parse type declarations **[Agent: general-purpose]**
+  - [x] Verify test coverage meets 90% threshold on `src/core/` parser files **[Agent: vitest-testing]**

@@ -19,7 +19,7 @@ _Move existing code to a legacy folder, reimplement from scratch in clean TypeSc
 
 - [ ] **Reimplement Existing Features (from scratch)**
   - [x] **Scopes & Digest Cycle:** Rewrite the full Scope module in clean TypeScript — `$watch`, `$watchGroup`, `$watchCollection`, `$digest`, `$apply`, `$eval`, `$evalAsync`, `$applyAsync`, scope hierarchy, events (`$on`, `$emit`, `$broadcast`), and lifecycle (`$new`, `$destroy`).
-  - [ ] **Expression Parser:** Rewrite the lexer, AST builder, and expression compiler in TypeScript with full type safety.
+  - [x] **Expression Parser:** Rewrite the lexer, AST builder, and expression compiler in TypeScript with full type safety.
   - [ ] **Utility Functions:** Rewrite helper/utility functions in TypeScript.
 
 - [ ] **Validate & Remove Legacy**
