@@ -4,6 +4,7 @@ import {
   type DeregisterFn,
   type EventListener,
   type ListenerFn,
+  type ScopeEvent,
   type ScopePhase,
   type TypedScope,
   type Watcher,
@@ -96,7 +97,7 @@ export class Scope {
     // Reset short-circuit optimization on root to prevent stale references
     this.$root.$$lastDirtyWatch = null;
 
-    return (): void => {
+    return () => {
       const index = this.$$watchers?.indexOf(watcher as Watcher<unknown>);
       if (index !== undefined && index >= 0 && this.$$watchers !== null) {
         this.$$watchers[index] = null;
@@ -186,7 +187,7 @@ export class Scope {
 
             try {
               watcher.listenerFn(newValue, listenerOldValue, scope);
-            } catch (e: unknown) {
+            } catch (e) {
               // Log listener errors but do not abort the digest
               console.error('Error in watch listener:', e);
             }
@@ -196,7 +197,7 @@ export class Scope {
             // Short-circuit: no more dirty watchers after this point
             return false;
           }
-        } catch (e: unknown) {
+        } catch (e) {
           // Log watch function errors but do not abort the digest
           console.error('Error in watch function:', e);
         }
@@ -229,7 +230,7 @@ export class Scope {
           if (asyncTask) {
             try {
               asyncTask.scope.$eval(asyncTask.expression);
-            } catch (e: unknown) {
+            } catch (e) {
               console.error('Error in $evalAsync expression:', e);
             }
           }
@@ -257,7 +258,7 @@ export class Scope {
       if (fn) {
         try {
           fn();
-        } catch (e: unknown) {
+        } catch (e) {
           console.error('Error in $$postDigest function:', e);
         }
       }
@@ -296,12 +297,15 @@ export class Scope {
 
   /**
    * Destroy this scope, removing it from the scope hierarchy.
+   * Broadcasts a `$destroy` event to this scope and all descendants before cleanup.
    * Clears watchers and listeners to prevent further digest participation.
    */
   $destroy(): void {
     if (this === this.$root) {
       return;
     }
+
+    this.$broadcast('$destroy');
 
     const parent = this.$parent;
     if (parent) {
@@ -409,15 +413,263 @@ export class Scope {
   }
 
   /**
+   * Shallow collection watcher that detects element-level changes in arrays
+   * and property-level changes in objects without deep comparison.
+   *
+   * Uses a change-counter pattern internally: the internal watch function
+   * returns an incrementing integer whenever a shallow change is detected,
+   * which triggers the standard $watch dirty-check mechanism.
+   *
+   * @param watchFn - Expression returning the collection (array/object) to watch
+   * @param listenerFn - Called with (newValue, oldValue, scope) when changes are detected
+   * @returns A function that deregisters the watcher when called
+   */
+  $watchCollection(watchFn: WatchFn<unknown>, listenerFn: ListenerFn<unknown>): DeregisterFn {
+    let changeCount = 0;
+    let oldValue: unknown;
+    let newValue: unknown;
+    let oldLength: number;
+    let veryOldValue: unknown;
+    const trackVeryOldValue = listenerFn.length > 1;
+    let firstRun = true;
+
+    const internalWatchFn = (scope: Scope) => {
+      newValue = watchFn(scope);
+
+      if (Array.isArray(newValue)) {
+        if (!Array.isArray(oldValue)) {
+          changeCount++;
+          oldValue = [];
+        }
+
+        const oldArr = oldValue as unknown[];
+        const newArr = newValue as unknown[];
+
+        if (oldArr.length !== newArr.length) {
+          changeCount++;
+          oldArr.length = newArr.length;
+        }
+
+        for (let i = 0; i < newArr.length; i++) {
+          const bothNaN =
+            typeof newArr[i] === 'number' &&
+            isNaN(newArr[i] as number) &&
+            typeof oldArr[i] === 'number' &&
+            isNaN(oldArr[i] as number);
+
+          if (!bothNaN && newArr[i] !== oldArr[i]) {
+            changeCount++;
+            oldArr[i] = newArr[i];
+          }
+        }
+      } else if (typeof newValue === 'object' && newValue !== null) {
+        if (typeof oldValue !== 'object' || oldValue === null || Array.isArray(oldValue)) {
+          changeCount++;
+          oldValue = {};
+          oldLength = 0;
+        }
+
+        const oldObj = oldValue as Record<string, unknown>;
+        const newObj = newValue as Record<string, unknown>;
+        let newLength = 0;
+
+        for (const key of Object.keys(newObj)) {
+          newLength++;
+          if (Object.prototype.hasOwnProperty.call(oldObj, key)) {
+            const bothNaN =
+              typeof newObj[key] === 'number' &&
+              isNaN(newObj[key]) &&
+              typeof oldObj[key] === 'number' &&
+              isNaN(oldObj[key]);
+
+            if (!bothNaN && oldObj[key] !== newObj[key]) {
+              changeCount++;
+              oldObj[key] = newObj[key];
+            }
+          } else {
+            changeCount++;
+            oldLength++;
+            oldObj[key] = newObj[key];
+          }
+        }
+
+        if (oldLength > newLength) {
+          changeCount++;
+          for (const key of Object.keys(oldObj)) {
+            if (!Object.prototype.hasOwnProperty.call(newObj, key)) {
+              oldLength--;
+              Reflect.deleteProperty(oldObj, key);
+            }
+          }
+        }
+
+        oldLength = newLength;
+      } else {
+        // Primitive value
+        const bothNaN =
+          typeof newValue === 'number' && isNaN(newValue) && typeof oldValue === 'number' && isNaN(oldValue);
+
+        if (!bothNaN && oldValue !== newValue) {
+          changeCount++;
+          oldValue = newValue;
+        }
+      }
+
+      return changeCount;
+    };
+
+    const internalListenerFn = () => {
+      if (firstRun) {
+        firstRun = false;
+        listenerFn(newValue, newValue, this);
+      } else {
+        listenerFn(newValue, veryOldValue, this);
+      }
+
+      if (trackVeryOldValue) {
+        if (Array.isArray(newValue)) {
+          veryOldValue = [...(newValue as unknown[])];
+        } else if (typeof newValue === 'object' && newValue !== null) {
+          veryOldValue = { ...(newValue as Record<string, unknown>) };
+        } else {
+          veryOldValue = newValue;
+        }
+      }
+    };
+
+    return this.$watch(internalWatchFn, internalListenerFn);
+  }
+
+  /**
+   * Register a listener for a named scope event.
+   *
+   * @param eventName - The event name to listen for
+   * @param listener - Callback invoked when the event fires
+   * @returns A function that deregisters the listener when called
+   */
+  $on(eventName: string, listener: EventListener): DeregisterFn {
+    let listeners = this.$$listeners[eventName];
+    if (!listeners) {
+      listeners = [];
+      this.$$listeners[eventName] = listeners;
+    }
+    listeners.push(listener);
+
+    return () => {
+      const idx = listeners.indexOf(listener);
+      if (idx >= 0) {
+        listeners[idx] = null;
+      }
+    };
+  }
+
+  /**
+   * Emit an event upward through the scope hierarchy from this scope to the root.
+   * Propagation stops if `stopPropagation()` is called on the event object.
+   *
+   * @param eventName - The event name to emit
+   * @param args - Additional arguments passed to each listener after the event object
+   * @returns The event object
+   */
+  $emit(eventName: string, ...args: unknown[]): ScopeEvent {
+    const state = { propagationStopped: false };
+
+    const event: ScopeEvent = {
+      name: eventName,
+      targetScope: this,
+      currentScope: this,
+      defaultPrevented: false,
+      stopPropagation(): void {
+        state.propagationStopped = true;
+      },
+      preventDefault(): void {
+        this.defaultPrevented = true;
+      },
+    };
+
+    // eslint-disable-next-line @typescript-eslint/no-this-alias -- walking the scope chain requires a mutable reference
+    let scope: Scope | null = this;
+    while (scope) {
+      scope.$$fireEventOnScope(event, args);
+      if (state.propagationStopped) {
+        break;
+      }
+      scope = scope.$parent;
+    }
+
+    event.currentScope = null;
+    return event;
+  }
+
+  /**
+   * Broadcast an event downward through the scope hierarchy to this scope and all descendants.
+   * `stopPropagation` has no effect on broadcast traversal.
+   *
+   * @param eventName - The event name to broadcast
+   * @param args - Additional arguments passed to each listener after the event object
+   * @returns The event object
+   */
+  $broadcast(eventName: string, ...args: unknown[]): ScopeEvent {
+    const event: ScopeEvent = {
+      name: eventName,
+      targetScope: this,
+      currentScope: this,
+      defaultPrevented: false,
+      stopPropagation(): void {
+        // No-op for broadcast — traversal cannot be stopped
+      },
+      preventDefault(): void {
+        this.defaultPrevented = true;
+      },
+    };
+
+    this.$$everyScope((scope) => {
+      scope.$$fireEventOnScope(event, args);
+      return true;
+    });
+
+    event.currentScope = null;
+    return event;
+  }
+
+  /**
+   * Fire an event on this scope by invoking all registered listeners for the event name.
+   * Errors thrown by listeners are caught and logged without interrupting other listeners.
+   * After iteration, null-sentinel entries are compacted from the listener array.
+   *
+   * @param event - The event object being propagated
+   * @param additionalArgs - Extra arguments passed to each listener
+   */
+  $$fireEventOnScope(event: ScopeEvent, additionalArgs: unknown[]): void {
+    event.currentScope = this;
+    const listeners = this.$$listeners[event.name];
+    if (listeners) {
+      for (let i = 0; i < listeners.length; i++) {
+        const listener = listeners[i];
+        if (listener === null || listener === undefined) {
+          continue;
+        }
+        try {
+          listener(event, ...additionalArgs);
+        } catch (e) {
+          console.error('Error in event listener:', e);
+        }
+      }
+      // Compact: remove null sentinels to prevent unbounded growth
+      this.$$listeners[event.name] = listeners.filter((l): l is EventListener => l !== null);
+    }
+  }
+
+  /**
    * Drain the $$applyAsyncQueue, evaluating each expression and clearing the timer ID.
    */
-  private $$flushApplyAsync(): void {
+  private $$flushApplyAsync() {
     while (this.$$applyAsyncQueue.length > 0) {
       const asyncTask = this.$$applyAsyncQueue.shift();
       if (asyncTask) {
         try {
           asyncTask.scope.$eval(asyncTask.expression);
-        } catch (e: unknown) {
+        } catch (e) {
           console.error('Error in $applyAsync expression:', e);
         }
       }

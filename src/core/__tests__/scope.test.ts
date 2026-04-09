@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, it, expect, vi } from 'vitest';
-import { Scope } from '../index';
+import { Scope, type ScopeEvent } from '../index';
 
 describe('Scope', () => {
   describe('$digest', () => {
@@ -1062,6 +1062,708 @@ describe('Scope', () => {
       expect(gotNewValues).not.toBe(gotOldValues);
       expect(gotNewValues).toEqual([3, 2]);
       expect(gotOldValues).toEqual([1, 2]);
+    });
+  });
+
+  describe('$watchCollection', () => {
+    it('detects when elements are added to an array', () => {
+      const scope = Scope.create<{ arr: number[] }>();
+      scope.arr = [1, 2, 3];
+      const listenerFn = vi.fn();
+
+      scope.$watchCollection(
+        () => scope.arr,
+        listenerFn,
+      );
+
+      scope.$digest();
+      expect(listenerFn).toHaveBeenCalledTimes(1);
+
+      scope.arr.push(4);
+      scope.$digest();
+      expect(listenerFn).toHaveBeenCalledTimes(2);
+    });
+
+    it('detects when elements are removed from an array', () => {
+      const scope = Scope.create<{ arr: number[] }>();
+      scope.arr = [1, 2, 3];
+      const listenerFn = vi.fn();
+
+      scope.$watchCollection(
+        () => scope.arr,
+        listenerFn,
+      );
+
+      scope.$digest();
+      expect(listenerFn).toHaveBeenCalledTimes(1);
+
+      scope.arr.pop();
+      scope.$digest();
+      expect(listenerFn).toHaveBeenCalledTimes(2);
+    });
+
+    it('detects when elements change position in an array', () => {
+      const scope = Scope.create<{ arr: number[] }>();
+      scope.arr = [1, 2, 3];
+      const listenerFn = vi.fn();
+
+      scope.$watchCollection(
+        () => scope.arr,
+        listenerFn,
+      );
+
+      scope.$digest();
+      expect(listenerFn).toHaveBeenCalledTimes(1);
+
+      // Swap first and last elements
+      scope.arr = [3, 2, 1];
+      scope.$digest();
+      expect(listenerFn).toHaveBeenCalledTimes(2);
+    });
+
+    it('detects new properties added to an object', () => {
+      const scope = Scope.create<{ obj: Record<string, unknown> }>();
+      scope.obj = { a: 1 };
+      const listenerFn = vi.fn();
+
+      scope.$watchCollection(
+        () => scope.obj,
+        listenerFn,
+      );
+
+      scope.$digest();
+      expect(listenerFn).toHaveBeenCalledTimes(1);
+
+      scope.obj['b'] = 2;
+      scope.$digest();
+      expect(listenerFn).toHaveBeenCalledTimes(2);
+    });
+
+    it('detects removed properties from an object', () => {
+      const scope = Scope.create<{ obj: Record<string, unknown> }>();
+      scope.obj = { a: 1, b: 2 };
+      const listenerFn = vi.fn();
+
+      scope.$watchCollection(
+        () => scope.obj,
+        listenerFn,
+      );
+
+      scope.$digest();
+      expect(listenerFn).toHaveBeenCalledTimes(1);
+
+      delete scope.obj['b'];
+      scope.$digest();
+      expect(listenerFn).toHaveBeenCalledTimes(2);
+    });
+
+    it('detects changed values on existing object properties', () => {
+      const scope = Scope.create<{ obj: Record<string, unknown> }>();
+      scope.obj = { a: 1, b: 2 };
+      const listenerFn = vi.fn();
+
+      scope.$watchCollection(
+        () => scope.obj,
+        listenerFn,
+      );
+
+      scope.$digest();
+      expect(listenerFn).toHaveBeenCalledTimes(1);
+
+      scope.obj['a'] = 99;
+      scope.$digest();
+      expect(listenerFn).toHaveBeenCalledTimes(2);
+    });
+
+    it('detects when value changes from primitive to array', () => {
+      const scope = Scope.create<{ value: unknown }>();
+      scope.value = 'hello';
+      const listenerFn = vi.fn();
+
+      scope.$watchCollection(
+        () => scope.value,
+        listenerFn,
+      );
+
+      scope.$digest();
+      expect(listenerFn).toHaveBeenCalledTimes(1);
+
+      scope.value = [1, 2, 3];
+      scope.$digest();
+      expect(listenerFn).toHaveBeenCalledTimes(2);
+    });
+
+    it('detects when value changes from array to object', () => {
+      const scope = Scope.create<{ value: unknown }>();
+      scope.value = [1, 2, 3];
+      const listenerFn = vi.fn();
+
+      scope.$watchCollection(
+        () => scope.value,
+        listenerFn,
+      );
+
+      scope.$digest();
+      expect(listenerFn).toHaveBeenCalledTimes(1);
+
+      scope.value = { a: 1 };
+      scope.$digest();
+      expect(listenerFn).toHaveBeenCalledTimes(2);
+    });
+
+    it('detects when value changes from object to primitive', () => {
+      const scope = Scope.create<{ value: unknown }>();
+      scope.value = { a: 1 };
+      const listenerFn = vi.fn();
+
+      scope.$watchCollection(
+        () => scope.value,
+        listenerFn,
+      );
+
+      scope.$digest();
+      expect(listenerFn).toHaveBeenCalledTimes(1);
+
+      scope.value = 42;
+      scope.$digest();
+      expect(listenerFn).toHaveBeenCalledTimes(2);
+    });
+
+    it('handles NaN values in arrays without triggering infinite digest', () => {
+      const scope = Scope.create<{ arr: number[] }>();
+      scope.arr = [1, NaN, 3];
+      const listenerFn = vi.fn();
+
+      scope.$watchCollection(
+        () => scope.arr,
+        listenerFn,
+      );
+
+      scope.$digest();
+      expect(listenerFn).toHaveBeenCalledTimes(1);
+
+      // NaN should be treated as equal to NaN, so no new trigger
+      scope.$digest();
+      expect(listenerFn).toHaveBeenCalledTimes(1);
+    });
+
+    it('handles NaN values in objects without triggering infinite digest', () => {
+      const scope = Scope.create<{ obj: Record<string, number> }>();
+      scope.obj = { a: NaN };
+      const listenerFn = vi.fn();
+
+      scope.$watchCollection(
+        () => scope.obj,
+        listenerFn,
+      );
+
+      scope.$digest();
+      expect(listenerFn).toHaveBeenCalledTimes(1);
+
+      scope.$digest();
+      expect(listenerFn).toHaveBeenCalledTimes(1);
+    });
+
+    it('does NOT detect nested object changes (shallow only)', () => {
+      const nested0 = { inner: 1 };
+      const nested1 = { inner: 2 };
+      const scope = Scope.create<{ arr: { inner: number }[] }>();
+      scope.arr = [nested0, nested1];
+      const listenerFn = vi.fn();
+
+      scope.$watchCollection(
+        () => scope.arr,
+        listenerFn,
+      );
+
+      scope.$digest();
+      expect(listenerFn).toHaveBeenCalledTimes(1);
+
+      // Mutate a nested property -- the reference in the array has not changed
+      nested0.inner = 99;
+      scope.$digest();
+      expect(listenerFn).toHaveBeenCalledTimes(1);
+    });
+
+    it('does NOT detect nested object property changes in objects (shallow only)', () => {
+      const innerObj = { value: 1 };
+      const scope = Scope.create<{ obj: Record<string, { value: number }> }>();
+      scope.obj = { a: innerObj };
+      const listenerFn = vi.fn();
+
+      scope.$watchCollection(
+        () => scope.obj,
+        listenerFn,
+      );
+
+      scope.$digest();
+      expect(listenerFn).toHaveBeenCalledTimes(1);
+
+      // Mutate a nested property -- the reference for key 'a' has not changed
+      innerObj.value = 99;
+      scope.$digest();
+      expect(listenerFn).toHaveBeenCalledTimes(1);
+    });
+
+    it('provides the previous collection state as oldValue when listener has >1 parameter', () => {
+      const scope = Scope.create<{ arr: number[] }>();
+      scope.arr = [1, 2, 3];
+      let receivedOldValue: unknown;
+      let receivedNewValue: unknown;
+
+      scope.$watchCollection(
+        () => scope.arr,
+        (newValue: unknown, oldValue: unknown) => {
+          receivedNewValue = newValue;
+          receivedOldValue = oldValue;
+        },
+      );
+
+      scope.$digest();
+
+      // On first call, oldValue === newValue
+      expect(receivedNewValue).toBe(receivedOldValue);
+
+      scope.arr.push(4);
+      scope.$digest();
+
+      // On subsequent call, oldValue is the previous state
+      expect(receivedNewValue).toEqual([1, 2, 3, 4]);
+      expect(receivedOldValue).toEqual([1, 2, 3]);
+    });
+
+    it('provides the previous object state as oldValue when listener has >1 parameter', () => {
+      const scope = Scope.create<{ obj: Record<string, number> }>();
+      scope.obj = { a: 1 };
+      let receivedOldValue: unknown;
+      let receivedNewValue: unknown;
+
+      scope.$watchCollection(
+        () => scope.obj,
+        (newValue: unknown, oldValue: unknown) => {
+          receivedNewValue = newValue;
+          receivedOldValue = oldValue;
+        },
+      );
+
+      scope.$digest();
+      expect(receivedNewValue).toBe(receivedOldValue);
+
+      scope.obj['b'] = 2;
+      scope.$digest();
+
+      expect(receivedNewValue).toEqual({ a: 1, b: 2 });
+      expect(receivedOldValue).toEqual({ a: 1 });
+    });
+
+    it('on first call, oldValue === newValue (same reference)', () => {
+      const scope = Scope.create<{ arr: number[] }>();
+      scope.arr = [1, 2, 3];
+      let firstNewValue: unknown;
+      let firstOldValue: unknown;
+      let callCount = 0;
+
+      scope.$watchCollection(
+        () => scope.arr,
+        (newValue: unknown, oldValue: unknown) => {
+          callCount++;
+          if (callCount === 1) {
+            firstNewValue = newValue;
+            firstOldValue = oldValue;
+          }
+        },
+      );
+
+      scope.$digest();
+
+      expect(firstNewValue).toBe(firstOldValue);
+    });
+
+    it('returns a deregistration function', () => {
+      const scope = Scope.create<{ arr: number[] }>();
+      scope.arr = [1, 2, 3];
+      const listenerFn = vi.fn();
+
+      const deregister = scope.$watchCollection(
+        () => scope.arr,
+        listenerFn,
+      );
+
+      scope.$digest();
+      expect(listenerFn).toHaveBeenCalledTimes(1);
+
+      deregister();
+      scope.arr.push(4);
+      scope.$digest();
+      expect(listenerFn).toHaveBeenCalledTimes(1);
+    });
+
+    it('handles NaN as a primitive value without infinite digest', () => {
+      const scope = Scope.create<{ value: number }>();
+      scope.value = NaN;
+      const listenerFn = vi.fn();
+
+      scope.$watchCollection(
+        () => scope.value,
+        listenerFn,
+      );
+
+      scope.$digest();
+      expect(listenerFn).toHaveBeenCalledTimes(1);
+
+      scope.$digest();
+      expect(listenerFn).toHaveBeenCalledTimes(1);
+    });
+
+    it('detects when an array is replaced with a new array of same content', () => {
+      const scope = Scope.create<{ arr: number[] }>();
+      scope.arr = [1, 2, 3];
+      const listenerFn = vi.fn();
+
+      scope.$watchCollection(
+        () => scope.arr,
+        listenerFn,
+      );
+
+      scope.$digest();
+      expect(listenerFn).toHaveBeenCalledTimes(1);
+
+      // Same content, different reference -- shallow watch tracks element identity
+      scope.arr = [1, 2, 3];
+      scope.$digest();
+      // Should NOT fire again because elements are identical by value
+      expect(listenerFn).toHaveBeenCalledTimes(1);
+    });
+
+    it('detects when an array element is replaced', () => {
+      const scope = Scope.create<{ arr: number[] }>();
+      scope.arr = [1, 2, 3];
+      const listenerFn = vi.fn();
+
+      scope.$watchCollection(
+        () => scope.arr,
+        listenerFn,
+      );
+
+      scope.$digest();
+      expect(listenerFn).toHaveBeenCalledTimes(1);
+
+      scope.arr[1] = 99;
+      scope.$digest();
+      expect(listenerFn).toHaveBeenCalledTimes(2);
+    });
+
+    it('does not fire listener when collection has not changed', () => {
+      const scope = Scope.create<{ arr: number[] }>();
+      scope.arr = [1, 2, 3];
+      const listenerFn = vi.fn();
+
+      scope.$watchCollection(
+        () => scope.arr,
+        listenerFn,
+      );
+
+      scope.$digest();
+      expect(listenerFn).toHaveBeenCalledTimes(1);
+
+      scope.$digest();
+      expect(listenerFn).toHaveBeenCalledTimes(1);
+
+      scope.$digest();
+      expect(listenerFn).toHaveBeenCalledTimes(1);
+    });
+
+    it('handles null and undefined values', () => {
+      const scope = Scope.create<{ value: unknown }>();
+      scope.value = null;
+      const listenerFn = vi.fn();
+
+      scope.$watchCollection(
+        () => scope.value,
+        listenerFn,
+      );
+
+      scope.$digest();
+      expect(listenerFn).toHaveBeenCalledTimes(1);
+
+      scope.value = undefined;
+      scope.$digest();
+      expect(listenerFn).toHaveBeenCalledTimes(2);
+
+      scope.value = [1, 2];
+      scope.$digest();
+      expect(listenerFn).toHaveBeenCalledTimes(3);
+    });
+  });
+
+  describe('events', () => {
+    it('registers a listener via $on that gets called when event fires', () => {
+      const scope = new Scope();
+      const listener = vi.fn();
+
+      scope.$on('someEvent', listener);
+      scope.$emit('someEvent');
+
+      expect(listener).toHaveBeenCalled();
+    });
+
+    it('calls multiple listeners for the same event', () => {
+      const scope = new Scope();
+      const listener1 = vi.fn();
+      const listener2 = vi.fn();
+
+      scope.$on('someEvent', listener1);
+      scope.$on('someEvent', listener2);
+      scope.$emit('someEvent');
+
+      expect(listener1).toHaveBeenCalled();
+      expect(listener2).toHaveBeenCalled();
+    });
+
+    it('deregisters a listener when the returned function is called', () => {
+      const scope = new Scope();
+      const listener = vi.fn();
+
+      const deregister = scope.$on('someEvent', listener);
+      deregister();
+      scope.$emit('someEvent');
+
+      expect(listener).not.toHaveBeenCalled();
+    });
+
+    it('does not skip listeners when a listener is deregistered during event fire', () => {
+      const scope = new Scope();
+      const listener1 = vi.fn();
+      const listener2 = vi.fn();
+      const listener3 = vi.fn();
+
+      const deregister1 = scope.$on('someEvent', () => {
+        deregister1();
+        listener1();
+      });
+      scope.$on('someEvent', listener2);
+      scope.$on('someEvent', listener3);
+
+      scope.$emit('someEvent');
+
+      expect(listener1).toHaveBeenCalled();
+      expect(listener2).toHaveBeenCalled();
+      expect(listener3).toHaveBeenCalled();
+    });
+
+    it('propagates $emit up the scope hierarchy', () => {
+      const parent = new Scope();
+      const scope = parent.$new();
+      const child = scope.$new();
+
+      const parentListener = vi.fn();
+      const scopeListener = vi.fn();
+      const childListener = vi.fn();
+
+      parent.$on('someEvent', parentListener);
+      scope.$on('someEvent', scopeListener);
+      child.$on('someEvent', childListener);
+
+      scope.$emit('someEvent');
+
+      expect(scopeListener).toHaveBeenCalled();
+      expect(parentListener).toHaveBeenCalled();
+      expect(childListener).not.toHaveBeenCalled();
+    });
+
+    it('propagates $broadcast down the scope hierarchy', () => {
+      const parent = new Scope();
+      const scope = parent.$new();
+      const child = scope.$new();
+      const sibling = parent.$new();
+
+      const parentListener = vi.fn();
+      const scopeListener = vi.fn();
+      const childListener = vi.fn();
+      const siblingListener = vi.fn();
+
+      parent.$on('someEvent', parentListener);
+      scope.$on('someEvent', scopeListener);
+      child.$on('someEvent', childListener);
+      sibling.$on('someEvent', siblingListener);
+
+      scope.$broadcast('someEvent');
+
+      expect(scopeListener).toHaveBeenCalled();
+      expect(childListener).toHaveBeenCalled();
+      expect(parentListener).not.toHaveBeenCalled();
+      expect(siblingListener).not.toHaveBeenCalled();
+    });
+
+    it('has the correct event object shape with name, targetScope, currentScope, and defaultPrevented', () => {
+      const parent = new Scope();
+      const scope = parent.$new();
+
+      parent.$on('someEvent', () => {
+        // listener present to verify propagation
+      });
+
+      const event = scope.$emit('someEvent');
+
+      expect(event.name).toBe('someEvent');
+      expect(event.targetScope).toBe(scope);
+      expect(event.defaultPrevented).toBe(false);
+    });
+
+    it('sets currentScope on the event object during propagation', () => {
+      const parent = new Scope();
+      const scope = parent.$new();
+      let currentScopeOnParent: Scope | null = null;
+      let currentScopeOnScope: Scope | null = null;
+
+      scope.$on('someEvent', (event) => {
+        currentScopeOnScope = event.currentScope;
+      });
+      parent.$on('someEvent', (event) => {
+        currentScopeOnParent = event.currentScope;
+      });
+
+      scope.$emit('someEvent');
+
+      expect(currentScopeOnScope).toBe(scope);
+      expect(currentScopeOnParent).toBe(parent);
+    });
+
+    it('sets currentScope to null after $emit propagation completes', () => {
+      const scope = new Scope();
+
+      const event = scope.$emit('someEvent');
+
+      expect(event.currentScope).toBeNull();
+    });
+
+    it('sets currentScope to null after $broadcast propagation completes', () => {
+      const scope = new Scope();
+
+      const event = scope.$broadcast('someEvent');
+
+      expect(event.currentScope).toBeNull();
+    });
+
+    it('stops upward propagation when stopPropagation is called on $emit', () => {
+      const parent = new Scope();
+      const scope = parent.$new();
+
+      const scopeListener = vi.fn((event: ScopeEvent) => {
+        event.stopPropagation();
+      });
+      const parentListener = vi.fn();
+
+      scope.$on('someEvent', scopeListener);
+      parent.$on('someEvent', parentListener);
+
+      scope.$emit('someEvent');
+
+      expect(scopeListener).toHaveBeenCalled();
+      expect(parentListener).not.toHaveBeenCalled();
+    });
+
+    it('does not stop $broadcast propagation when stopPropagation is called', () => {
+      const parent = new Scope();
+      const scope = parent.$new();
+      const child = scope.$new();
+
+      const scopeListener = vi.fn((event: ScopeEvent) => {
+        event.stopPropagation();
+      });
+      const childListener = vi.fn();
+
+      scope.$on('someEvent', scopeListener);
+      child.$on('someEvent', childListener);
+
+      scope.$broadcast('someEvent');
+
+      expect(scopeListener).toHaveBeenCalled();
+      expect(childListener).toHaveBeenCalled();
+    });
+
+    it('sets defaultPrevented to true when preventDefault is called', () => {
+      const scope = new Scope();
+
+      scope.$on('someEvent', (event) => {
+        event.preventDefault();
+      });
+
+      const event = scope.$emit('someEvent');
+
+      expect(event.defaultPrevented).toBe(true);
+    });
+
+    it('passes additional arguments to listeners', () => {
+      const scope = new Scope();
+      let receivedArgs: unknown[] = [];
+
+      scope.$on('someEvent', (_event, ...args) => {
+        receivedArgs = args;
+      });
+
+      scope.$emit('someEvent', 'arg1', 'arg2', 'arg3');
+
+      expect(receivedArgs).toEqual(['arg1', 'arg2', 'arg3']);
+    });
+
+    it('passes additional arguments to listeners on $broadcast', () => {
+      const scope = new Scope();
+      let receivedArgs: unknown[] = [];
+
+      scope.$on('someEvent', (_event, ...args) => {
+        receivedArgs = args;
+      });
+
+      scope.$broadcast('someEvent', 'arg1', 'arg2');
+
+      expect(receivedArgs).toEqual(['arg1', 'arg2']);
+    });
+
+    it('does not let an error in one listener prevent other listeners from firing', () => {
+      const scope = new Scope();
+      const listener1 = vi.fn(() => {
+        throw new Error('listener1 error');
+      });
+      const listener2 = vi.fn();
+
+      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+      scope.$on('someEvent', listener1);
+      scope.$on('someEvent', listener2);
+
+      scope.$emit('someEvent');
+
+      expect(listener1).toHaveBeenCalled();
+      expect(listener2).toHaveBeenCalled();
+      expect(consoleSpy).toHaveBeenCalled();
+
+      consoleSpy.mockRestore();
+    });
+
+    it('broadcasts a $destroy event when $destroy is called', () => {
+      const parent = new Scope();
+      const scope = parent.$new();
+      const listener = vi.fn();
+
+      scope.$on('$destroy', listener);
+
+      scope.$destroy();
+
+      expect(listener).toHaveBeenCalled();
+    });
+
+    it('broadcasts $destroy to child scopes before cleanup', () => {
+      const parent = new Scope();
+      const scope = parent.$new();
+      const child = scope.$new();
+      const childListener = vi.fn();
+
+      child.$on('$destroy', childListener);
+
+      scope.$destroy();
+
+      expect(childListener).toHaveBeenCalled();
     });
   });
 

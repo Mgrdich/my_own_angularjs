@@ -69,10 +69,10 @@ _After this slice: multiple watchers can be grouped with a single listener callb
 
 _After this slice: shallow collection watching detects element-level array changes and property-level object changes._
 
-- [ ] **Slice 6: `$watchCollection`**
-  - [ ] Implement `$watchCollection(watchFn, listenerFn)` — change counter pattern, separate array/object/primitive branches, shallow comparison, NaN handling, `veryOldValue` tracking only when `listenerFn.length > 1` **[Agent: typescript-framework]**
-  - [ ] Add tests for: array additions/removals/reorderings, object property add/remove/change, type transitions (primitive → array → object), NaN in arrays, shallow-only verification (nested changes not detected), oldValue tracking **[Agent: vitest-testing]**
-  - [ ] **Verify:** `pnpm lint` + `pnpm typecheck` + `pnpm test` all pass **[Agent: typescript-framework]**
+- [x] **Slice 6: `$watchCollection`**
+  - [x] Implement `$watchCollection(watchFn, listenerFn)` — change counter pattern, separate array/object/primitive branches, shallow comparison, NaN handling, `veryOldValue` tracking only when `listenerFn.length > 1` **[Agent: typescript-framework]**
+  - [x] Add tests for: array additions/removals/reorderings, object property add/remove/change, type transitions (primitive → array → object), NaN in arrays, shallow-only verification (nested changes not detected), oldValue tracking **[Agent: vitest-testing]**
+  - [x] **Verify:** `pnpm lint` + `pnpm typecheck` + `pnpm test` all pass **[Agent: typescript-framework]**
 
 ---
 
@@ -80,14 +80,14 @@ _After this slice: shallow collection watching detects element-level array chang
 
 _After this slice: the full event system works with upward/downward propagation, stopPropagation, and safe deregistration during fire._
 
-- [ ] **Slice 7: Event system**
-  - [ ] Add `ScopeEvent` and `EventListener` types to `scope-types.ts` **[Agent: typescript-framework]**
-  - [ ] Implement `$on(eventName, listener)` — register listener, return deregister function using null-sentinel pattern **[Agent: typescript-framework]**
-  - [ ] Implement `$emit(eventName, ...args)` — upward propagation through `$parent` chain, stopPropagation support **[Agent: typescript-framework]**
-  - [ ] Implement `$broadcast(eventName, ...args)` — downward propagation through `$$children` tree, stopPropagation is no-op **[Agent: typescript-framework]**
-  - [ ] Implement `$$fireEventOnScope` — iterate listeners, skip nulls, catch errors, compact array after iteration **[Agent: typescript-framework]**
-  - [ ] Add tests for: registration, multiple listeners, deregistration, deregistration during fire, `$emit` upward propagation, `$broadcast` downward propagation, event object shape (name, targetScope, currentScope, defaultPrevented), stopPropagation on emit only, additional args passing **[Agent: vitest-testing]**
-  - [ ] **Verify:** `pnpm lint` + `pnpm typecheck` + `pnpm test` all pass **[Agent: typescript-framework]**
+- [x] **Slice 7: Event system**
+  - [x] Add `ScopeEvent` and `EventListener` types to `scope-types.ts` **[Agent: typescript-framework]**
+  - [x] Implement `$on(eventName, listener)` — register listener, return deregister function using null-sentinel pattern **[Agent: typescript-framework]**
+  - [x] Implement `$emit(eventName, ...args)` — upward propagation through `$parent` chain, stopPropagation support **[Agent: typescript-framework]**
+  - [x] Implement `$broadcast(eventName, ...args)` — downward propagation through `$$children` tree, stopPropagation is no-op **[Agent: typescript-framework]**
+  - [x] Implement `$$fireEventOnScope` — iterate listeners, skip nulls, catch errors, compact array after iteration **[Agent: typescript-framework]**
+  - [x] Add tests for: registration, multiple listeners, deregistration, deregistration during fire, `$emit` upward propagation, `$broadcast` downward propagation, event object shape (name, targetScope, currentScope, defaultPrevented), stopPropagation on emit only, additional args passing **[Agent: vitest-testing]**
+  - [x] **Verify:** `pnpm lint` + `pnpm typecheck` + `pnpm test` all pass **[Agent: typescript-framework]**
 
 ---
 
