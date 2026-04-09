@@ -49,7 +49,7 @@ _Complete the essential building blocks that everything else depends on._
 _The layer that connects the runtime to templates and the DOM._
 
 - [ ] **Expressions & Parser**
-  - [ ] **Expression Parser:** Implement a full expression parser supporting property access, method calls, operators, literals, and assignments.
+  - [ ] **Expression Parser:** Implement a full expression parser supporting property access, method calls, operators, literals, and assignments and all the supported features of AngularJS 1.x, integration with scope.
   - [ ] **One-Time Bindings:** Support `::` prefix for expressions that unwatch after stabilization.
   - [ ] **Interpolation:** Implement `$interpolate` service for `{{expression}}` resolution in strings and templates.
 
@@ -103,3 +103,8 @@ _Features that complete the full framework experience._
 - [ ] **Package & Distribution**
   - [ ] **npm Package:** Bundle and publish as an installable npm package with full TypeScript type declarations.
   - [ ] **API Documentation:** Generate API docs from the typed source code.
+  - [ ] **Examples Folder:** Create an `examples/` directory at the project root with working applications that consume the published library, demonstrating real-world AngularJS usage patterns.
+    - [ ] **Basic Starter:** Minimal "Hello World" example showing scope binding, watchers, and the digest cycle.
+    - [ ] **TodoMVC:** A full TodoMVC implementation — the standard framework showcase app — demonstrating directives, two-way binding, and filtering.
+    - [ ] **Form Validation Demo:** A form with validation rules demonstrating `ngModel`, built-in and custom validators, and form state tracking (`$dirty`, `$valid`, etc.).
+    - [ ] **SPA with Routing:** A multi-page single-page application using `$routeProvider`, `ng-view`, route parameters, and navigation.
