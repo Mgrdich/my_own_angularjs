@@ -9,6 +9,7 @@ import {
   type Watcher,
   type WatchFn,
 } from './scope-types';
+import { isEqual } from './is-equal';
 
 /** Maximum number of digest iterations before throwing. */
 const TTL = 10;
@@ -132,7 +133,7 @@ export class Scope {
 
         if (!this.$$areEqual(newValue, oldValue, watcher.valueEq)) {
           this.$root.$$lastDirtyWatch = watcher;
-          watcher.last = newValue;
+          watcher.last = watcher.valueEq ? structuredClone(newValue) : newValue;
 
           const listenerOldValue = oldValue === initWatchVal ? newValue : oldValue;
 
@@ -239,11 +240,15 @@ export class Scope {
   }
 
   /**
-   * Compare two values for equality. Uses reference equality for Slice 1.
-   * Handles NaN === NaN as equal (unlike JavaScript's default behavior).
+   * Compare two values for equality.
+   * Uses deep comparison via `isEqual` when `valueEq` is true,
+   * otherwise reference equality with NaN self-equality.
    */
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- valueEq will be used in Slice 2 for deep comparison
-  private $$areEqual(newValue: unknown, oldValue: unknown, _valueEq: boolean) {
+  private $$areEqual(newValue: unknown, oldValue: unknown, valueEq: boolean) {
+    if (valueEq) {
+      return isEqual(newValue, oldValue);
+    }
+
     // NaN check: NaN !== NaN in JS, but we want to treat NaN as equal to NaN
     if (typeof newValue === 'number' && isNaN(newValue) && typeof oldValue === 'number' && isNaN(oldValue)) {
       return true;

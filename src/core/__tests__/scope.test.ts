@@ -352,6 +352,77 @@ describe('Scope', () => {
 
       consoleSpy.mockRestore();
     });
+
+    describe('value-based $watch', () => {
+      it('detects array mutation when using valueEq', () => {
+        const scope = Scope.create<{ items: number[] }>();
+        scope.items = [1, 2, 3];
+        const listenerFn = vi.fn();
+
+        scope.$watch(() => scope.items, listenerFn, true);
+
+        scope.$digest();
+        expect(listenerFn).toHaveBeenCalledTimes(1);
+
+        scope.items.push(4);
+        scope.$digest();
+        expect(listenerFn).toHaveBeenCalledTimes(2);
+      });
+
+      it('detects nested object property changes when using valueEq', () => {
+        const scope = Scope.create<{ obj: { nested: { value: number } } }>();
+        scope.obj = { nested: { value: 1 } };
+        const listenerFn = vi.fn();
+
+        scope.$watch(() => scope.obj, listenerFn, true);
+
+        scope.$digest();
+        expect(listenerFn).toHaveBeenCalledTimes(1);
+
+        scope.obj.nested.value = 2;
+        scope.$digest();
+        expect(listenerFn).toHaveBeenCalledTimes(2);
+      });
+
+      it('does not detect array mutation in reference mode (default)', () => {
+        const scope = Scope.create<{ items: number[] }>();
+        scope.items = [1, 2, 3];
+        const listenerFn = vi.fn();
+
+        scope.$watch(() => scope.items, listenerFn);
+
+        scope.$digest();
+        expect(listenerFn).toHaveBeenCalledTimes(1);
+
+        scope.items.push(4);
+        scope.$digest();
+        // Reference did not change, so listener should not fire again
+        expect(listenerFn).toHaveBeenCalledTimes(1);
+      });
+
+      it('stores a deep clone via structuredClone so mutations do not affect the snapshot', () => {
+        const scope = Scope.create<{ items: number[] }>();
+        scope.items = [1, 2, 3];
+        const listenerFn = vi.fn();
+
+        scope.$watch(() => scope.items, listenerFn, true);
+
+        scope.$digest();
+        expect(listenerFn).toHaveBeenCalledTimes(1);
+
+        // Mutate the original array after digest -- the stored snapshot should be independent
+        scope.items.push(4);
+
+        // The next digest should detect the change because the snapshot was a clone
+        scope.$digest();
+        expect(listenerFn).toHaveBeenCalledTimes(2);
+
+        // Verify the snapshot is not the same reference as the watched value
+        scope.items.push(5);
+        scope.$digest();
+        expect(listenerFn).toHaveBeenCalledTimes(3);
+      });
+    });
   });
 
   describe('$eval', () => {

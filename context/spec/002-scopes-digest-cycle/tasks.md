@@ -19,12 +19,12 @@ _After this slice: a root Scope can be created, watchers registered, and a diges
 
 _After this slice: `$watch` supports deep value comparison via `valueEq: true`. Custom `isEqual` utility is tested independently._
 
-- [ ] **Slice 2: Value-based `$watch` and `isEqual` utility**
-  - [ ] Create `src/core/is-equal.ts` with deep equality function supporting primitives, NaN, arrays, objects, Date, RegExp **[Agent: typescript-framework]**
-  - [ ] Add `valueEq` support to `$watch` — use `structuredClone` for snapshotting, `isEqual` for comparison **[Agent: typescript-framework]**
-  - [ ] Add tests for `isEqual` (primitives, NaN, nested objects, arrays, Date, RegExp, empty structures) **[Agent: vitest-testing]**
-  - [ ] Add tests for value-based `$watch` (array mutation detection, nested object changes, reference vs value mode) **[Agent: vitest-testing]**
-  - [ ] **Verify:** `pnpm lint` + `pnpm typecheck` + `pnpm test` all pass **[Agent: typescript-framework]**
+- [x] **Slice 2: Value-based `$watch` and `isEqual` utility**
+  - [x] Create `src/core/is-equal.ts` with deep equality function supporting primitives, NaN, arrays, objects, Date, RegExp **[Agent: typescript-framework]**
+  - [x] Add `valueEq` support to `$watch` — use `structuredClone` for snapshotting, `isEqual` for comparison **[Agent: typescript-framework]**
+  - [x] Add tests for `isEqual` (primitives, NaN, nested objects, arrays, Date, RegExp, empty structures) **[Agent: vitest-testing]**
+  - [x] Add tests for value-based `$watch` (array mutation detection, nested object changes, reference vs value mode) **[Agent: vitest-testing]**
+  - [x] **Verify:** `pnpm lint` + `pnpm typecheck` + `pnpm test` all pass **[Agent: typescript-framework]**
 
 ---
 
