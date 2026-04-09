@@ -40,9 +40,9 @@
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "format": "prettier --write",
+    "format": "prettier --write src/**/*.ts",
     "format:check": "prettier --check 'src/**/*.ts'",
-    "lint:fix": "eslint --fix",
+    "lint:fix": "eslint --fix src/",
     "lint": "eslint src/",
     "test": "vitest run",
     "test:watch": "vitest",

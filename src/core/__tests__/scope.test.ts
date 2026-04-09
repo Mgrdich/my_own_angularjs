@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { afterEach, beforeEach, describe, it, expect, vi } from 'vitest';
 import { Scope } from '../index';
 
 describe('Scope', () => {
@@ -671,7 +671,260 @@ describe('Scope', () => {
     it('does not throw on root scope destroy', () => {
       const scope = new Scope();
 
-      expect(() => { scope.$destroy(); }).not.toThrow();
+      expect(() => {
+        scope.$destroy();
+      }).not.toThrow();
+    });
+  });
+
+  describe('$evalAsync', () => {
+    beforeEach(() => {
+      vi.useFakeTimers();
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it('executes expression during digest', () => {
+      const scope = Scope.create<{ aValue: number[]; asyncEvaluated: boolean }>();
+      scope.aValue = [1, 2, 3];
+      scope.asyncEvaluated = false;
+
+      scope.$watch(
+        () => scope.aValue,
+        () => {
+          scope.$evalAsync(() => {
+            scope.asyncEvaluated = true;
+          });
+        },
+      );
+
+      scope.$digest();
+
+      expect(scope.asyncEvaluated).toBe(true);
+    });
+
+    it('executes even when not dirty', () => {
+      const scope = Scope.create<{ aValue: number[]; asyncEvaluated: boolean }>();
+      scope.aValue = [1, 2, 3];
+      scope.asyncEvaluated = false;
+      let evalAsyncScheduled = false;
+
+      scope.$watch(
+        () => {
+          if (!evalAsyncScheduled) {
+            evalAsyncScheduled = true;
+            scope.$evalAsync(() => {
+              scope.asyncEvaluated = true;
+            });
+          }
+          return scope.aValue;
+        },
+        () => {
+          /* noop */
+        },
+      );
+
+      scope.$digest();
+
+      expect(scope.asyncEvaluated).toBe(true);
+    });
+
+    it('auto-schedules a digest via setTimeout when no digest running', () => {
+      const scope = Scope.create<{ asyncEvaluated: boolean }>();
+      scope.asyncEvaluated = false;
+
+      scope.$evalAsync(() => {
+        scope.asyncEvaluated = true;
+      });
+
+      expect(scope.asyncEvaluated).toBe(false);
+
+      vi.advanceTimersByTime(0);
+
+      expect(scope.asyncEvaluated).toBe(true);
+    });
+
+    it('catches exceptions and continues digest', () => {
+      const scope = Scope.create<{ aValue: string }>();
+      scope.aValue = 'abc';
+      let counter = 0;
+
+      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+      scope.$watch(
+        () => scope.aValue,
+        () => {
+          scope.$evalAsync(() => {
+            throw new Error('evalAsync error');
+          });
+        },
+      );
+
+      scope.$watch(
+        () => scope.aValue,
+        () => {
+          counter++;
+        },
+      );
+
+      scope.$digest();
+
+      expect(counter).toBe(1);
+
+      consoleSpy.mockRestore();
+    });
+  });
+
+  describe('$applyAsync', () => {
+    beforeEach(() => {
+      vi.useFakeTimers();
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it('coalesces multiple calls into single $apply', () => {
+      const scope = Scope.create<{ aValue: string; bValue: string }>();
+      let digestCount = 0;
+
+      scope.$watch(
+        () => scope.aValue,
+        () => {
+          digestCount++;
+        },
+      );
+
+      scope.$applyAsync(() => {
+        scope.aValue = 'first';
+      });
+
+      scope.$applyAsync(() => {
+        scope.bValue = 'second';
+      });
+
+      vi.advanceTimersByTime(0);
+
+      expect(scope.aValue).toBe('first');
+      expect(scope.bValue).toBe('second');
+      expect(digestCount).toBe(1);
+    });
+
+    it('flushes queue during active digest', () => {
+      const scope = Scope.create<{ aValue: string }>();
+
+      scope.$applyAsync(() => {
+        scope.aValue = 'applied';
+      });
+
+      scope.$digest();
+
+      expect(scope.aValue).toBe('applied');
+    });
+
+    it('cancels the pending timeout when flushed during digest', () => {
+      const scope = Scope.create<{ aValue: string }>();
+      let digestCount = 0;
+
+      scope.$watch(
+        () => scope.aValue,
+        () => {
+          digestCount++;
+        },
+      );
+
+      scope.$applyAsync(() => {
+        scope.aValue = 'applied';
+      });
+
+      scope.$digest();
+      const digestCountAfterDigest = digestCount;
+
+      vi.advanceTimersByTime(0);
+
+      expect(digestCount).toBe(digestCountAfterDigest);
+    });
+
+    it('catches exceptions in individual expressions', () => {
+      const scope = Scope.create<{ aValue: string }>();
+
+      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+      scope.$applyAsync(() => {
+        throw new Error('applyAsync error');
+      });
+
+      scope.$applyAsync(() => {
+        scope.aValue = 'applied';
+      });
+
+      vi.advanceTimersByTime(0);
+
+      expect(scope.aValue).toBe('applied');
+
+      consoleSpy.mockRestore();
+    });
+  });
+
+  describe('$$postDigest', () => {
+    it('runs after digest completes', () => {
+      const scope = Scope.create<{ postDigestRan: boolean }>();
+      scope.postDigestRan = false;
+
+      scope.$$postDigest(() => {
+        scope.postDigestRan = true;
+      });
+
+      scope.$digest();
+
+      expect(scope.postDigestRan).toBe(true);
+    });
+
+    it('does NOT trigger another digest', () => {
+      const scope = Scope.create<{ aValue: string }>();
+      scope.aValue = 'initial';
+      let watchCount = 0;
+
+      scope.$watch(
+        () => scope.aValue,
+        () => {
+          watchCount++;
+        },
+      );
+
+      scope.$$postDigest(() => {
+        scope.aValue = 'changed';
+      });
+
+      scope.$digest();
+      expect(watchCount).toBe(1);
+
+      scope.$digest();
+      expect(watchCount).toBe(2);
+    });
+
+    it('catches exceptions and continues', () => {
+      let secondRan = false;
+
+      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+      const scope = new Scope();
+
+      scope.$$postDigest(() => {
+        throw new Error('postDigest error');
+      });
+
+      scope.$$postDigest(() => {
+        secondRan = true;
+      });
+
+      scope.$digest();
+
+      expect(secondRan).toBe(true);
+
+      consoleSpy.mockRestore();
     });
   });
 

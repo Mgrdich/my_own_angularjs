@@ -45,12 +45,12 @@ _After this slice: child scopes (normal, isolated, custom parent) can be created
 
 _After this slice: async expressions can be scheduled and coalesced, post-digest callbacks work._
 
-- [ ] **Slice 4: Async scheduling**
-  - [ ] Implement `$evalAsync` — queue expression, auto-schedule digest via `setTimeout` if none running **[Agent: typescript-framework]**
-  - [ ] Implement `$applyAsync` — coalesce multiple calls into single `setTimeout` + `$apply`, drain during active digest **[Agent: typescript-framework]**
-  - [ ] Implement `$$postDigest` — queue functions to run after digest completes **[Agent: typescript-framework]**
-  - [ ] Add tests using `vi.useFakeTimers()` for: `$evalAsync` queue execution and auto-digest, `$applyAsync` coalescing and flush-during-digest, `$$postDigest` timing and no-redigest behavior, error isolation in all three **[Agent: vitest-testing]**
-  - [ ] **Verify:** `pnpm lint` + `pnpm typecheck` + `pnpm test` all pass **[Agent: typescript-framework]**
+- [x] **Slice 4: Async scheduling**
+  - [x] Implement `$evalAsync` — queue expression, auto-schedule digest via `setTimeout` if none running **[Agent: typescript-framework]**
+  - [x] Implement `$applyAsync` — coalesce multiple calls into single `setTimeout` + `$apply`, drain during active digest **[Agent: typescript-framework]**
+  - [x] Implement `$$postDigest` — queue functions to run after digest completes **[Agent: typescript-framework]**
+  - [x] Add tests using `vi.useFakeTimers()` for: `$evalAsync` queue execution and auto-digest, `$applyAsync` coalescing and flush-during-digest, `$$postDigest` timing and no-redigest behavior, error isolation in all three **[Agent: vitest-testing]**
+  - [x] **Verify:** `pnpm lint` + `pnpm typecheck` + `pnpm test` all pass **[Agent: typescript-framework]**
 
 ---
 

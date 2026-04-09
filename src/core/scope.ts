@@ -242,6 +242,11 @@ export class Scope {
           throw new Error('10 digest iterations reached');
         }
       } while (dirty || this.$$asyncQueue.length > 0);
+      // Flush any pending $applyAsync during the active digest
+      if (this.$root.$$applyAsyncId !== null) {
+        clearTimeout(this.$root.$$applyAsyncId);
+        this.$$flushApplyAsync();
+      }
     } finally {
       this.$clearPhase();
     }
@@ -308,6 +313,62 @@ export class Scope {
 
     this.$$watchers = null;
     this.$$listeners = {};
+  }
+
+  /**
+   * Queue an expression for deferred execution within the current or next digest.
+   * If no digest is already in progress, schedules one via setTimeout.
+   */
+  $evalAsync(expr: WatchFn<unknown>): void {
+    if (!this.$root.$$phase && this.$root.$$asyncQueue.length === 0) {
+      setTimeout(() => {
+        if (this.$root.$$asyncQueue.length > 0) {
+          this.$root.$digest();
+        }
+      });
+    }
+    this.$$asyncQueue.push({ scope: this, expression: expr });
+  }
+
+  /**
+   * Coalesce multiple apply calls into a single setTimeout + $apply.
+   * All queued expressions are flushed together in one digest cycle.
+   */
+  $applyAsync(expr: WatchFn<unknown>): void {
+    this.$$applyAsyncQueue.push({ scope: this, expression: expr });
+
+    if (this.$root.$$applyAsyncId === null) {
+      this.$root.$$applyAsyncId = setTimeout(() => {
+        this.$apply(() => {
+          this.$$flushApplyAsync();
+        });
+      });
+    }
+  }
+
+  /**
+   * Register a function to run once after the next digest cycle completes.
+   * The function is not run inside the digest and will not trigger further digestion.
+   */
+  $$postDigest(fn: () => void): void {
+    this.$$postDigestQueue.push(fn);
+  }
+
+  /**
+   * Drain the $$applyAsyncQueue, evaluating each expression and clearing the timer ID.
+   */
+  private $$flushApplyAsync(): void {
+    while (this.$$applyAsyncQueue.length > 0) {
+      const asyncTask = this.$$applyAsyncQueue.shift();
+      if (asyncTask) {
+        try {
+          asyncTask.scope.$eval(asyncTask.expression);
+        } catch (e: unknown) {
+          console.error('Error in $applyAsync expression:', e);
+        }
+      }
+    }
+    this.$root.$$applyAsyncId = null;
   }
 
   /**
