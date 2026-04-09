@@ -42,7 +42,7 @@ Key strict behaviors:
 
 ```typescript
 // Parameters and return: always annotate
-function calculateTotal(items: LineItem[], taxRate: number): number {
+function calculateTotal(items: LineItem[], taxRate: number) {
   return items.reduce((sum, item) => sum + item.price, 0) * (1 + taxRate);
 }
 

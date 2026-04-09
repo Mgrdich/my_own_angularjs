@@ -14,8 +14,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "jq -r '.tool_input.file_path' | { read -r f; if [[ \"$f\" == */src/*.ts ]]; then pnpm run format \"$f\" && pnpm run lint:fix \"$f\"; fi; } 2>/dev/null || true",
-            "timeout": 30,
+            "command": "pnpm run format && pnpm run lint:fix",
             "statusMessage": "Formatting & linting..."
           }
         ]

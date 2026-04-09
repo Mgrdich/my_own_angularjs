@@ -18,7 +18,7 @@ _Move existing code to a legacy folder, reimplement from scratch in clean TypeSc
   - [x] **CI Steps:** Lint (ESLint) → Format Check (Prettier) → Type Check (tsc) → Test (Vitest) — all must pass before merge.
 
 - [ ] **Reimplement Existing Features (from scratch)**
-  - [ ] **Scopes & Digest Cycle:** Rewrite the full Scope module in clean TypeScript — `$watch`, `$watchGroup`, `$watchCollection`, `$digest`, `$apply`, `$eval`, `$evalAsync`, `$applyAsync`, scope hierarchy, events (`$on`, `$emit`, `$broadcast`), and lifecycle (`$new`, `$destroy`).
+  - [x] **Scopes & Digest Cycle:** Rewrite the full Scope module in clean TypeScript — `$watch`, `$watchGroup`, `$watchCollection`, `$digest`, `$apply`, `$eval`, `$evalAsync`, `$applyAsync`, scope hierarchy, events (`$on`, `$emit`, `$broadcast`), and lifecycle (`$new`, `$destroy`).
   - [ ] **Expression Parser:** Rewrite the lexer, AST builder, and expression compiler in TypeScript with full type safety.
   - [ ] **Utility Functions:** Rewrite helper/utility functions in TypeScript.
 
