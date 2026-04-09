@@ -58,10 +58,10 @@ _After this slice: async expressions can be scheduled and coalesced, post-digest
 
 _After this slice: multiple watchers can be grouped with a single listener callback._
 
-- [ ] **Slice 5: `$watchGroup`**
-  - [ ] Implement `$watchGroup(watchFns, listenerFn)` — register individual watches, call listener once per digest with `[newValues, oldValues]` arrays, return deregister function **[Agent: typescript-framework]**
-  - [ ] Add tests for: grouped watch notification, empty array edge case, deregistration, first-call oldValues === newValues **[Agent: vitest-testing]**
-  - [ ] **Verify:** `pnpm lint` + `pnpm typecheck` + `pnpm test` all pass **[Agent: typescript-framework]**
+- [x] **Slice 5: `$watchGroup`**
+  - [x] Implement `$watchGroup(watchFns, listenerFn)` — register individual watches, call listener once per digest with `[newValues, oldValues]` arrays, return deregister function **[Agent: typescript-framework]**
+  - [x] Add tests for: grouped watch notification, empty array edge case, deregistration, first-call oldValues === newValues **[Agent: vitest-testing]**
+  - [x] **Verify:** `pnpm lint` + `pnpm typecheck` + `pnpm test` all pass **[Agent: typescript-framework]**
 
 ---
 

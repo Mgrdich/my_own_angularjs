@@ -928,6 +928,143 @@ describe('Scope', () => {
     });
   });
 
+  describe('$watchGroup', () => {
+    beforeEach(() => {
+      vi.useFakeTimers();
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it('takes watches as an array and calls listener with arrays of new and old values', () => {
+      const scope = Scope.create<{ a: number; b: number }>();
+      scope.a = 1;
+      scope.b = 2;
+      let gotNewValues: unknown[] | undefined;
+      let gotOldValues: unknown[] | undefined;
+
+      scope.$watchGroup(
+        [() => scope.a, () => scope.b],
+        (newValues, oldValues) => {
+          gotNewValues = newValues;
+          gotOldValues = oldValues;
+        },
+      );
+
+      scope.$digest();
+      vi.advanceTimersByTime(0);
+      scope.$digest();
+
+      expect(gotNewValues).toEqual([1, 2]);
+      expect(gotOldValues).toEqual([1, 2]);
+    });
+
+    it('calls the listener once with empty arrays when given an empty watchFns array', () => {
+      const scope = new Scope();
+      const listenerFn = vi.fn();
+
+      scope.$watchGroup([], listenerFn);
+
+      vi.advanceTimersByTime(0);
+      scope.$digest();
+
+      expect(listenerFn).toHaveBeenCalledTimes(1);
+      expect(listenerFn).toHaveBeenCalledWith([], [], scope);
+    });
+
+    it('can deregister an empty watchGroup before it fires', () => {
+      const scope = new Scope();
+      const listenerFn = vi.fn();
+
+      const deregister = scope.$watchGroup([], listenerFn);
+      deregister();
+
+      vi.advanceTimersByTime(0);
+      scope.$digest();
+
+      expect(listenerFn).not.toHaveBeenCalled();
+    });
+
+    it('returns a deregistration function that removes all grouped watchers', () => {
+      const scope = Scope.create<{ a: number; b: number }>();
+      scope.a = 1;
+      scope.b = 2;
+      const listenerFn = vi.fn();
+
+      const deregister = scope.$watchGroup(
+        [() => scope.a, () => scope.b],
+        listenerFn,
+      );
+
+      scope.$digest();
+      vi.advanceTimersByTime(0);
+      scope.$digest();
+
+      expect(listenerFn).toHaveBeenCalledTimes(1);
+
+      listenerFn.mockClear();
+      scope.a = 3;
+      deregister();
+      scope.$digest();
+      vi.advanceTimersByTime(0);
+      scope.$digest();
+
+      expect(listenerFn).not.toHaveBeenCalled();
+    });
+
+    it('passes the same reference for oldValues and newValues on the first invocation', () => {
+      const scope = Scope.create<{ a: number; b: number }>();
+      scope.a = 1;
+      scope.b = 2;
+      let gotNewValues: unknown[] | undefined;
+      let gotOldValues: unknown[] | undefined;
+
+      scope.$watchGroup(
+        [() => scope.a, () => scope.b],
+        (newValues, oldValues) => {
+          gotNewValues = newValues;
+          gotOldValues = oldValues;
+        },
+      );
+
+      scope.$digest();
+      vi.advanceTimersByTime(0);
+      scope.$digest();
+
+      expect(gotNewValues).toBe(gotOldValues);
+    });
+
+    it('passes different references for oldValues and newValues on subsequent invocations', () => {
+      const scope = Scope.create<{ a: number; b: number }>();
+      scope.a = 1;
+      scope.b = 2;
+      let gotNewValues: unknown[] | undefined;
+      let gotOldValues: unknown[] | undefined;
+
+      scope.$watchGroup(
+        [() => scope.a, () => scope.b],
+        (newValues, oldValues) => {
+          gotNewValues = newValues;
+          gotOldValues = oldValues;
+        },
+      );
+
+      scope.$digest();
+      vi.advanceTimersByTime(0);
+      scope.$digest();
+
+      scope.a = 3;
+      scope.$digest();
+      vi.advanceTimersByTime(0);
+      scope.$digest();
+
+      expect(gotNewValues).not.toBe(gotOldValues);
+      expect(gotNewValues).toEqual([3, 2]);
+      expect(gotOldValues).toEqual([1, 2]);
+    });
+  });
+
   describe('$$phase', () => {
     it('has $$phase as null initially', () => {
       const scope = new Scope();

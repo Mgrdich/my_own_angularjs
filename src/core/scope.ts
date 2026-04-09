@@ -355,6 +355,60 @@ export class Scope {
   }
 
   /**
+   * Watch a group of expressions and call the listener once per digest
+   * with arrays of new and old values when any watched value changes.
+   *
+   * @param watchFns - Array of watch functions to observe
+   * @param listenerFn - Called with [newValues[], oldValues[], scope]
+   * @returns A function that deregisters all grouped watchers
+   */
+  $watchGroup(watchFns: WatchFn<unknown>[], listenerFn: ListenerFn<unknown[]>): DeregisterFn {
+    const newValues: unknown[] = new Array(watchFns.length);
+    const oldValues: unknown[] = new Array(watchFns.length);
+    let changeReactionScheduled = false;
+    let firstRun = true;
+
+    if (watchFns.length === 0) {
+      let shouldCall = true;
+      this.$evalAsync(() => {
+        if (shouldCall) {
+          listenerFn(newValues, newValues, this);
+        }
+      });
+      return () => {
+        shouldCall = false;
+      };
+    }
+
+    const watchGroupListener = () => {
+      if (firstRun) {
+        firstRun = false;
+        listenerFn(newValues, newValues, this);
+      } else {
+        listenerFn(newValues, oldValues, this);
+      }
+      changeReactionScheduled = false;
+    };
+
+    const deregisterFns = watchFns.map((watchFn, i) => {
+      return this.$watch(watchFn, (newValue, oldValue) => {
+        newValues[i] = newValue;
+        oldValues[i] = oldValue;
+        if (!changeReactionScheduled) {
+          changeReactionScheduled = true;
+          this.$evalAsync(watchGroupListener);
+        }
+      });
+    });
+
+    return () => {
+      deregisterFns.forEach((deregisterFn) => {
+        deregisterFn();
+      });
+    };
+  }
+
+  /**
    * Drain the $$applyAsyncQueue, evaluating each expression and clearing the timer ID.
    */
   private $$flushApplyAsync(): void {
