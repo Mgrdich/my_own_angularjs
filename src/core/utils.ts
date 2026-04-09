@@ -1,3 +1,8 @@
+/** Type guard that narrows a string key to a key of the given object. */
+export function isKeyOf<T extends Record<string, unknown>>(obj: T, key: string): key is Extract<keyof T, string> {
+  return key in obj;
+}
+
 /**
  * Minimal recursive deep equality used by the scope dirty-checking system.
  *

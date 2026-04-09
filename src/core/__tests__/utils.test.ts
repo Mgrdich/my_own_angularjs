@@ -1,5 +1,25 @@
 import { describe, it, expect } from 'vitest';
-import { isEqual } from '../is-equal';
+import { isEqual, isKeyOf } from '@core/utils';
+
+describe('isKeyOf', () => {
+  const obj = { a: 1, b: 2 } as const satisfies Record<string, number>;
+
+  it('returns true for a key that exists', () => {
+    expect(isKeyOf(obj, 'a')).toBe(true);
+  });
+
+  it('returns false for a key that does not exist', () => {
+    expect(isKeyOf(obj, 'c')).toBe(false);
+  });
+
+  it('narrows the key type in a conditional', () => {
+    const key = 'b' as string;
+    if (isKeyOf(obj, key)) {
+      // If this compiles, the type guard works — key is narrowed to 'a' | 'b'
+      expect(obj[key]).toBe(2);
+    }
+  });
+});
 
 describe('isEqual', () => {
   describe('primitives', () => {

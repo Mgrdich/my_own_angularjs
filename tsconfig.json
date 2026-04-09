@@ -10,7 +10,11 @@
     "outDir": "./dist",
     "rootDir": "./src",
     "importHelpers": true,
-    "sourceMap": true
+    "sourceMap": true,
+    "paths": {
+      "@core/*": ["./src/core/*"],
+      "@parser/*": ["./src/parser/*"]
+    }
   },
   "include": ["src"],
   "exclude": ["node_modules", "dist", "legacy"]

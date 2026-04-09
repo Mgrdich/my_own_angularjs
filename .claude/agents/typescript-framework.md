@@ -23,3 +23,9 @@ When working on tasks:
 - Reference the original AngularJS source at https://github.com/angular/angular.js/ for behavior parity
 - Ensure all changes maintain a working, runnable application state
 - Use TypeScript strict mode features: no implicit any, strict null checks, unchecked indexed access
+
+Import conventions:
+
+- Use extensionless imports (no `.js` suffix) — the project uses `"moduleResolution": "bundler"` which resolves `.ts` files without extensions
+- Use absolute-style imports from the `src/core/` barrel where possible (e.g. `import { Scope } from '../index'` in tests, `import { isEqual } from './utils'` within core)
+- Prefer importing from the closest barrel or direct module path without file extensions

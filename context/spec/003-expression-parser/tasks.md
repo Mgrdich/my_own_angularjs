@@ -6,14 +6,14 @@
 
 _After this slice: `parse('42')`, `parse('"hello"')`, `parse('true')`, `parse('null')` all return working expression functions. The full three-stage pipeline (lex → AST → interpret) is operational for primitive values._
 
-- [ ] **Slice 1: Types, Lexer, and primitive literal parsing**
-  - [ ] Create `src/core/parse-types.ts` with `Token`, all AST node discriminated union types (`Program`, `Literal`, `Identifier`, `ThisExpression`, `ArrayExpression`, `ObjectExpression`, `Property`, `MemberExpression`, `CallExpression`), and `ExpressionFn` type **[Agent: typescript-framework]**
-  - [ ] Create `src/core/lexer.ts` with `lex(input: string): Token[]` — tokenize numbers (int, float, scientific notation), strings (single/double quote, escapes, Unicode), identifiers/keywords, symbols, whitespace. Throw on invalid input **[Agent: typescript-framework]**
-  - [ ] Create `src/core/ast.ts` with `buildAST(tokens: Token[]): Program` — implement `program`, `primary` (literals, identifiers, `this` only for now) **[Agent: typescript-framework]**
-  - [ ] Create `src/core/interpreter.ts` with `evaluate(node: ASTNode, scope?, locals?): unknown` — handle `Program`, `Literal`, `Identifier`, `ThisExpression` **[Agent: typescript-framework]**
-  - [ ] Create `src/core/parse.ts` with `parse(expr: string): ExpressionFn` — chain lex → buildAST → evaluate **[Agent: typescript-framework]**
-  - [ ] Create `src/core/__tests__/parse.test.ts` with tests for: numbers (integers, floats, scientific notation, errors), strings (quotes, escapes, Unicode, unterminated), booleans, null, whitespace handling, identifiers (scope lookup, undefined, `this`) **[Agent: vitest-testing]**
-  - [ ] **Verify:** `pnpm lint` + `pnpm typecheck` + `pnpm test` all pass **[Agent: typescript-framework]**
+- [x] **Slice 1: Types, Lexer, and primitive literal parsing**
+  - [x] Create `src/core/parse-types.ts` with `Token`, all AST node discriminated union types (`Program`, `Literal`, `Identifier`, `ThisExpression`, `ArrayExpression`, `ObjectExpression`, `Property`, `MemberExpression`, `CallExpression`), and `ExpressionFn` type **[Agent: typescript-framework]**
+  - [x] Create `src/core/lexer.ts` with `lex(input: string): Token[]` — tokenize numbers (int, float, scientific notation), strings (single/double quote, escapes, Unicode), identifiers/keywords, symbols, whitespace. Throw on invalid input **[Agent: typescript-framework]**
+  - [x] Create `src/core/ast.ts` with `buildAST(tokens: Token[]): Program` — implement `program`, `primary` (literals, identifiers, `this` only for now) **[Agent: typescript-framework]**
+  - [x] Create `src/core/interpreter.ts` with `evaluate(node: ASTNode, scope?, locals?): unknown` — handle `Program`, `Literal`, `Identifier`, `ThisExpression` **[Agent: typescript-framework]**
+  - [x] Create `src/core/parse.ts` with `parse(expr: string): ExpressionFn` — chain lex → buildAST → evaluate **[Agent: typescript-framework]**
+  - [x] Create `src/core/__tests__/parse.test.ts` with tests for: numbers (integers, floats, scientific notation, errors), strings (quotes, escapes, Unicode, unterminated), booleans, null, whitespace handling, identifiers (scope lookup, undefined, `this`) **[Agent: vitest-testing]**
+  - [x] **Verify:** `pnpm lint` + `pnpm typecheck` + `pnpm test` all pass **[Agent: typescript-framework]**
 
 ---
 

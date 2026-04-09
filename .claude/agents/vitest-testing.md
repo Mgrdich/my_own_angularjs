@@ -22,3 +22,8 @@ When working on tasks:
 - Reference original AngularJS tests for behavior expectations
 - Ensure all changes maintain a working, runnable application state
 - Organize tests to mirror the source module structure
+
+Import conventions:
+
+- Use extensionless imports (no `.js` suffix) — the project uses `"moduleResolution": "bundler"`
+- Import from relative paths without extensions (e.g. `import { parse } from '../parse'`, `import { Scope } from '../index'`)
