@@ -106,54 +106,104 @@ export class Scope {
   }
 
   /**
-   * Execute a single digest pass over all watchers.
+   * Create a child scope.
+   *
+   * @param isolated - If true, create an isolated scope (no prototypal inheritance)
+   * @param parent - Optional parent scope for hierarchy (defaults to `this`)
+   * @returns The new child scope
+   */
+  $new(isolated?: boolean, parent?: Scope): Scope {
+    const effectiveParent = parent ?? this;
+    let child: Scope;
+
+    if (isolated) {
+      child = new Scope();
+      child.$root = this.$root;
+      child.$$asyncQueue = this.$$asyncQueue;
+      child.$$applyAsyncQueue = this.$$applyAsyncQueue;
+      child.$$postDigestQueue = this.$$postDigestQueue;
+    } else {
+      child = Object.create(this) as Scope;
+      child.$$watchers = [];
+      child.$$children = [];
+      child.$$listeners = {};
+    }
+
+    Object.defineProperty(child, '$id', { value: nextId++, writable: false });
+    child.$parent = effectiveParent;
+    effectiveParent.$$children.push(child);
+
+    return child;
+  }
+
+  /**
+   * Traverse the scope tree, calling `fn` on each scope.
+   * Stops early and returns `false` if `fn` returns `false` for any scope.
+   *
+   * @param fn - Predicate to call on each scope
+   * @returns `true` if all scopes returned `true`, `false` otherwise
+   */
+  $$everyScope(fn: (scope: Scope) => boolean): boolean {
+    if (fn(this)) {
+      return this.$$children.every((child) => child.$$everyScope(fn));
+    }
+    return false;
+  }
+
+  /**
+   * Execute a single digest pass over all watchers across the scope hierarchy.
    * Iterates in reverse order for safe deregistration during iteration.
    *
    * @returns true if any watcher was dirty during this pass
    */
   $$digestOnce() {
     let dirty = false;
-    const watchers = this.$$watchers;
 
-    if (watchers === null) {
-      return false;
-    }
+    this.$$everyScope((scope) => {
+      const watchers = scope.$$watchers;
 
-    const length = watchers.length;
-    for (let i = length - 1; i >= 0; i--) {
-      const watcher = watchers[i];
-
-      if (watcher === null || watcher === undefined) {
-        continue;
+      if (watchers === null) {
+        return true;
       }
 
-      try {
-        const newValue = watcher.watchFn(this);
-        const oldValue = watcher.last;
+      const length = watchers.length;
+      for (let i = length - 1; i >= 0; i--) {
+        const watcher = watchers[i];
 
-        if (!this.$$areEqual(newValue, oldValue, watcher.valueEq)) {
-          this.$root.$$lastDirtyWatch = watcher;
-          watcher.last = watcher.valueEq ? structuredClone(newValue) : newValue;
-
-          const listenerOldValue = oldValue === initWatchVal ? newValue : oldValue;
-
-          try {
-            watcher.listenerFn(newValue, listenerOldValue, this);
-          } catch (e: unknown) {
-            // Log listener errors but do not abort the digest
-            console.error('Error in watch listener:', e);
-          }
-
-          dirty = true;
-        } else if (this.$root.$$lastDirtyWatch === watcher) {
-          // Short-circuit: no more dirty watchers after this point
-          return false;
+        if (watcher === null || watcher === undefined) {
+          continue;
         }
-      } catch (e: unknown) {
-        // Log watch function errors but do not abort the digest
-        console.error('Error in watch function:', e);
+
+        try {
+          const newValue = watcher.watchFn(scope);
+          const oldValue = watcher.last;
+
+          if (!this.$$areEqual(newValue, oldValue, watcher.valueEq)) {
+            this.$root.$$lastDirtyWatch = watcher;
+            watcher.last = watcher.valueEq ? structuredClone(newValue) : newValue;
+
+            const listenerOldValue = oldValue === initWatchVal ? newValue : oldValue;
+
+            try {
+              watcher.listenerFn(newValue, listenerOldValue, scope);
+            } catch (e: unknown) {
+              // Log listener errors but do not abort the digest
+              console.error('Error in watch listener:', e);
+            }
+
+            dirty = true;
+          } else if (this.$root.$$lastDirtyWatch === watcher) {
+            // Short-circuit: no more dirty watchers after this point
+            return false;
+          }
+        } catch (e: unknown) {
+          // Log watch function errors but do not abort the digest
+          console.error('Error in watch function:', e);
+        }
       }
-    }
+
+      return true;
+    });
 
     return dirty;
   }
@@ -237,6 +287,27 @@ export class Scope {
       this.$clearPhase();
       this.$root.$digest();
     }
+  }
+
+  /**
+   * Destroy this scope, removing it from the scope hierarchy.
+   * Clears watchers and listeners to prevent further digest participation.
+   */
+  $destroy(): void {
+    if (this === this.$root) {
+      return;
+    }
+
+    const parent = this.$parent;
+    if (parent) {
+      const index = parent.$$children.indexOf(this);
+      if (index >= 0) {
+        parent.$$children.splice(index, 1);
+      }
+    }
+
+    this.$$watchers = null;
+    this.$$listeners = {};
   }
 
   /**

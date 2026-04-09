@@ -5,7 +5,7 @@
  * Does not handle Map, Set, WeakMap, WeakRef, ArrayBuffer, circular
  * references, or arbitrary class instances.
  */
-export function isEqual(a: unknown, b: unknown): boolean {
+export function isEqual(a: unknown, b: unknown) {
   // Strict equality covers primitives, null, undefined, and same-reference objects
   if (a === b) return true;
 

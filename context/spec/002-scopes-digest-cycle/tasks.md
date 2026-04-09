@@ -32,12 +32,12 @@ _After this slice: `$watch` supports deep value comparison via `valueEq: true`. 
 
 _After this slice: child scopes (normal, isolated, custom parent) can be created, digests propagate through the tree, and scopes can be destroyed._
 
-- [ ] **Slice 3: Scope hierarchy and destruction**
-  - [ ] Implement `$new(isolated?, parent?)` — normal child via `Object.create`, isolated child via `new Scope()` with shared queues, custom parent support **[Agent: typescript-framework]**
-  - [ ] Implement `$$everyScope` for recursive scope tree traversal, integrate into `$$digestOnce` **[Agent: typescript-framework]**
-  - [ ] Implement `$destroy` — broadcast `$destroy` event, remove from parent `$$children`, nullify `$$watchers`, clear `$$listeners` **[Agent: typescript-framework]**
-  - [ ] Add tests for: prototype inheritance, property shadowing, isolated scope isolation, shared queues, custom parent, nested scope digest, destruction cleanup **[Agent: vitest-testing]**
-  - [ ] **Verify:** `pnpm lint` + `pnpm typecheck` + `pnpm test` all pass **[Agent: typescript-framework]**
+- [x] **Slice 3: Scope hierarchy and destruction**
+  - [x] Implement `$new(isolated?, parent?)` — normal child via `Object.create`, isolated child via `new Scope()` with shared queues, custom parent support **[Agent: typescript-framework]**
+  - [x] Implement `$$everyScope` for recursive scope tree traversal, integrate into `$$digestOnce` **[Agent: typescript-framework]**
+  - [x] Implement `$destroy` — broadcast `$destroy` event, remove from parent `$$children`, nullify `$$watchers`, clear `$$listeners` **[Agent: typescript-framework]**
+  - [x] Add tests for: prototype inheritance, property shadowing, isolated scope isolation, shared queues, custom parent, nested scope digest, destruction cleanup **[Agent: vitest-testing]**
+  - [x] **Verify:** `pnpm lint` + `pnpm typecheck` + `pnpm test` all pass **[Agent: typescript-framework]**
 
 ---
 

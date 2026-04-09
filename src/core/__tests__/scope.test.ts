@@ -529,6 +529,152 @@ describe('Scope', () => {
     });
   });
 
+  describe('inheritance', () => {
+    it('inherits parent properties via prototype chain', () => {
+      const parent = Scope.create<{ aValue: number[] }>();
+      parent.aValue = [1, 2, 3];
+
+      const child = parent.$new();
+
+      expect(child.aValue).toBe(parent.aValue);
+    });
+
+    it('does not affect parent when assigning on child (property shadowing)', () => {
+      const parent = Scope.create<{ name: string }>();
+      parent.name = 'Joe';
+
+      const child = parent.$new() as Scope & { name: string };
+      child.name = 'Jill';
+
+      expect(child.name).toBe('Jill');
+      expect(parent.name).toBe('Joe');
+    });
+
+    it('sees parent property changes through prototype chain', () => {
+      const parent = Scope.create<{ aValue: number[] }>();
+      parent.aValue = [1, 2, 3];
+
+      const child = parent.$new();
+
+      parent.aValue.push(4);
+
+      expect(child.aValue).toEqual([1, 2, 3, 4]);
+    });
+
+    it('digests child watchers when parent digest is called', () => {
+      const parent = Scope.create<{ aValue: string }>();
+      parent.aValue = 'abc';
+
+      const child = parent.$new();
+      const listenerFn = vi.fn();
+
+      child.$watch(() => child.aValue, listenerFn);
+
+      parent.$digest();
+
+      expect(listenerFn).toHaveBeenCalled();
+    });
+
+    it('does NOT inherit parent properties when isolated', () => {
+      const parent = Scope.create<{ aValue: string }>();
+      parent.aValue = 'abc';
+
+      const child = parent.$new(true);
+
+      expect(child.aValue).toBeUndefined();
+    });
+
+    it('shares $$asyncQueue with root when isolated', () => {
+      const parent = new Scope();
+      const child = parent.$new(true);
+
+      expect(child.$$asyncQueue).toBe(parent.$$asyncQueue);
+    });
+
+    it('digests isolated child watchers when parent digest is called', () => {
+      const parent = new Scope();
+      const child = parent.$new(true);
+      const listenerFn = vi.fn();
+
+      child.$watch(() => 'value', listenerFn);
+
+      parent.$digest();
+
+      expect(listenerFn).toHaveBeenCalled();
+    });
+
+    it('sets $parent to custom parent when provided', () => {
+      const parentScope = new Scope();
+      const customParent = parentScope.$new();
+      const child = parentScope.$new(false, customParent);
+
+      expect(child.$parent).toBe(customParent);
+      expect(customParent.$$children).toContain(child);
+    });
+
+    it('digests arbitrarily nested scope watchers', () => {
+      const parent = new Scope();
+      const child = parent.$new();
+      const grandchild = child.$new();
+      const listenerFn = vi.fn();
+
+      grandchild.$watch(() => 'value', listenerFn);
+
+      parent.$digest();
+
+      expect(listenerFn).toHaveBeenCalled();
+    });
+  });
+
+  describe('$destroy', () => {
+    it('removes scope from parent $$children', () => {
+      const parent = new Scope();
+      const child = parent.$new();
+
+      expect(parent.$$children).toContain(child);
+
+      child.$destroy();
+
+      expect(parent.$$children).not.toContain(child);
+    });
+
+    it('nullifies $$watchers so digest skips it', () => {
+      const parent = Scope.create<{ aValue: string }>();
+      parent.aValue = 'abc';
+
+      const child = parent.$new();
+      const listenerFn = vi.fn();
+
+      child.$watch(() => parent.aValue, listenerFn);
+
+      parent.$digest();
+      expect(listenerFn).toHaveBeenCalledTimes(1);
+
+      child.$destroy();
+      parent.aValue = 'def';
+      parent.$digest();
+
+      expect(listenerFn).toHaveBeenCalledTimes(1);
+    });
+
+    it('clears $$listeners', () => {
+      const parent = new Scope();
+      const child = parent.$new();
+
+      child.$$listeners = { someEvent: [vi.fn()] };
+
+      child.$destroy();
+
+      expect(child.$$listeners).toEqual({});
+    });
+
+    it('does not throw on root scope destroy', () => {
+      const scope = new Scope();
+
+      expect(() => { scope.$destroy(); }).not.toThrow();
+    });
+  });
+
   describe('$$phase', () => {
     it('has $$phase as null initially', () => {
       const scope = new Scope();
