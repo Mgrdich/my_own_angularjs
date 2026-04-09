@@ -944,13 +944,10 @@ describe('Scope', () => {
       let gotNewValues: unknown[] | undefined;
       let gotOldValues: unknown[] | undefined;
 
-      scope.$watchGroup(
-        [() => scope.a, () => scope.b],
-        (newValues, oldValues) => {
-          gotNewValues = newValues;
-          gotOldValues = oldValues;
-        },
-      );
+      scope.$watchGroup([() => scope.a, () => scope.b], (newValues, oldValues) => {
+        gotNewValues = newValues;
+        gotOldValues = oldValues;
+      });
 
       scope.$digest();
       vi.advanceTimersByTime(0);
@@ -992,10 +989,7 @@ describe('Scope', () => {
       scope.b = 2;
       const listenerFn = vi.fn();
 
-      const deregister = scope.$watchGroup(
-        [() => scope.a, () => scope.b],
-        listenerFn,
-      );
+      const deregister = scope.$watchGroup([() => scope.a, () => scope.b], listenerFn);
 
       scope.$digest();
       vi.advanceTimersByTime(0);
@@ -1020,13 +1014,10 @@ describe('Scope', () => {
       let gotNewValues: unknown[] | undefined;
       let gotOldValues: unknown[] | undefined;
 
-      scope.$watchGroup(
-        [() => scope.a, () => scope.b],
-        (newValues, oldValues) => {
-          gotNewValues = newValues;
-          gotOldValues = oldValues;
-        },
-      );
+      scope.$watchGroup([() => scope.a, () => scope.b], (newValues, oldValues) => {
+        gotNewValues = newValues;
+        gotOldValues = oldValues;
+      });
 
       scope.$digest();
       vi.advanceTimersByTime(0);
@@ -1042,13 +1033,10 @@ describe('Scope', () => {
       let gotNewValues: unknown[] | undefined;
       let gotOldValues: unknown[] | undefined;
 
-      scope.$watchGroup(
-        [() => scope.a, () => scope.b],
-        (newValues, oldValues) => {
-          gotNewValues = newValues;
-          gotOldValues = oldValues;
-        },
-      );
+      scope.$watchGroup([() => scope.a, () => scope.b], (newValues, oldValues) => {
+        gotNewValues = newValues;
+        gotOldValues = oldValues;
+      });
 
       scope.$digest();
       vi.advanceTimersByTime(0);
@@ -1071,10 +1059,7 @@ describe('Scope', () => {
       scope.arr = [1, 2, 3];
       const listenerFn = vi.fn();
 
-      scope.$watchCollection(
-        () => scope.arr,
-        listenerFn,
-      );
+      scope.$watchCollection(() => scope.arr, listenerFn);
 
       scope.$digest();
       expect(listenerFn).toHaveBeenCalledTimes(1);
@@ -1089,10 +1074,7 @@ describe('Scope', () => {
       scope.arr = [1, 2, 3];
       const listenerFn = vi.fn();
 
-      scope.$watchCollection(
-        () => scope.arr,
-        listenerFn,
-      );
+      scope.$watchCollection(() => scope.arr, listenerFn);
 
       scope.$digest();
       expect(listenerFn).toHaveBeenCalledTimes(1);
@@ -1107,10 +1089,7 @@ describe('Scope', () => {
       scope.arr = [1, 2, 3];
       const listenerFn = vi.fn();
 
-      scope.$watchCollection(
-        () => scope.arr,
-        listenerFn,
-      );
+      scope.$watchCollection(() => scope.arr, listenerFn);
 
       scope.$digest();
       expect(listenerFn).toHaveBeenCalledTimes(1);
@@ -1126,10 +1105,7 @@ describe('Scope', () => {
       scope.obj = { a: 1 };
       const listenerFn = vi.fn();
 
-      scope.$watchCollection(
-        () => scope.obj,
-        listenerFn,
-      );
+      scope.$watchCollection(() => scope.obj, listenerFn);
 
       scope.$digest();
       expect(listenerFn).toHaveBeenCalledTimes(1);
@@ -1144,10 +1120,7 @@ describe('Scope', () => {
       scope.obj = { a: 1, b: 2 };
       const listenerFn = vi.fn();
 
-      scope.$watchCollection(
-        () => scope.obj,
-        listenerFn,
-      );
+      scope.$watchCollection(() => scope.obj, listenerFn);
 
       scope.$digest();
       expect(listenerFn).toHaveBeenCalledTimes(1);
@@ -1162,10 +1135,7 @@ describe('Scope', () => {
       scope.obj = { a: 1, b: 2 };
       const listenerFn = vi.fn();
 
-      scope.$watchCollection(
-        () => scope.obj,
-        listenerFn,
-      );
+      scope.$watchCollection(() => scope.obj, listenerFn);
 
       scope.$digest();
       expect(listenerFn).toHaveBeenCalledTimes(1);
@@ -1180,10 +1150,7 @@ describe('Scope', () => {
       scope.value = 'hello';
       const listenerFn = vi.fn();
 
-      scope.$watchCollection(
-        () => scope.value,
-        listenerFn,
-      );
+      scope.$watchCollection(() => scope.value, listenerFn);
 
       scope.$digest();
       expect(listenerFn).toHaveBeenCalledTimes(1);
@@ -1198,10 +1165,7 @@ describe('Scope', () => {
       scope.value = [1, 2, 3];
       const listenerFn = vi.fn();
 
-      scope.$watchCollection(
-        () => scope.value,
-        listenerFn,
-      );
+      scope.$watchCollection(() => scope.value, listenerFn);
 
       scope.$digest();
       expect(listenerFn).toHaveBeenCalledTimes(1);
@@ -1216,10 +1180,7 @@ describe('Scope', () => {
       scope.value = { a: 1 };
       const listenerFn = vi.fn();
 
-      scope.$watchCollection(
-        () => scope.value,
-        listenerFn,
-      );
+      scope.$watchCollection(() => scope.value, listenerFn);
 
       scope.$digest();
       expect(listenerFn).toHaveBeenCalledTimes(1);
@@ -1234,10 +1195,7 @@ describe('Scope', () => {
       scope.arr = [1, NaN, 3];
       const listenerFn = vi.fn();
 
-      scope.$watchCollection(
-        () => scope.arr,
-        listenerFn,
-      );
+      scope.$watchCollection(() => scope.arr, listenerFn);
 
       scope.$digest();
       expect(listenerFn).toHaveBeenCalledTimes(1);
@@ -1252,10 +1210,7 @@ describe('Scope', () => {
       scope.obj = { a: NaN };
       const listenerFn = vi.fn();
 
-      scope.$watchCollection(
-        () => scope.obj,
-        listenerFn,
-      );
+      scope.$watchCollection(() => scope.obj, listenerFn);
 
       scope.$digest();
       expect(listenerFn).toHaveBeenCalledTimes(1);
@@ -1271,10 +1226,7 @@ describe('Scope', () => {
       scope.arr = [nested0, nested1];
       const listenerFn = vi.fn();
 
-      scope.$watchCollection(
-        () => scope.arr,
-        listenerFn,
-      );
+      scope.$watchCollection(() => scope.arr, listenerFn);
 
       scope.$digest();
       expect(listenerFn).toHaveBeenCalledTimes(1);
@@ -1291,10 +1243,7 @@ describe('Scope', () => {
       scope.obj = { a: innerObj };
       const listenerFn = vi.fn();
 
-      scope.$watchCollection(
-        () => scope.obj,
-        listenerFn,
-      );
+      scope.$watchCollection(() => scope.obj, listenerFn);
 
       scope.$digest();
       expect(listenerFn).toHaveBeenCalledTimes(1);
@@ -1384,10 +1333,7 @@ describe('Scope', () => {
       scope.arr = [1, 2, 3];
       const listenerFn = vi.fn();
 
-      const deregister = scope.$watchCollection(
-        () => scope.arr,
-        listenerFn,
-      );
+      const deregister = scope.$watchCollection(() => scope.arr, listenerFn);
 
       scope.$digest();
       expect(listenerFn).toHaveBeenCalledTimes(1);
@@ -1403,10 +1349,7 @@ describe('Scope', () => {
       scope.value = NaN;
       const listenerFn = vi.fn();
 
-      scope.$watchCollection(
-        () => scope.value,
-        listenerFn,
-      );
+      scope.$watchCollection(() => scope.value, listenerFn);
 
       scope.$digest();
       expect(listenerFn).toHaveBeenCalledTimes(1);
@@ -1420,10 +1363,7 @@ describe('Scope', () => {
       scope.arr = [1, 2, 3];
       const listenerFn = vi.fn();
 
-      scope.$watchCollection(
-        () => scope.arr,
-        listenerFn,
-      );
+      scope.$watchCollection(() => scope.arr, listenerFn);
 
       scope.$digest();
       expect(listenerFn).toHaveBeenCalledTimes(1);
@@ -1440,10 +1380,7 @@ describe('Scope', () => {
       scope.arr = [1, 2, 3];
       const listenerFn = vi.fn();
 
-      scope.$watchCollection(
-        () => scope.arr,
-        listenerFn,
-      );
+      scope.$watchCollection(() => scope.arr, listenerFn);
 
       scope.$digest();
       expect(listenerFn).toHaveBeenCalledTimes(1);
@@ -1458,10 +1395,7 @@ describe('Scope', () => {
       scope.arr = [1, 2, 3];
       const listenerFn = vi.fn();
 
-      scope.$watchCollection(
-        () => scope.arr,
-        listenerFn,
-      );
+      scope.$watchCollection(() => scope.arr, listenerFn);
 
       scope.$digest();
       expect(listenerFn).toHaveBeenCalledTimes(1);
@@ -1478,10 +1412,7 @@ describe('Scope', () => {
       scope.value = null;
       const listenerFn = vi.fn();
 
-      scope.$watchCollection(
-        () => scope.value,
-        listenerFn,
-      );
+      scope.$watchCollection(() => scope.value, listenerFn);
 
       scope.$digest();
       expect(listenerFn).toHaveBeenCalledTimes(1);
