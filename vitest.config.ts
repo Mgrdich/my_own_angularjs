@@ -1,6 +1,13 @@
+import path from 'node:path';
 import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
+  resolve: {
+    alias: {
+      '@core': path.resolve(__dirname, 'src/core'),
+      '@parser': path.resolve(__dirname, 'src/parser'),
+    },
+  },
   test: {
     passWithNoTests: true,
     environment: 'jsdom',

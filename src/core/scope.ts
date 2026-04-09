@@ -10,7 +10,7 @@ import {
   type Watcher,
   type WatchFn,
 } from './scope-types';
-import { isEqual } from './is-equal';
+import { isEqual } from './utils';
 
 /** Maximum number of digest iterations before throwing. */
 const TTL = 10;

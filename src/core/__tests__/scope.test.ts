@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, it, expect, vi } from 'vitest';
-import { Scope, type ScopeEvent } from '../index';
+import { Scope, type ScopeEvent } from '@core/index';
 
 describe('Scope', () => {
   describe('$digest', () => {

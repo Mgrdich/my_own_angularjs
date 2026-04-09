@@ -11,6 +11,17 @@ export default tseslint.config(
     },
     rules: {
       'no-duplicate-imports': 'error',
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              group: ['../*'],
+              message: 'Parent directory imports (../) are not allowed. Use @core/* alias instead.',
+            },
+          ],
+        },
+      ],
     },
   },
   {
