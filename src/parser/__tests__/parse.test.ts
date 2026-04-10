@@ -234,9 +234,7 @@ describe('parse', () => {
     });
 
     it('looks up a computed property using a scope key', () => {
-      expect(
-        parse('lock[key]')({ key: 'aKey', lock: { aKey: 'theValue' } }),
-      ).toBe('theValue');
+      expect(parse('lock[key]')({ key: 'aKey', lock: { aKey: 'theValue' } })).toBe('theValue');
     });
 
     it('accesses an element of an inline array literal', () => {
@@ -320,15 +318,11 @@ describe('parse', () => {
     });
 
     it('accesses a field on a function call result', () => {
-      expect(
-        parse('a().name')({ a: () => ({ name: 'Misko' }) }),
-      ).toBe('Misko');
+      expect(parse('a().name')({ a: () => ({ name: 'Misko' }) })).toBe('Misko');
     });
 
     it('calls a function returned by a function', () => {
-      expect(
-        parse('fn()()')({ fn: () => () => 42 }),
-      ).toBe(42);
+      expect(parse('fn()()')({ fn: () => () => 42 })).toBe(42);
     });
 
     it('binds bare function calls to the scope', () => {
