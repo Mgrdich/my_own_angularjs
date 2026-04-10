@@ -1,7 +1,7 @@
 # Functional Specification: Utility Functions
 
 - **Roadmap Item:** Rewrite helper/utility functions in TypeScript (Phase 0 — Reimplement Existing Features)
-- **Status:** Draft
+- **Status:** Completed
 - **Author:** Mgrdich
 
 ---
@@ -46,9 +46,9 @@ The following type-checking functions must be implemented as TypeScript type gua
 
 **Acceptance Criteria:**
 
-- [ ] Each type-checking function returns the correct boolean for all JavaScript value types (primitives, objects, null, undefined, NaN, typed arrays, etc.)
-- [ ] Each function acts as a TypeScript type guard, narrowing the type in conditional branches
-- [ ] Edge cases are handled: `isNumber(NaN)` returns `true` (NaN is typeof number), `isObject(null)` returns `false`, `isArray([])` returns `true`
+- [x] Each type-checking function returns the correct boolean for all JavaScript value types (primitives, objects, null, undefined, NaN, typed arrays, etc.)
+- [x] Each function acts as a TypeScript type guard, narrowing the type in conditional branches
+- [x] Edge cases are handled: `isNumber(NaN)` returns `true` (NaN is typeof number), `isObject(null)` returns `false`, `isArray([])` returns `true`
 
 ### 2.2 Equality
 
@@ -57,8 +57,8 @@ The following type-checking functions must be implemented as TypeScript type gua
 
 **Acceptance Criteria:**
 
-- [ ] Correctly compares primitives, NaN (NaN === NaN should be `true`), arrays, nested objects, Date, and RegExp
-- [ ] Existing implementation passes all legacy equivalent tests
+- [x] Correctly compares primitives, NaN (NaN === NaN should be `true`), arrays, nested objects, Date, and RegExp
+- [x] Existing implementation passes all legacy equivalent tests
 
 ### 2.3 Deep Clone
 
@@ -69,10 +69,10 @@ The following type-checking functions must be implemented as TypeScript type gua
 
 **Acceptance Criteria:**
 
-- [ ] Cloning a nested object produces a fully independent copy (mutations to clone do not affect original)
-- [ ] Circular references are detected and handled (not infinite recursion)
-- [ ] Date, RegExp, typed arrays, and ArrayBuffer are cloned correctly (not just by reference)
-- [ ] If `destination` is provided, properties are copied into it rather than creating a new object
+- [x] Cloning a nested object produces a fully independent copy (mutations to clone do not affect original)
+- [x] Circular references are detected and handled (not infinite recursion)
+- [x] Date, RegExp, typed arrays, and ArrayBuffer are cloned correctly (not just by reference)
+- [x] If `destination` is provided, properties are copied into it rather than creating a new object
 
 ### 2.4 Iteration
 
@@ -83,10 +83,10 @@ The following type-checking functions must be implemented as TypeScript type gua
 
 **Acceptance Criteria:**
 
-- [ ] Iterates all elements of an array, passing value, index, and the array
-- [ ] Iterates all own enumerable properties of an object, passing value, key, and the object
-- [ ] Stops iteration when the iteratee explicitly returns `false`
-- [ ] Skips inherited properties (own properties only)
+- [x] Iterates all elements of an array, passing value, index, and the array
+- [x] Iterates all own enumerable properties of an object, passing value, key, and the object
+- [x] Stops iteration when the iteratee explicitly returns `false`
+- [x] Skips inherited properties (own properties only)
 
 ### 2.5 Object Utilities
 
@@ -95,8 +95,8 @@ The following type-checking functions must be implemented as TypeScript type gua
 
 **Acceptance Criteria:**
 
-- [ ] `createMap()` returns an object where `Object.getPrototypeOf(result)` is `null`
-- [ ] `noop()` returns `undefined` and has no side effects
+- [x] `createMap()` returns an object where `Object.getPrototypeOf(result)` is `null`
+- [x] `noop()` returns `undefined` and has no side effects
 
 ### 2.6 Math / Number Utilities
 
@@ -105,10 +105,10 @@ The following type-checking functions must be implemented as TypeScript type gua
 
 **Acceptance Criteria:**
 
-- [ ] Single argument: `range(n)` produces `[0, 1, ..., n-1]`
-- [ ] Two arguments: `range(start, end)` produces values from start (inclusive) to end (exclusive)
-- [ ] Three arguments: `range(start, end, step)` steps by the given increment
-- [ ] Negative step for descending ranges: `range(5, 0, -1)` → `[5, 4, 3, 2, 1]`
+- [x] Single argument: `range(n)` produces `[0, 1, ..., n-1]`
+- [x] Two arguments: `range(start, end)` produces values from start (inclusive) to end (exclusive)
+- [x] Three arguments: `range(start, end, step)` steps by the given increment
+- [x] Negative step for descending ranges: `range(5, 0, -1)` → `[5, 4, 3, 2, 1]`
 
 ---
 

@@ -1,7 +1,7 @@
 # Technical Specification: Utility Functions
 
 - **Functional Specification:** `context/spec/004-utility-functions/functional-spec.md`
-- **Status:** Draft
+- **Status:** Completed
 - **Author(s):** Mgrdich
 
 ---

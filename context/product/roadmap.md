@@ -17,10 +17,10 @@ _Move existing code to a legacy folder, reimplement from scratch in clean TypeSc
   - [x] **GitHub Actions Workflow:** Set up a CI workflow that runs on every push and pull request.
   - [x] **CI Steps:** Lint (ESLint) → Format Check (Prettier) → Type Check (tsc) → Test (Vitest) — all must pass before merge.
 
-- [ ] **Reimplement Existing Features (from scratch)**
+- [x] **Reimplement Existing Features (from scratch)**
   - [x] **Scopes & Digest Cycle:** Rewrite the full Scope module in clean TypeScript — `$watch`, `$watchGroup`, `$watchCollection`, `$digest`, `$apply`, `$eval`, `$evalAsync`, `$applyAsync`, scope hierarchy, events (`$on`, `$emit`, `$broadcast`), and lifecycle (`$new`, `$destroy`).
   - [x] **Expression Parser:** Rewrite the lexer, AST builder, and expression compiler in TypeScript with full type safety.
-  - [ ] **Utility Functions:** Rewrite helper/utility functions in TypeScript.
+  - [x] **Utility Functions:** Rewrite helper/utility functions in TypeScript.
 
 - [ ] **Validate & Remove Legacy**
   - [ ] **Test Parity:** Ensure all new implementations pass equivalent tests to the legacy code, using the original AngularJS test suite as reference.
