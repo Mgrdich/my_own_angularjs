@@ -62,7 +62,7 @@ export function isEqual(a: unknown, b: unknown) {
   if (keysA.length !== keysB.length) return false;
 
   for (const key of keysA) {
-    if (!Object.prototype.hasOwnProperty.call(b, key)) return false;
+    if (!Object.prototype.hasOwnProperty.call(objB, key)) return false;
     if (!isEqual(objA[key], objB[key])) {
       return false;
     }
@@ -100,11 +100,11 @@ export function isDefined<T>(value: T | undefined): value is T {
   return typeof value !== 'undefined';
 }
 
-export function isArray(value: unknown): value is unknown[] {
+export function isArray<T>(value: T | readonly unknown[]): value is Extract<T, readonly unknown[]> {
   return Array.isArray(value);
 }
 
-export function isObject(value: unknown): value is object {
+export function isObject(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object';
 }
 
@@ -116,22 +116,35 @@ export function isRegExp(value: unknown): value is RegExp {
   return value instanceof RegExp;
 }
 
-export function isNaN(value: unknown): boolean {
+export function isNaN(value: unknown) {
   return typeof value === 'number' && value !== value;
 }
 
-export function isWindow(value: unknown): boolean {
-  return isObject(value) && (value as Record<string, unknown>)['window'] === value;
+export function isWindow(value: unknown) {
+  return isObject(value) && 'window' in value && value['window'] === value;
 }
 
-export function isBlankObject(value: unknown): boolean {
+export function isBlankObject(value: unknown) {
   return isObject(value) && Object.getPrototypeOf(value) === null;
 }
+
+type TypedArray =
+  | Uint8Array
+  | Uint8ClampedArray
+  | Uint16Array
+  | Uint32Array
+  | Int8Array
+  | Int16Array
+  | Int32Array
+  | Float32Array
+  | Float64Array
+  | BigInt64Array
+  | BigUint64Array;
 
 const TYPED_ARRAY_REGEXP =
   /^\[object (?:Uint8|Uint8Clamped|Uint16|Uint32|Int8|Int16|Int32|Float32|Float64|BigInt64|BigUint64)Array]$/;
 
-export function isTypedArray(value: unknown): boolean {
+export function isTypedArray(value: unknown): value is TypedArray {
   return TYPED_ARRAY_REGEXP.test(Object.prototype.toString.call(value));
 }
 
@@ -139,12 +152,13 @@ export function isArrayBuffer(value: unknown): value is ArrayBuffer {
   return value instanceof ArrayBuffer;
 }
 
-export function isArrayLike(value: unknown): boolean {
+export function isArrayLike(value: unknown) {
   if (isArray(value) || isString(value)) return true;
 
   if (!isObject(value)) return false;
 
-  const length = (value as Record<string, unknown>)['length'];
+  if (!('length' in value)) return false;
+  const { length } = value;
   return (
     typeof length === 'number' && length >= 0 && length <= Number.MAX_SAFE_INTEGER && Math.floor(length) === length
   );
@@ -183,14 +197,13 @@ function copyRecursive<T>(source: T, destination: T | undefined, visited: Set<T>
 
   // ArrayBuffer
   if (isArrayBuffer(source)) {
-    return (source as ArrayBuffer).slice(0) as T;
+    return source.slice(0) as T;
   }
 
-  // TypedArray — use `any` because TypedArray constructors are not uniformly typed
+  // TypedArray
   if (isTypedArray(source)) {
-    const typed = source as unknown as { buffer: ArrayBuffer; constructor: unknown };
     // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-call
-    return new (typed.constructor as any)(typed.buffer.slice(0)) as T;
+    return new (source.constructor as any)(source.buffer.slice(0)) as T;
   }
 
   // Circular reference detection
@@ -221,9 +234,8 @@ function copyRecursive<T>(source: T, destination: T | undefined, visited: Set<T>
         delete result[key];
       }
     }
-    const src = source as Record<string, unknown>;
-    for (const key of Object.keys(src)) {
-      result[key] = copyRecursive(src[key], undefined, visited);
+    for (const key of Object.keys(source)) {
+      result[key] = copyRecursive(source[key], undefined, visited);
     }
     return result as T;
   }
@@ -231,34 +243,35 @@ function copyRecursive<T>(source: T, destination: T | undefined, visited: Set<T>
   return source;
 }
 
-export function forEach<T>(collection: T[], iteratee: (value: T, index: number, array: T[]) => undefined | false): void;
+export function forEach<T>(collection: T[], iteratee: (value: T, index: number, array: T[]) => void | false): void;
 export function forEach<T>(
   collection: Record<string, T>,
-  iteratee: (value: T, key: string, object: Record<string, T>) => undefined | false,
+  iteratee: (value: T, key: string, object: Record<string, T>) => void | false,
 ): void;
 export function forEach(
   collection: null | undefined,
-  iteratee: (value: unknown, key: unknown, collection: unknown) => undefined | false,
+  iteratee: (value: unknown, key: unknown, collection: unknown) => void | false,
 ): void;
 export function forEach(
   collection: unknown[] | Record<string, unknown> | null | undefined,
   iteratee:
-    | ((value: unknown, index: number, array: unknown[]) => undefined | false)
-    | ((value: unknown, key: string, object: Record<string, unknown>) => undefined | false),
+    | ((value: unknown, index: number, array: unknown[]) => void | false)
+    | ((value: unknown, key: string, object: Record<string, unknown>) => void | false),
 ): void {
   if (collection == null) return;
 
   if (isArray(collection)) {
-    const fn = iteratee as (value: unknown, index: number, array: unknown[]) => undefined | false;
+    const fn = iteratee as (value: unknown, index: number, array: unknown[]) => void | false;
     for (let i = 0; i < collection.length; i++) {
       if (fn(collection[i], i, collection) === false) break;
     }
   } else {
     const obj = collection;
-    const fn = iteratee as (value: unknown, key: string, object: Record<string, unknown>) => undefined | false;
+    const fn = iteratee as (value: unknown, key: string, object: Record<string, unknown>) => void | false;
     const keys = Object.keys(obj);
     for (let i = 0; i < keys.length; i++) {
-      const key = keys[i] as string;
+      const key = keys[i];
+      if (key === undefined) continue;
       if (fn(obj[key], key, obj) === false) break;
     }
   }
