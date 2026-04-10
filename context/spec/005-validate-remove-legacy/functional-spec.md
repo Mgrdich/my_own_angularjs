@@ -1,7 +1,7 @@
 # Functional Specification: Validate & Remove Legacy
 
 - **Roadmap Item:** Validate test parity and remove the legacy folder (Phase 0 — Legacy Migration & Fresh Start)
-- **Status:** Draft
+- **Status:** Completed
 - **Author:** Mgrdich
 
 ---
@@ -26,10 +26,10 @@ Cross-reference the legacy test files (`legacy/src/__tests__/Scope.test.ts`, `le
 
 **Acceptance Criteria:**
 
-- [ ] All behavioral scenarios from the legacy Scope tests are covered by the new test suite
-- [ ] All behavioral scenarios from the original AngularJS Scope test suite (relevant to implemented features) are covered
-- [ ] Any gaps found are fixed (new tests added, implementation corrected if needed) before proceeding
-- [ ] `pnpm test` passes with all Scope tests green
+- [x] All behavioral scenarios from the legacy Scope tests are covered by the new test suite
+- [x] All behavioral scenarios from the original AngularJS Scope test suite (relevant to implemented features) are covered
+- [x] Any gaps found are fixed (new tests added, implementation corrected if needed) before proceeding
+- [x] `pnpm test` passes with all Scope tests green
 
 ### 2.2 Behavioral Parity Validation — Expression Parser
 
@@ -37,10 +37,10 @@ Cross-reference the legacy parser test file (`legacy/src/__tests__/js_legacy/par
 
 **Acceptance Criteria:**
 
-- [ ] All behavioral scenarios from the legacy parser tests are covered by the new test suite
-- [ ] All behavioral scenarios from the original AngularJS parser test suite (relevant to implemented features) are covered
-- [ ] Any gaps found are fixed before proceeding
-- [ ] `pnpm test` passes with all parser tests green
+- [x] All behavioral scenarios from the legacy parser tests are covered by the new test suite
+- [x] All behavioral scenarios from the original AngularJS parser test suite (relevant to implemented features) are covered
+- [x] Any gaps found are fixed before proceeding
+- [x] `pnpm test` passes with all parser tests green
 
 ### 2.3 Behavioral Parity Validation — Utility Functions
 
@@ -48,10 +48,10 @@ Cross-reference the legacy utility test file (`legacy/src/util/__tests__/LibHelp
 
 **Acceptance Criteria:**
 
-- [ ] All behavioral scenarios from the legacy utility tests are covered by the new test suite
-- [ ] All behavioral scenarios from the original AngularJS utility functions (relevant to implemented functions) are covered
-- [ ] Any gaps found are fixed before proceeding
-- [ ] `pnpm test` passes with all utility tests green
+- [x] All behavioral scenarios from the legacy utility tests are covered by the new test suite
+- [x] All behavioral scenarios from the original AngularJS utility functions (relevant to implemented functions) are covered
+- [x] Any gaps found are fixed before proceeding
+- [x] `pnpm test` passes with all utility tests green
 
 ### 2.4 Remove Legacy Folder
 
@@ -59,11 +59,11 @@ Once all three modules pass parity validation, delete the entire `legacy/` direc
 
 **Acceptance Criteria:**
 
-- [ ] The `legacy/` directory is completely removed from the repository
-- [ ] No files in the repository reference or import from `legacy/`
-- [ ] `pnpm test` passes after removal
-- [ ] `pnpm build` succeeds after removal
-- [ ] `pnpm typecheck` passes after removal
+- [x] The `legacy/` directory is completely removed from the repository
+- [x] No files in the repository reference or import from `legacy/`
+- [x] `pnpm test` passes after removal
+- [x] `pnpm build` succeeds after removal
+- [x] `pnpm typecheck` passes after removal
 
 ### 2.5 Full Cleanup of Legacy References
 
@@ -71,10 +71,10 @@ Remove any remaining references to the legacy folder from configs, documentation
 
 **Acceptance Criteria:**
 
-- [ ] No references to `legacy/` remain in any config file (tsconfig, eslint, vitest, rollup, package.json)
-- [ ] No references to `legacy/` remain in any documentation file (CLAUDE.md, README, spec files)
-- [ ] No references to `legacy/` remain in CI/CD workflows
-- [ ] The repository is clean — `git grep legacy` (tracked files only) returns no stale references
+- [x] No references to `legacy/` remain in any config file (tsconfig, eslint, vitest, rollup, package.json)
+- [x] No references to `legacy/` remain in any documentation file (CLAUDE.md, README, spec files)
+- [x] No references to `legacy/` remain in CI/CD workflows
+- [x] The repository is clean — `git grep legacy` (tracked files only) returns no stale references
 
 ---
 

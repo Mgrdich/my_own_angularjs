@@ -1,6 +1,6 @@
 /** Type guard that narrows a string key to a key of the given object. */
 export function isKeyOf<T extends Record<string, unknown>>(obj: T, key: string): key is Extract<keyof T, string> {
-  return key in obj;
+  return Object.prototype.hasOwnProperty.call(obj, key);
 }
 
 /**
@@ -24,13 +24,18 @@ export function isEqual(a: unknown, b: unknown) {
     return false;
   }
 
-  // Date comparison via epoch millis
-  if (a instanceof Date && b instanceof Date) {
-    return a.getTime() === b.getTime();
+  // Date comparison via epoch millis (NaN-safe: two invalid dates are equal)
+  if (a instanceof Date || b instanceof Date) {
+    if (!(a instanceof Date) || !(b instanceof Date)) return false;
+    const timeA = a.getTime();
+    const timeB = b.getTime();
+    if (Number.isNaN(timeA) && Number.isNaN(timeB)) return true;
+    return timeA === timeB;
   }
 
   // RegExp comparison via source pattern and flags
-  if (a instanceof RegExp && b instanceof RegExp) {
+  if (a instanceof RegExp || b instanceof RegExp) {
+    if (!(a instanceof RegExp) || !(b instanceof RegExp)) return false;
     return a.source === b.source && a.flags === b.flags;
   }
 
@@ -54,7 +59,7 @@ export function isEqual(a: unknown, b: unknown) {
   const objB = b as Record<string, unknown>;
 
   const filterKeys = (obj: Record<string, unknown>) =>
-    Object.keys(obj).filter((key) => !key.startsWith('$') && typeof obj[key] !== 'function');
+    Object.keys(obj).filter((key) => !key.startsWith('$') && typeof obj[key] !== 'function' && obj[key] !== undefined);
 
   const keysA = filterKeys(objA);
   const keysB = filterKeys(objB);
@@ -172,6 +177,9 @@ export function isArrayLike(value: unknown) {
  * clearing existing contents) rather than creating a new container.
  */
 export function copy<T>(source: T, destination?: T): T {
+  if (destination !== undefined && source === destination) {
+    throw new Error('Cannot copy! Source and destination are identical.');
+  }
   const visited = new Set<T>();
   return copyRecursive(source, destination, visited);
 }
@@ -197,11 +205,17 @@ function copyRecursive<T>(source: T, destination: T | undefined, visited: Set<T>
 
   // ArrayBuffer
   if (isArrayBuffer(source)) {
+    if (destination !== undefined) {
+      throw new Error('Cannot copy! ArrayBuffer destination is not supported.');
+    }
     return source.slice(0) as T;
   }
 
   // TypedArray
   if (isTypedArray(source)) {
+    if (destination !== undefined) {
+      throw new Error('Cannot copy! TypedArray destination is not supported.');
+    }
     // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-call
     return new (source.constructor as any)(source.buffer.slice(0)) as T;
   }

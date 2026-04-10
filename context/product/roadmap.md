@@ -22,9 +22,9 @@ _Move existing code to a legacy folder, reimplement from scratch in clean TypeSc
   - [x] **Expression Parser:** Rewrite the lexer, AST builder, and expression compiler in TypeScript with full type safety.
   - [x] **Utility Functions:** Rewrite helper/utility functions in TypeScript.
 
-- [ ] **Validate & Remove Legacy**
-  - [ ] **Test Parity:** Ensure all new implementations pass equivalent tests to the legacy code, using the original AngularJS test suite as reference.
-  - [ ] **Remove Legacy Folder:** Once parity is confirmed, delete the `legacy/` folder entirely.
+- [x] **Validate & Remove Legacy**
+  - [x] **Test Parity:** Ensure all new implementations pass equivalent tests to the legacy code, using the original AngularJS test suite as reference.
+  - [x] **Remove Legacy Folder:** Once parity is confirmed, delete the `legacy/` folder entirely.
 
 ---
 

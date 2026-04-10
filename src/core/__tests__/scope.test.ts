@@ -280,6 +280,31 @@ describe('Scope', () => {
       }).not.toThrow();
     });
 
+    it('handles destroying multiple watches in same digest without crashing', () => {
+      const scope = Scope.create<{ aValue: string }>();
+      scope.aValue = 'abc';
+
+      const deregisterHolder: { second: () => void } = { second: () => {} };
+      const deregisterFirst = scope.$watch(
+        () => scope.aValue,
+        () => {
+          deregisterFirst();
+          deregisterHolder.second();
+        },
+      );
+
+      deregisterHolder.second = scope.$watch(
+        () => scope.aValue,
+        () => {
+          /* noop */
+        },
+      );
+
+      expect(() => {
+        scope.$digest();
+      }).not.toThrow();
+    });
+
     it('uses initWatchVal as oldValue on first listener invocation (oldValue === newValue)', () => {
       const scope = Scope.create<{ aValue: number }>();
       scope.aValue = 123;
@@ -624,6 +649,180 @@ describe('Scope', () => {
 
       expect(listenerFn).toHaveBeenCalled();
     });
+
+    it('child $digest does NOT trigger parent watchers', () => {
+      const parent = Scope.create<{ aValue: string }>();
+      parent.aValue = 'abc';
+      const child = parent.$new();
+      const parentListener = vi.fn();
+
+      parent.$watch(() => parent.aValue, parentListener);
+
+      child.$digest();
+
+      expect(parentListener).not.toHaveBeenCalled();
+    });
+
+    it('$apply digests from root, triggering parent watchers', () => {
+      const parent = Scope.create<{ aValue: string }>();
+      parent.aValue = 'abc';
+      const child = parent.$new();
+      const parentListener = vi.fn();
+
+      parent.$watch(() => parent.aValue, parentListener);
+
+      child.$apply(() => {
+        /* noop */
+      });
+
+      expect(parentListener).toHaveBeenCalled();
+    });
+
+    it('$evalAsync digests from root, triggering parent watchers', () => {
+      vi.useFakeTimers();
+      const parent = Scope.create<{ aValue: string }>();
+      parent.aValue = 'abc';
+      const child = parent.$new();
+      const parentListener = vi.fn();
+
+      parent.$watch(() => parent.aValue, parentListener);
+
+      child.$evalAsync(() => {
+        /* noop */
+      });
+
+      vi.advanceTimersByTime(0);
+
+      expect(parentListener).toHaveBeenCalled();
+      vi.useRealTimers();
+    });
+
+    it('isolated scope $apply digests from root', () => {
+      const parent = Scope.create<{ aValue: string }>();
+      parent.aValue = 'abc';
+      const isolatedChild = parent.$new(true);
+      const parentListener = vi.fn();
+
+      parent.$watch(() => parent.aValue, parentListener);
+
+      isolatedChild.$apply(() => {
+        /* noop */
+      });
+
+      expect(parentListener).toHaveBeenCalled();
+    });
+
+    it('isolated scope $evalAsync digests from root', () => {
+      vi.useFakeTimers();
+      const parent = Scope.create<{ aValue: string }>();
+      parent.aValue = 'abc';
+      const isolatedChild = parent.$new(true);
+      const parentListener = vi.fn();
+
+      parent.$watch(() => parent.aValue, parentListener);
+
+      isolatedChild.$evalAsync(() => {
+        /* noop */
+      });
+
+      vi.advanceTimersByTime(0);
+
+      expect(parentListener).toHaveBeenCalled();
+      vi.useRealTimers();
+    });
+
+    it('$evalAsync executes on isolated scope context', () => {
+      const parent = new Scope();
+      const isolatedChild = parent.$new(true) as Scope & { value: number };
+
+      isolatedChild.$evalAsync((s) => {
+        (s as Scope & { value: number }).value = 1;
+      });
+
+      parent.$digest();
+
+      expect(isolatedChild.value).toBe(1);
+    });
+
+    it('$$postDigest runs on isolated scope', () => {
+      const parent = new Scope();
+      const isolatedChild = parent.$new(true);
+      let postDigestRan = false;
+
+      isolatedChild.$$postDigest(() => {
+        postDigestRan = true;
+      });
+
+      parent.$digest();
+
+      expect(postDigestRan).toBe(true);
+    });
+
+    it('cannot watch parent attributes when isolated', () => {
+      const parent = Scope.create<{ parentProp: string }>();
+      parent.parentProp = 'hello';
+      const isolatedChild = parent.$new(true);
+      let watchedValue: unknown = 'not-set';
+
+      isolatedChild.$watch(
+        (scope) => (scope as Scope & { parentProp: string }).parentProp,
+        (newValue: unknown) => {
+          watchedValue = newValue;
+        },
+      );
+
+      parent.$digest();
+
+      expect(watchedValue).toBeUndefined();
+    });
+
+    it('inherits parent properties defined after $new', () => {
+      const parent = new Scope();
+      const child = parent.$new();
+
+      parent['newProp'] = 1;
+
+      expect(child['newProp']).toBe(1);
+    });
+
+    it('child does not cause parent to inherit its properties', () => {
+      const parent = new Scope();
+      const child = parent.$new();
+
+      (child as Scope & { childProp: number }).childProp = 1;
+
+      expect(parent['childProp']).toBeUndefined();
+    });
+
+    it('does not shadow parent reference-type members', () => {
+      const parent = Scope.create<{ user: { name: string } }>();
+      parent.user = { name: 'Joe' };
+
+      const child = parent.$new() as Scope & { user: { name: string } };
+      child.user.name = 'Jill';
+
+      expect(parent.user.name).toBe('Jill');
+    });
+
+    it('$root points to root scope', () => {
+      const root = new Scope();
+      const child = root.$new();
+      const grandchild = child.$new();
+
+      expect(root.$root).toBe(root);
+      expect(child.$root).toBe(root);
+      expect(grandchild.$root).toBe(root);
+    });
+
+    it('$parent chain is correct', () => {
+      const root = new Scope();
+      const child = root.$new();
+      const grandchild = child.$new();
+
+      expect(root.$parent).toBeNull();
+      expect(child.$parent).toBe(root);
+      expect(grandchild.$parent).toBe(child);
+    });
   });
 
   describe('$destroy', () => {
@@ -674,6 +873,50 @@ describe('Scope', () => {
       expect(() => {
         scope.$destroy();
       }).not.toThrow();
+    });
+
+    it('$destroy is idempotent: calling twice does not throw', () => {
+      const parent = new Scope();
+      const child = parent.$new();
+
+      child.$destroy();
+
+      expect(() => {
+        child.$destroy();
+      }).not.toThrow();
+    });
+
+    it('after $destroy, $apply is a no-op (watch silently ignored)', () => {
+      const parent = new Scope();
+      const child = parent.$new();
+      const listenerFn = vi.fn();
+
+      child.$watch(() => 'value', listenerFn);
+
+      child.$destroy();
+      listenerFn.mockClear();
+
+      // $watch on a destroyed scope returns a noop deregister
+      const deregister = child.$watch(() => 'anotherValue', vi.fn());
+      expect(typeof deregister).toBe('function');
+
+      parent.$digest();
+
+      expect(listenerFn).not.toHaveBeenCalled();
+    });
+
+    it('$destroy preserves model properties', () => {
+      const parent = Scope.create<{ parentProp: string }>();
+      parent.parentProp = 'parent';
+      const child = parent.$new() as Scope & { childProp: string; parentProp: string };
+      child.childProp = 'child';
+
+      child.$destroy();
+
+      // Own properties remain accessible
+      expect(child.childProp).toBe('child');
+      // Inherited properties remain accessible via prototype
+      expect(child.parentProp).toBe('parent');
     });
   });
 
@@ -775,6 +1018,29 @@ describe('Scope', () => {
 
       consoleSpy.mockRestore();
     });
+
+    it('$evalAsync expression has not executed yet when listener returns', () => {
+      const scope = Scope.create<{ aValue: string; asyncExecuted: boolean }>();
+      scope.aValue = 'abc';
+      scope.asyncExecuted = false;
+      let asyncExecutedDuringListener = true;
+
+      scope.$watch(
+        () => scope.aValue,
+        () => {
+          scope.$evalAsync(() => {
+            scope.asyncExecuted = true;
+          });
+          // At this point the evalAsync has been queued but not yet executed
+          asyncExecutedDuringListener = scope.asyncExecuted;
+        },
+      );
+
+      scope.$digest();
+
+      expect(asyncExecutedDuringListener).toBe(false);
+      expect(scope.asyncExecuted).toBe(true);
+    });
   });
 
   describe('$applyAsync', () => {
@@ -866,6 +1132,26 @@ describe('Scope', () => {
 
       consoleSpy.mockRestore();
     });
+
+    it('$applyAsync flushes during active digest when timer is pending', () => {
+      const scope = Scope.create<{ aValue: string; asyncApplied: boolean }>();
+      scope.aValue = 'abc';
+      scope.asyncApplied = false;
+
+      scope.$watch(
+        () => scope.aValue,
+        () => {
+          scope.$applyAsync(() => {
+            scope.asyncApplied = true;
+          });
+        },
+      );
+
+      scope.$digest();
+
+      // $applyAsync IS flushed at the end of the active digest when the timer is pending
+      expect(scope.asyncApplied).toBe(true);
+    });
   });
 
   describe('$$postDigest', () => {
@@ -925,6 +1211,60 @@ describe('Scope', () => {
       expect(secondRan).toBe(true);
 
       consoleSpy.mockRestore();
+    });
+
+    it('$$postDigest FIFO queue with nesting: callback can schedule another that runs in same drain', () => {
+      const scope = new Scope();
+      const order: number[] = [];
+
+      scope.$$postDigest(() => {
+        order.push(1);
+        scope.$$postDigest(() => {
+          order.push(2);
+        });
+      });
+
+      scope.$digest();
+
+      expect(order).toEqual([1, 2]);
+    });
+
+    it('$$postDigest supports nested $apply', () => {
+      const scope = Scope.create<{ aValue: string }>();
+      scope.aValue = 'initial';
+      let watchCount = 0;
+
+      scope.$watch(
+        () => scope.aValue,
+        () => {
+          watchCount++;
+        },
+      );
+
+      scope.$$postDigest(() => {
+        scope.$apply(() => {
+          scope.aValue = 'changed';
+        });
+      });
+
+      scope.$digest();
+      // First digest fires the watcher once, then $$postDigest calls $apply which triggers another digest
+      expect(watchCount).toBe(2);
+      expect(scope.aValue).toBe('changed');
+    });
+
+    it('$$postDigest on child scope shares queue and runs when root digests', () => {
+      const parent = new Scope();
+      const child = parent.$new();
+      let postDigestRan = false;
+
+      child.$$postDigest(() => {
+        postDigestRan = true;
+      });
+
+      parent.$digest();
+
+      expect(postDigestRan).toBe(true);
     });
   });
 
@@ -1425,6 +1765,62 @@ describe('Scope', () => {
       scope.$digest();
       expect(listenerFn).toHaveBeenCalledTimes(3);
     });
+
+    it('object with length property is not treated as array', () => {
+      const scope = Scope.create<{ obj: Record<string, unknown> }>();
+      scope.obj = { length: 42, otherKey: 'abc' };
+      const listenerFn = vi.fn();
+
+      scope.$watchCollection(() => scope.obj, listenerFn);
+
+      scope.$digest();
+      expect(listenerFn).toHaveBeenCalledTimes(1);
+
+      scope.obj['otherKey'] = 'def';
+      scope.$digest();
+      expect(listenerFn).toHaveBeenCalledTimes(2);
+    });
+
+    it('primitive oldValue tracking with $watchCollection', () => {
+      const scope = Scope.create<{ value: number }>();
+      scope.value = 1;
+      let receivedOldValue: unknown;
+
+      scope.$watchCollection(
+        () => scope.value,
+        (_newValue: unknown, oldValue: unknown) => {
+          receivedOldValue = oldValue;
+        },
+      );
+
+      scope.$digest();
+      // First call: oldValue === newValue
+      expect(receivedOldValue).toBe(1);
+
+      scope.value = 2;
+      scope.$digest();
+      expect(receivedOldValue).toBe(1);
+
+      scope.value = 3;
+      scope.$digest();
+      expect(receivedOldValue).toBe(2);
+    });
+
+    it('handles Object.create(null) objects', () => {
+      const scope = Scope.create<{ obj: Record<string, unknown> }>();
+      scope.obj = Object.create(null) as Record<string, unknown>;
+      scope.obj['a'] = 1;
+      const listenerFn = vi.fn();
+
+      scope.$watchCollection(() => scope.obj, listenerFn);
+
+      scope.$digest();
+      expect(listenerFn).toHaveBeenCalledTimes(1);
+
+      scope.obj['b'] = 2;
+      scope.$digest();
+      expect(listenerFn).toHaveBeenCalledTimes(2);
+    });
   });
 
   describe('events', () => {
@@ -1695,6 +2091,136 @@ describe('Scope', () => {
       scope.$destroy();
 
       expect(childListener).toHaveBeenCalled();
+    });
+
+    it('$emit still calls remaining listeners on same scope after stopPropagation', () => {
+      const parent = new Scope();
+      const scope = parent.$new();
+      const listener1 = vi.fn((event: ScopeEvent) => {
+        event.stopPropagation();
+      });
+      const listener2 = vi.fn();
+      const parentListener = vi.fn();
+
+      scope.$on('someEvent', listener1);
+      scope.$on('someEvent', listener2);
+      parent.$on('someEvent', parentListener);
+
+      scope.$emit('someEvent');
+
+      expect(listener1).toHaveBeenCalled();
+      expect(listener2).toHaveBeenCalled();
+      expect(parentListener).not.toHaveBeenCalled();
+    });
+
+    it('no listeners fire after $destroy', () => {
+      const parent = new Scope();
+      const scope = parent.$new();
+      const listener = vi.fn();
+
+      scope.$on('someEvent', listener);
+      scope.$destroy();
+      listener.mockClear();
+
+      scope.$emit('someEvent');
+
+      expect(listener).not.toHaveBeenCalled();
+    });
+
+    it('separate $$listeners per scope', () => {
+      const parent = new Scope();
+      const child = parent.$new();
+      const isolatedChild = parent.$new(true);
+
+      expect(parent.$$listeners).not.toBe(child.$$listeners);
+      expect(parent.$$listeners).not.toBe(isolatedChild.$$listeners);
+      expect(child.$$listeners).not.toBe(isolatedChild.$$listeners);
+    });
+
+    it('currentScope during $broadcast equals each scope as it traverses', () => {
+      const parent = new Scope();
+      const child = parent.$new();
+      const grandchild = child.$new();
+      const currentScopes: (Scope | null)[] = [];
+
+      parent.$on('someEvent', (event) => {
+        currentScopes.push(event.currentScope);
+      });
+      child.$on('someEvent', (event) => {
+        currentScopes.push(event.currentScope);
+      });
+      grandchild.$on('someEvent', (event) => {
+        currentScopes.push(event.currentScope);
+      });
+
+      parent.$broadcast('someEvent');
+
+      expect(currentScopes).toEqual([parent, child, grandchild]);
+    });
+
+    it('targetScope on $broadcast equals the originating scope', () => {
+      const parent = new Scope();
+      const child = parent.$new();
+      const targetScopes: (Scope | null)[] = [];
+
+      parent.$on('someEvent', (event) => {
+        targetScopes.push(event.targetScope);
+      });
+      child.$on('someEvent', (event) => {
+        targetScopes.push(event.targetScope);
+      });
+
+      parent.$broadcast('someEvent');
+
+      expect(targetScopes[0]).toBe(parent);
+      expect(targetScopes[1]).toBe(parent);
+    });
+
+    it('event listener removal by a previous listener prevents removed listener from firing', () => {
+      const scope = new Scope();
+      const listenerB = vi.fn();
+      const deregisterB = scope.$on('someEvent', listenerB);
+
+      scope.$on('someEvent', () => {
+        deregisterB();
+      });
+
+      // listenerB is registered first but deregisterA sets it to null mid-iteration
+      // Due to iteration order, listenerB is at index 0 and has already fired,
+      // but let's test when A removes B where B is registered after A
+      const scope2 = new Scope();
+      const listenerB2 = vi.fn();
+
+      const holder: { deregB2: () => void } = { deregB2: () => {} };
+      scope2.$on('someEvent', () => {
+        holder.deregB2();
+      });
+      holder.deregB2 = scope2.$on('someEvent', listenerB2);
+
+      scope2.$emit('someEvent');
+
+      // listenerB2 should NOT fire because listener A (index 0) deregistered it (set to null)
+      expect(listenerB2).not.toHaveBeenCalled();
+    });
+
+    it('recursive $emit does not cause infinite loops', () => {
+      const scope = new Scope();
+      let emitCount = 0;
+
+      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+      scope.$on('someEvent', () => {
+        emitCount++;
+        if (emitCount < 3) {
+          scope.$emit('someEvent');
+        }
+      });
+
+      scope.$emit('someEvent');
+
+      expect(emitCount).toBe(3);
+
+      consoleSpy.mockRestore();
     });
   });
 

@@ -1,7 +1,7 @@
 # Technical Specification: Validate & Remove Legacy
 
 - **Functional Specification:** `context/spec/005-validate-remove-legacy/functional-spec.md`
-- **Status:** Draft
+- **Status:** Completed
 - **Author(s):** Mgrdich
 
 ---
