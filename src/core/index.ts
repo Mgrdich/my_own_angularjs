@@ -12,3 +12,4 @@ export type {
   WatchFn,
 } from './scope-types';
 export { initWatchVal } from './scope-types';
+export * from './utils';
