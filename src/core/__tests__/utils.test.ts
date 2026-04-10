@@ -229,12 +229,7 @@ describe('isEqual', () => {
     });
 
     it('treats objects with both $-keys and function values differing only in those as equal', () => {
-      expect(
-        isEqual(
-          { a: 1, $key: 'x', fn: () => {} },
-          { a: 1, $key: 'y', fn: () => 'other' },
-        ),
-      ).toBe(true);
+      expect(isEqual({ a: 1, $key: 'x', fn: () => {} }, { a: 1, $key: 'y', fn: () => 'other' })).toBe(true);
     });
   });
 });
@@ -860,12 +855,16 @@ describe('forEach', () => {
   describe('null/undefined handling', () => {
     it('does not throw when collection is null', () => {
       const iteratee = () => undefined;
-      expect(() => { forEach(null, iteratee); }).not.toThrow();
+      expect(() => {
+        forEach(null, iteratee);
+      }).not.toThrow();
     });
 
     it('does not throw when collection is undefined', () => {
       const iteratee = () => undefined;
-      expect(() => { forEach(undefined, iteratee); }).not.toThrow();
+      expect(() => {
+        forEach(undefined, iteratee);
+      }).not.toThrow();
     });
   });
 });
@@ -1007,7 +1006,9 @@ describe('noop', () => {
   });
 
   it('has no side effects', () => {
-    expect(() => { noop(); }).not.toThrow();
+    expect(() => {
+      noop();
+    }).not.toThrow();
   });
 });
 
