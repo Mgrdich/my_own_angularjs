@@ -12,7 +12,6 @@ export default defineConfig({
     passWithNoTests: true,
     environment: 'jsdom',
     include: ['src/**/*.test.ts'],
-    exclude: ['legacy/**'],
     coverage: {
       provider: 'v8',
       thresholds: {

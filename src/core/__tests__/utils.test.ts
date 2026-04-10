@@ -232,6 +232,128 @@ describe('isEqual', () => {
       expect(isEqual({ a: 1, $key: 'x', fn: () => {} }, { a: 1, $key: 'y', fn: () => 'other' })).toBe(true);
     });
   });
+
+  describe('undefined member variables', () => {
+    it('treats an explicit undefined property as equivalent to a missing property', () => {
+      expect(isEqual({ name: 'misko' }, { name: 'misko', undefinedVar: undefined })).toBe(true);
+    });
+
+    it('treats both sides having undefined properties as equal', () => {
+      expect(isEqual({ a: 1, b: undefined }, { a: 1, c: undefined })).toBe(true);
+    });
+  });
+
+  describe('Object.prototype key collisions', () => {
+    it('returns false when one object shadows hasOwnProperty and the other does not', () => {
+      expect(isEqual({}, { hasOwnProperty: 1 })).toBe(false);
+    });
+
+    it('returns false when one object shadows toString with null', () => {
+      expect(isEqual({}, { toString: null })).toBe(false);
+    });
+  });
+
+  describe('objects shadowing hasOwnProperty', () => {
+    it('compares correctly when both objects have hasOwnProperty as own property', () => {
+      expect(isEqual({ hasOwnProperty: true, a: 1 }, { hasOwnProperty: true, a: 1 })).toBe(true);
+    });
+
+    it('returns false when hasOwnProperty values differ', () => {
+      expect(isEqual({ hasOwnProperty: true, a: 1 }, { hasOwnProperty: false, a: 1 })).toBe(false);
+    });
+  });
+
+  describe('Date edge cases', () => {
+    it('treats two invalid dates (new Date(undefined)) as equal', () => {
+      const invalidDate1 = new Date('invalid');
+      const invalidDate2 = new Date('also-invalid');
+      expect(isEqual(invalidDate1, invalidDate2)).toBe(true);
+    });
+
+    it('returns false for invalid date vs Date(0)', () => {
+      const invalidDate = new Date('invalid');
+      expect(isEqual(invalidDate, new Date(0))).toBe(false);
+    });
+
+    it('returns false for invalid date vs Date(null)', () => {
+      const invalidDate = new Date('invalid');
+      const nullDate = new Date(0); // Date(null) coerces to 0
+      expect(isEqual(invalidDate, nullDate)).toBe(false);
+    });
+
+    it('treats two NaN-timestamp dates as equal (e.g. new Date("wrong"))', () => {
+      const invalidDate = new Date('invalid');
+      const wrongDate = new Date('wrong');
+      expect(isEqual(invalidDate, wrongDate)).toBe(true);
+    });
+  });
+
+  describe('cross-type comparisons', () => {
+    it('returns false for Date vs number', () => {
+      expect(isEqual(new Date(0), 0)).toBe(false);
+      expect(isEqual(0, new Date(0))).toBe(false);
+    });
+
+    it('returns false for Date vs RegExp', () => {
+      expect(isEqual(new Date(), /abc/)).toBe(false);
+    });
+
+    it('returns false for RegExp vs string', () => {
+      expect(isEqual(/^abc/, '/^abc/')).toBe(false);
+    });
+
+    it('returns false for Object vs RegExp', () => {
+      expect(isEqual({}, /abc/)).toBe(false);
+    });
+
+    it('returns false for Object vs Date', () => {
+      expect(isEqual({}, new Date())).toBe(false);
+    });
+  });
+
+  describe('objects with no prototype', () => {
+    it('treats Object.create(null) objects with matching properties as equal', () => {
+      const a = Object.create(null) as Record<string, unknown>;
+      a['x'] = 1;
+      a['y'] = 2;
+      const b = Object.create(null) as Record<string, unknown>;
+      b['x'] = 1;
+      b['y'] = 2;
+      expect(isEqual(a, b)).toBe(true);
+    });
+
+    it('returns false for Object.create(null) objects with different properties', () => {
+      const a = Object.create(null) as Record<string, unknown>;
+      a['x'] = 1;
+      const b = Object.create(null) as Record<string, unknown>;
+      b['x'] = 2;
+      expect(isEqual(a, b)).toBe(false);
+    });
+  });
+
+  describe('null vs various types', () => {
+    it('returns false for null vs string', () => {
+      expect(isEqual(null, '123')).toBe(false);
+      expect(isEqual('123', null)).toBe(false);
+    });
+
+    it('returns false for null vs object', () => {
+      expect(isEqual(null, { foo: 'bar' })).toBe(false);
+      expect(isEqual({ foo: 'bar' }, null)).toBe(false);
+    });
+  });
+
+  describe('undefined vs various types', () => {
+    it('returns false for undefined vs string', () => {
+      expect(isEqual(undefined, '123')).toBe(false);
+      expect(isEqual('123', undefined)).toBe(false);
+    });
+
+    it('returns false for undefined vs object', () => {
+      expect(isEqual(undefined, { foo: 'bar' })).toBe(false);
+      expect(isEqual({ foo: 'bar' }, undefined)).toBe(false);
+    });
+  });
 });
 
 // Shared test values used across all type guard suites
@@ -852,6 +974,42 @@ describe('forEach', () => {
     });
   });
 
+  describe('objects shadowing hasOwnProperty', () => {
+    it('iterates all keys of an object that shadows hasOwnProperty', () => {
+      const obj = { hasOwnProperty: true, a: 1, b: 2, c: 3 };
+      const keys: string[] = [];
+
+      forEach(obj, (_value, key) => {
+        keys.push(key);
+        return undefined;
+      });
+
+      expect(keys).toContain('hasOwnProperty');
+      expect(keys).toContain('a');
+      expect(keys).toContain('b');
+      expect(keys).toContain('c');
+      expect(keys).toHaveLength(4);
+    });
+  });
+
+  describe('objects with no prototype parent', () => {
+    it('iterates properties of Object.create(null) objects without errors', () => {
+      const obj = Object.create(null) as Record<string, unknown>;
+      obj['x'] = 10;
+      obj['y'] = 20;
+      const keys: string[] = [];
+
+      forEach(obj, (_value, key) => {
+        keys.push(key);
+        return undefined;
+      });
+
+      expect(keys).toContain('x');
+      expect(keys).toContain('y');
+      expect(keys).toHaveLength(2);
+    });
+  });
+
   describe('null/undefined handling', () => {
     it('does not throw when collection is null', () => {
       const iteratee = () => undefined;
@@ -983,6 +1141,29 @@ describe('copy', () => {
 
       expect(result).toBe(dest);
       expect(dest).toEqual([1, 2]);
+    });
+  });
+
+  describe('source equals destination', () => {
+    it('throws when source and destination are the same object', () => {
+      const obj = { a: 1 };
+      expect(() => copy(obj, obj)).toThrow('Cannot copy! Source and destination are identical.');
+    });
+  });
+
+  describe('TypedArray destination', () => {
+    it('throws when a TypedArray is provided as destination', () => {
+      const src = new Uint8Array([1, 2, 3]);
+      const dest = new Uint8Array(3);
+      expect(() => copy(src, dest)).toThrow('Cannot copy! TypedArray destination is not supported.');
+    });
+  });
+
+  describe('ArrayBuffer destination', () => {
+    it('throws when an ArrayBuffer is provided as destination', () => {
+      const src = new ArrayBuffer(8);
+      const dest = new ArrayBuffer(8);
+      expect(() => copy(src, dest)).toThrow('Cannot copy! ArrayBuffer destination is not supported.');
     });
   });
 

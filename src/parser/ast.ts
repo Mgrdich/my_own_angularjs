@@ -191,6 +191,10 @@ export function buildAST(tokens: Token[]): Program {
         }
         if (token.identifier === true) {
           key = identifier();
+        } else if (isKeyOf(CONSTANTS, token.text)) {
+          // Keyword used as object key (e.g., {null: 1, true: 2})
+          cursor++;
+          key = { type: 'Identifier', name: token.text };
         } else {
           // String or number key
           cursor++;

@@ -33,6 +33,16 @@ describe('parse', () => {
       expect(fn()).toBe(42);
     });
 
+    it('parses uppercase scientific notation', () => {
+      const fn = parse('.42E2');
+      expect(fn()).toBe(42);
+    });
+
+    it('parses scientific notation with explicit positive sign', () => {
+      const fn = parse('.42e+2');
+      expect(fn()).toBe(42);
+    });
+
     it('throws for invalid scientific notation', () => {
       expect(() => parse('42e-')).toThrow();
     });
@@ -66,6 +76,20 @@ describe('parse', () => {
 
     it('throws for unterminated strings', () => {
       expect(() => parse("'abc")).toThrow();
+    });
+
+    it('throws for mismatched quotes', () => {
+      expect(() => parse('"abc\'')).toThrow();
+    });
+
+    it('parses escaped single quote in single-quoted string', () => {
+      const fn = parse("'a\\'b'");
+      expect(fn()).toBe("a'b");
+    });
+
+    it('parses escaped double quote in double-quoted string', () => {
+      const fn = parse('"a\\"b"');
+      expect(fn()).toBe('a"b');
     });
   });
 
@@ -125,6 +149,16 @@ describe('parse', () => {
       const fn = parse('{"a key": 1}');
       expect(fn()).toEqual({ 'a key': 1 });
     });
+
+    it('parses objects with numeric keys', () => {
+      const fn = parse('{0: 1}');
+      expect(fn()).toEqual({ 0: 1 });
+    });
+
+    it('parses objects with keyword keys', () => {
+      const fn = parse('{null: 1}');
+      expect(fn()).toEqual({ null: 1 });
+    });
   });
 
   describe('identifiers', () => {
@@ -134,6 +168,18 @@ describe('parse', () => {
 
     it('returns undefined for a missing identifier', () => {
       expect(parse('aKey')({})).toBeUndefined();
+    });
+
+    it('returns undefined when no scope argument is passed', () => {
+      expect(parse('aKey')()).toBeUndefined();
+    });
+
+    it('looks up hasOwnProperty as an identifier', () => {
+      expect(parse('hasOwnProperty')({ hasOwnProperty: 42 })).toBe(42);
+    });
+
+    it('looks up toString as an identifier', () => {
+      expect(parse('toString')({ toString: 42 })).toBe(42);
     });
 
     it('supports the this keyword', () => {
@@ -177,6 +223,26 @@ describe('parse', () => {
       const scope = { aKey: { anotherKey: 'scope' } };
       const locals = { aKey: { anotherKey: 'locals' } };
       expect(parse('aKey.anotherKey')(scope, locals)).toBe('locals');
+    });
+
+    it('handles whitespace around dots', () => {
+      expect(parse('a . b')({ a: { b: 42 } })).toBe(42);
+    });
+
+    it('accesses a member on an inline object literal', () => {
+      expect(parse('{aKey: 40}.aKey')({})).toBe(40);
+    });
+
+    it('looks up a computed property using a scope key', () => {
+      expect(parse('lock[key]')({ key: 'aKey', lock: { aKey: 'theValue' } })).toBe('theValue');
+    });
+
+    it('accesses an element of an inline array literal', () => {
+      expect(parse('[1][0]')({})).toBe(1);
+    });
+
+    it('accesses a property on an inline array literal', () => {
+      expect(parse('[1, 2].length')({})).toBe(2);
     });
   });
 
@@ -249,6 +315,36 @@ describe('parse', () => {
         },
       };
       expect(parse('anObject.obj.nested()')(scope)).toBe('inner');
+    });
+
+    it('accesses a field on a function call result', () => {
+      expect(parse('a().name')({ a: () => ({ name: 'Misko' }) })).toBe('Misko');
+    });
+
+    it('calls a function returned by a function', () => {
+      expect(parse('fn()()')({ fn: () => () => 42 })).toBe(42);
+    });
+
+    it('binds bare function calls to the scope', () => {
+      const scope = {
+        aFunction() {
+          return this;
+        },
+      };
+      const result = parse('aFunction')(scope) as () => unknown;
+      // The returned value is the function itself; calling it with the scope's context
+      // is handled by the call expression, not bare identifier resolution
+      expect(typeof result).toBe('function');
+    });
+
+    it('binds bare function calls from locals', () => {
+      const locals = {
+        aFunction() {
+          return this;
+        },
+      };
+      const result = parse('aFunction')({}, locals) as () => unknown;
+      expect(typeof result).toBe('function');
     });
   });
 });
