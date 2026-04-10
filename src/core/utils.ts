@@ -243,31 +243,31 @@ function copyRecursive<T>(source: T, destination: T | undefined, visited: Set<T>
   return source;
 }
 
-export function forEach<T>(collection: T[], iteratee: (value: T, index: number, array: T[]) => void | false): void;
+export function forEach<T>(collection: T[], iteratee: (value: T, index: number, array: T[]) => undefined | false): void;
 export function forEach<T>(
   collection: Record<string, T>,
-  iteratee: (value: T, key: string, object: Record<string, T>) => void | false,
+  iteratee: (value: T, key: string, object: Record<string, T>) => undefined | false,
 ): void;
 export function forEach(
   collection: null | undefined,
-  iteratee: (value: unknown, key: unknown, collection: unknown) => void | false,
+  iteratee: (value: unknown, key: unknown, collection: unknown) => undefined | false,
 ): void;
 export function forEach(
   collection: unknown[] | Record<string, unknown> | null | undefined,
   iteratee:
-    | ((value: unknown, index: number, array: unknown[]) => void | false)
-    | ((value: unknown, key: string, object: Record<string, unknown>) => void | false),
+    | ((value: unknown, index: number, array: unknown[]) => undefined | false)
+    | ((value: unknown, key: string, object: Record<string, unknown>) => undefined | false),
 ): void {
   if (collection == null) return;
 
   if (isArray(collection)) {
-    const fn = iteratee as (value: unknown, index: number, array: unknown[]) => void | false;
+    const fn = iteratee as (value: unknown, index: number, array: unknown[]) => undefined | false;
     for (let i = 0; i < collection.length; i++) {
       if (fn(collection[i], i, collection) === false) break;
     }
   } else {
     const obj = collection;
-    const fn = iteratee as (value: unknown, key: string, object: Record<string, unknown>) => void | false;
+    const fn = iteratee as (value: unknown, key: string, object: Record<string, unknown>) => undefined | false;
     const keys = Object.keys(obj);
     for (let i = 0; i < keys.length; i++) {
       const key = keys[i];
