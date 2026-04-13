@@ -1,7 +1,7 @@
 # Functional Specification: Scopes — Configurable Digest TTL
 
 - **Roadmap Item:** Phase 1 — Core Runtime Foundation > Scopes & Digest Cycle (remaining)
-- **Status:** Draft
+- **Status:** Completed
 - **Author:** Mgrdich
 
 ---
@@ -28,10 +28,10 @@ The `Scope.create()` factory method must accept an optional configuration object
 
 **Acceptance Criteria:**
 
-- [ ] `Scope.create()` with no arguments uses a default TTL of 10
-- [ ] `Scope.create({ ttl: 20 })` sets the digest TTL to 20 for that root scope
-- [ ] Child scopes (via `$new()`) inherit the root scope's TTL
-- [ ] TTL must be >= 2; values below 2 throw an error at creation time
+- [x] `Scope.create()` with no arguments uses a default TTL of 10
+- [x] `Scope.create({ ttl: 20 })` sets the digest TTL to 20 for that root scope
+- [x] Child scopes (via `$new()`) inherit the root scope's TTL
+- [x] TTL must be >= 2; values below 2 throw an error at creation time
 
 ### 2.2 Improved TTL Exceeded Error Message
 
@@ -39,8 +39,8 @@ When the digest does not stabilize within the configured TTL, the error message 
 
 **Acceptance Criteria:**
 
-- [ ] When TTL is exceeded, the error includes the last watch expression or function that was still dirty
-- [ ] The error message is actionable — a developer can use it to identify the problematic watcher
+- [x] When TTL is exceeded, the error includes the last watch expression or function that was still dirty
+- [x] The error message is actionable — a developer can use it to identify the problematic watcher
 
 ### 2.3 Phase Tracking (Already Implemented)
 
@@ -48,8 +48,8 @@ Phase tracking (`$beginPhase`, `$clearPhase`, `$$postDigest`, `$$phase`) is alre
 
 **Acceptance Criteria:**
 
-- [ ] `$$phase` is `'$digest'` during digest, `'$apply'` during apply, `null` otherwise (already passing)
-- [ ] `$$postDigest` callbacks run after the digest completes (already passing)
+- [x] `$$phase` is `'$digest'` during digest, `'$apply'` during apply, `null` otherwise (already passing)
+- [x] `$$postDigest` callbacks run after the digest completes (already passing)
 
 ---
 

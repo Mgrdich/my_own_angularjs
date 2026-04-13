@@ -1,7 +1,7 @@
 # Technical Specification: Scopes — Configurable Digest TTL
 
 - **Functional Specification:** `context/spec/006-configurable-digest-ttl/functional-spec.md`
-- **Status:** Draft
+- **Status:** Completed
 - **Author(s):** Mgrdich
 
 ---

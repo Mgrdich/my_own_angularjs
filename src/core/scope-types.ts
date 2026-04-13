@@ -51,3 +51,9 @@ export interface AsyncTask {
 
 /** Phase tracking literal union for the digest cycle. */
 export type ScopePhase = '$digest' | '$apply' | null;
+
+/** Options for configuring a Scope created via `Scope.create()`. */
+export interface ScopeOptions {
+  /** Maximum number of digest iterations before throwing. Must be >= 2. Defaults to 10. */
+  ttl?: number;
+}

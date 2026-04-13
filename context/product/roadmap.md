@@ -32,9 +32,9 @@ _Move existing code to a legacy folder, reimplement from scratch in clean TypeSc
 
 _Complete the essential building blocks that everything else depends on._
 
-- [ ] **Scopes & Digest Cycle (remaining)**
-  - [ ] **Phase tracking:** Implement `$beginPhase`, `$clearPhase`, and `$$postDigest` hooks.
-  - [ ] **TTL configuration:** Support configurable digest TTL and cycle detection.
+- [x] **Scopes & Digest Cycle (remaining)**
+  - [x] **Phase tracking:** Implement `$beginPhase`, `$clearPhase`, and `$$postDigest` hooks.
+  - [x] **TTL configuration:** Support configurable digest TTL and cycle detection.
 
 - [ ] **Dependency Injection**
   - [ ] **Module System:** Implement `angular.module()` with support for dependencies between modules.

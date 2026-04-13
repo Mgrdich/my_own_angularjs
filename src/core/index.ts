@@ -6,6 +6,7 @@ export type {
   InitWatchVal,
   ListenerFn,
   ScopeEvent,
+  ScopeOptions,
   ScopePhase,
   TypedScope,
   Watcher,

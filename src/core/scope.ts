@@ -5,6 +5,7 @@ import {
   type EventListener,
   type ListenerFn,
   type ScopeEvent,
+  type ScopeOptions,
   type ScopePhase,
   type TypedScope,
   type Watcher,
@@ -48,6 +49,7 @@ export class Scope {
   $$lastDirtyWatch: Watcher<unknown> | null;
   $$applyAsyncId: ReturnType<typeof setTimeout> | null;
   $$phase: ScopePhase;
+  $$ttl: number;
 
   constructor() {
     this.$id = nextId++;
@@ -62,11 +64,17 @@ export class Scope {
     this.$$lastDirtyWatch = null;
     this.$$applyAsyncId = null;
     this.$$phase = null;
+    this.$$ttl = TTL;
   }
 
   /** Create a typed Scope instance with compile-time property access. */
-  static create<T extends Record<string, unknown> = Record<string, unknown>>(): TypedScope<T> {
-    return new Scope() as TypedScope<T>;
+  static create<T extends Record<string, unknown> = Record<string, unknown>>(options?: ScopeOptions): TypedScope<T> {
+    if (options?.ttl !== undefined && options.ttl < 2) {
+      throw new Error('TTL must be at least 2');
+    }
+    const scope = new Scope();
+    scope.$$ttl = options?.ttl ?? TTL;
+    return scope as TypedScope<T>;
   }
 
   /**
@@ -120,6 +128,7 @@ export class Scope {
     if (isolated) {
       child = new Scope();
       child.$root = this.$root;
+      child.$$ttl = this.$root.$$ttl;
       child.$$asyncQueue = this.$$asyncQueue;
       child.$$applyAsyncQueue = this.$$applyAsyncQueue;
       child.$$postDigestQueue = this.$$postDigestQueue;
@@ -216,7 +225,7 @@ export class Scope {
    * @throws When the digest does not stabilize within TTL iterations
    */
   $digest(): void {
-    let ttl = TTL;
+    let ttl = this.$root.$$ttl;
     let dirty: boolean;
 
     this.$root.$$lastDirtyWatch = null;
@@ -240,7 +249,11 @@ export class Scope {
 
         if ((dirty || this.$$asyncQueue.length > 0) && --ttl <= 0) {
           this.$clearPhase();
-          throw new Error('10 digest iterations reached');
+          const lastDirtyWatch = this.$root.$$lastDirtyWatch as Watcher<unknown> | null;
+          const lastDirtyInfo =
+            lastDirtyWatch !== null ? `\nLast dirty watcher: ${lastDirtyWatch.watchFn.toString()}` : '';
+          const ttlValue = String(this.$root.$$ttl);
+          throw new Error(`${ttlValue} digest iterations reached. Aborting!${lastDirtyInfo}`);
         }
       } while (dirty || this.$$asyncQueue.length > 0);
       // Flush any pending $applyAsync during the active digest
