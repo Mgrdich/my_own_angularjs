@@ -1,3 +1,5 @@
+import type { Invokable } from './di-types';
+
 /**
  * Recipe types supported by the module system. At Slice 1 only the identifier
  * strings are needed -- the actual `value`, `constant`, and `factory` methods
@@ -97,6 +99,32 @@ export class Module<
   constant<K extends string, T>(name: K, value: T): Module<Registry & { [P in K]: T }, Name, Requires> {
     this.invokeQueue.push(['constant', name, value]);
     return this as unknown as Module<Registry & { [P in K]: T }, Name, Requires>;
+  }
+
+  /**
+   * Register a factory function under `name`. The factory will be called by the
+   * injector to produce the service instance, with its declared dependencies
+   * resolved and passed in. The factory is a {@link Invokable} — either an
+   * array-style annotation `['dep1', 'dep2', fn]` or a function with a
+   * `$inject` property. Unlike `value` and `constant`, which store the literal
+   * argument, `factory` registrations are lazy: the function runs only when
+   * the service is first requested, and the result is cached as a singleton.
+   *
+   * `Return` is inferred from the trailing function of the supplied invokable
+   * so that `injector.get(name)` resolves to the factory's actual return type
+   * without any explicit annotation. Callers may still provide `Return`
+   * explicitly (e.g. `.factory<'svc', MyShape>(...)`) as an escape hatch.
+   *
+   * @param name - The name to register the factory under.
+   * @param invokable - The factory, as an array-style annotation or an
+   *   `$inject`-annotated function.
+   */
+  factory<K extends string, Return>(
+    name: K,
+    invokable: Invokable<Return>,
+  ): Module<Registry & { [P in K]: Return }, Name, Requires> {
+    this.invokeQueue.push(['factory', name, invokable]);
+    return this as unknown as Module<Registry & { [P in K]: Return }, Name, Requires>;
   }
 }
 

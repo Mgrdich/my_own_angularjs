@@ -21,15 +21,24 @@ export type Annotated<Fn extends (...args: never[]) => unknown> = Fn & {
  * Array-style dependency annotation: a tuple whose leading entries are
  * dependency names and whose final entry is the function to invoke.
  *
+ * Generic over `Return` so callers get the trailing function's return type
+ * inferred automatically -- no explicit annotation required at call sites of
+ * `Module.factory` or `Injector.invoke`.
+ *
  * Example: `['dep1', 'dep2', (dep1, dep2) => { ... }]`.
  */
-export type InvokableArray = readonly [...string[], (...deps: never[]) => unknown];
+export type InvokableArray<Return = unknown> = readonly [...string[], (...deps: never[]) => Return];
 
 /**
  * Anything that can be invoked by the injector: either an annotated function
  * (with an optional `$inject` property) or an array-style annotation.
+ *
+ * Generic over `Return` so callers get return-type inference on
+ * `Module.factory` and `Injector.invoke`. The default `Return = unknown`
+ * keeps `Invokable` usable as an opaque "any invokable" type in spots like
+ * the `annotate` helper or the injector's internal factory cache.
  */
-export type Invokable = Annotated<(...args: never[]) => unknown> | InvokableArray;
+export type Invokable<Return = unknown> = Annotated<(...args: never[]) => Return> | InvokableArray<Return>;
 
 /**
  * The module builder interface, generic over an accumulated registry of
@@ -65,13 +74,15 @@ export interface ModuleAPI<
    * injector with its declared dependencies, and its return value is cached
    * as the resolved service instance.
    *
-   * `T` appears only in the return position because the factory's return
-   * type cannot yet be statically inferred from an `Invokable` -- callers
-   * supply it explicitly so downstream `injector.get(name)` lookups resolve
-   * to the correct type.
+   * `Return` is inferred from the trailing function of the supplied
+   * {@link Invokable}, so downstream `injector.get(name)` lookups resolve to
+   * the factory's actual return type without any explicit annotation. Callers
+   * may still supply `Return` explicitly as an escape hatch.
    */
-  // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-parameters -- explicit caller-provided return type for registry inference
-  factory<K extends string, T>(name: K, factory: Invokable): ModuleAPI<Registry & { [P in K]: T }, Name, Requires>;
+  factory<K extends string, Return>(
+    name: K,
+    factory: Invokable<Return>,
+  ): ModuleAPI<Registry & { [P in K]: Return }, Name, Requires>;
 }
 
 /**
@@ -101,11 +112,11 @@ export interface Injector<Registry extends Record<string, unknown> = Record<stri
   /**
    * Invoke an {@link Invokable} with its dependencies resolved from the
    * injector. An optional `self` binds `this`, and `locals` override specific
-   * dependency names for this call. `T` is a caller-provided hint for the
-   * invoked function's return type.
+   * dependency names for this call. `Return` is inferred from the supplied
+   * invokable's trailing function -- callers don't need to annotate it unless
+   * they want to widen or narrow the inferred type explicitly.
    */
-  // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-parameters -- caller-provided return type hint
-  invoke<T = unknown>(fn: Invokable, self?: unknown, locals?: Record<string, unknown>): T;
+  invoke<Return>(fn: Invokable<Return>, self?: unknown, locals?: Record<string, unknown>): Return;
 
   /** Return the list of dependency names declared by an {@link Invokable}. */
   annotate(fn: Invokable): readonly string[];
