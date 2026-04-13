@@ -11,10 +11,10 @@
 Build the DI system as a new module under `src/di/`. The module has three main pieces:
 
 1. **Module registry** — A singleton `Map<string, Module>` that stores all modules by name. Both `angular.module()` and `createModule()` read/write this same registry, so the APIs are interchangeable.
-2. **Module class** — Holds the queued service registrations (`value`, `constant`, `factory`) as a list of invokables. Registration is *declarative* — nothing is instantiated until the injector is created.
-3. **Injector** — Created from a root module name. Walks the dependency graph, collects all queued registrations, and provides `get`, `has`, `invoke`, `annotate` for resolving services. Uses lazy instantiation with a cache for singletons.
+2. **Module class** — Generic over a `Registry` type parameter that tracks all registered services as a mapped type `{ [K in registered name]: service type }`. Each `.value()` / `.constant()` / `.factory()` call returns `Module<Registry & { [newName]: newType }>` — a builder-pattern approach that accumulates type information across chained calls. Registration is *declarative* — nothing is instantiated until the injector is created.
+3. **Injector** — Created from a root module. Walks the dependency graph, collects all queued registrations, and provides `get`, `has`, `invoke`, `annotate` for resolving services. Uses lazy instantiation with a cache for singletons. The injector type is generic over the merged registry of all modules in the graph, so `injector.get('name')` infers the correct return type from string literal lookup.
 
-The `angular` namespace is a named export that provides the `module()` method. It is NOT a default export or a global — consumers import it explicitly (`import { angular } from 'my-own-angularjs/di'`).
+The `angular` namespace is a **thin wrapper** over `createModule` / `getModule` — `angular.module(name, requires)` literally calls `createModule(name, requires)` and `angular.module(name)` calls `getModule(name)`. There is ONE implementation; `angular` just provides a familiar surface for users migrating from classic AngularJS. The `angular` namespace is a named export that consumers import explicitly (`import { angular } from 'my-own-angularjs/di'`).
 
 No architectural changes. The new module plugs into existing `src/di/` (currently empty) and extends `src/di/index.ts` as a barrel.
 
@@ -65,22 +65,44 @@ type Annotated<Fn extends (...args: unknown[]) => unknown> = Fn & {
 type InvokableArray = readonly [...string[], (...deps: unknown[]) => unknown];
 type Invokable = Annotated<(...args: unknown[]) => unknown> | InvokableArray;
 
-// Module API
-interface ModuleAPI {
+// Module API — generic over a Registry type that accumulates
+// registered services via builder-pattern return types.
+interface ModuleAPI<Registry extends Record<string, unknown> = {}> {
   readonly name: string;
   readonly requires: readonly string[];
-  value<T>(name: string, value: T): ModuleAPI;
-  constant<T>(name: string, value: T): ModuleAPI;
-  factory(name: string, factory: Invokable): ModuleAPI;
+
+  // Each call returns a NEW ModuleAPI type with the additional service merged
+  // into the registry. TypeScript infers `Name` as a string literal from the
+  // argument, and `T` from the value argument.
+  value<Name extends string, T>(
+    name: Name,
+    value: T,
+  ): ModuleAPI<Registry & { [K in Name]: T }>;
+
+  constant<Name extends string, T>(
+    name: Name,
+    value: T,
+  ): ModuleAPI<Registry & { [K in Name]: T }>;
+
+  factory<Name extends string, T>(
+    name: Name,
+    factory: Invokable,
+  ): ModuleAPI<Registry & { [K in Name]: T }>;
 }
 
-// Injector API
-interface Injector {
-  get<T = unknown>(name: string): T;
+// Injector API — generic over the merged registry of all modules it was built
+// from. `get` uses the registry for type inference; an explicit generic is
+// still supported as a fallback escape hatch.
+interface Injector<Registry extends Record<string, unknown> = Record<string, unknown>> {
+  get<K extends keyof Registry>(name: K): Registry[K];
+  get<T>(name: string): T; // overload for escape hatch
   has(name: string): boolean;
   invoke<T = unknown>(fn: Invokable, self?: unknown, locals?: Record<string, unknown>): T;
   annotate(fn: Invokable): readonly string[];
 }
+
+// Helper type to merge registries from multiple modules in dependency order.
+type MergeRegistries<Modules extends readonly ModuleAPI<any>[]> = /* ... */;
 ```
 
 ### Key Implementation Details
@@ -94,7 +116,9 @@ interface Injector {
 | Resolution path stack | `Array<string>` tracking in-progress resolutions for cycle detection                                                        |
 | `annotate`            | If `fn` is an array, pop last element as the actual fn and use rest as `$inject`. Else read `fn.$inject`. Throw if neither. |
 | Error messages        | `Unknown provider: <name>`, `Module not found: <name>`, `Circular dependency: A <- B <- A`                                  |
-| `angular` namespace   | Object with `module(name, requires?)` method; same signature/behavior as `createModule` / `getModule`                       |
+| `angular` namespace   | **Thin wrapper.** `angular.module(name, requires)` is literally `(name, requires) => requires !== undefined ? createModule(name, requires) : getModule(name)`. One shared implementation. |
+| Builder-pattern types | `value` / `constant` / `factory` methods return `ModuleAPI<Registry & { [Name]: T }>` — the type widens with each call. At runtime the same instance is returned (cast through the new type). |
+| Type-safe `get`       | `Injector<Registry>#get<K extends keyof Registry>(name: K)` returns `Registry[K]`, so calling `get('apiUrl')` infers the registered type. An overload `get<T>(name: string): T` provides the escape hatch. |
 
 ### Public API Exposure
 
@@ -119,7 +143,8 @@ interface Injector {
 
 | Risk                                                                     | Impact                                 | Mitigation                                                                                                                    |
 |--------------------------------------------------------------------------|----------------------------------------|-------------------------------------------------------------------------------------------------------------------------------|
-| Type inference for `injector.get('name')` without a generic type param   | Medium — callers may get `unknown`     | Accept this limitation. With `get<T>('name')`, callers opt into their known type. Advanced per-module typing is out of scope. |
+| Builder-pattern generic types may become complex or hit TS inference limits | Medium — may push against TS recursion/inference limits | Start with a simple intersection type `Registry & { [Name]: T }`. If inference degrades on long chains, fall back to the explicit-generic `get<T>(name)` escape hatch. The runtime behavior is identical either way. |
+| Merging registries across module dependencies (transitive types) | Medium — getting `MergeRegistries<[Mod1, Mod2, Mod3]>` right is non-trivial | Implement registry merging as a separate utility type; test with `expectTypeOf` or `satisfies` in the type-safety test suite. |
 | Circular module dependencies (module A depends on B, B depends on A)     | Medium — different from service cycles | Track loaded modules in a Set during graph walk. Shared dep is fine; circular module dep should throw.                        |
 | Global state (`registry` Map) makes tests order-dependent                | Medium — tests could leak state        | Expose a test-only `resetRegistry()` helper or use a factory function that creates isolated registries per test               |
 | `$inject` array length mismatch with function parameters                 | Low — runtime error                    | Validate in `invoke` and throw a clear error                                                                                  |

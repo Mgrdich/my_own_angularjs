@@ -32,7 +32,7 @@ Developers must be able to create and retrieve modules using **both** the classi
 - `createModule('myApp', ['dep1', 'dep2'])` — creates a module
 - `getModule('myApp')` — retrieves an existing module
 
-Both APIs operate on the same module registry — a module created via `createModule` is retrievable via `angular.module` and vice versa.
+**Both APIs must share a single underlying implementation.** `angular.module()` is a thin wrapper that delegates to the same internal module registry and the same `createModule` / `getModule` code paths. There must not be two separate implementations — a module created via `createModule` is retrievable via `angular.module` and vice versa, because they are literally the same code behind the scenes.
 
 **Acceptance Criteria:**
 
@@ -42,7 +42,8 @@ Both APIs operate on the same module registry — a module created via `createMo
 - [ ] `angular.module('app')` throws a clear error if `app` was never created
 - [ ] Creating a module with the same name twice replaces the previous registration
 - [ ] `createModule()` and `getModule()` named exports work identically to `angular.module()`
-- [ ] Modules created via one API are retrievable via the other (shared registry)
+- [ ] Modules created via one API are retrievable via the other (shared registry and shared code path)
+- [ ] `angular.module` is implemented by delegating to `createModule` / `getModule` — not a second parallel implementation
 
 ### 2.2 Module Dependency Graph
 
@@ -116,25 +117,43 @@ If a service's factory function declares a dependency that (directly or transiti
 
 ### 2.7 Type Safety and Inference
 
-Every part of the DI system must be fully type-safe with proper TypeScript inference where possible. Consumers should get autocomplete, type checking, and compile-time errors for DI mistakes.
+Every part of the DI system must be fully type-safe with proper TypeScript inference. Consumers should get autocomplete, type checking, and compile-time errors for DI mistakes without having to manually annotate anything.
 
 **Key type-safety goals:**
 
-- **Typed service registration:** `module.value<T>(name, value)` infers `T` from the value argument, or accepts an explicit type parameter. Registered services have a known type.
-- **Typed injector.get:** `injector.get<T>(name)` returns `T`. Ideally, when a module's service registry is typed, `injector.get('logger')` infers the return type from the registration.
-- **Typed factories:** Factory functions have properly typed dependency parameters — `module.factory('userService', ['$http', ($http: HttpClient) => { ... }])` should type-check the `$http` parameter.
-- **$inject annotation:** The `$inject` property is typed as `readonly string[]`, and TypeScript should enforce that the annotated function's parameter count matches the `$inject` array length.
-- **No `any` leakage:** The internal injector implementation must use `unknown` instead of `any`, narrowing with type guards where needed.
-- **Generic constraints:** Where possible, use generic constraints to enforce that dependencies resolve to the correct types at the call site.
+- **Typed service registration:** `module.value(name, value)` infers the value type from the argument.
+- **String-literal-tracked registry (builder pattern):** Each `.value()`, `.constant()`, and `.factory()` call returns a new module type with the accumulated service registry, keyed by the literal string name. This lets TypeScript remember *which* services the module has registered and *what type* each one is.
+- **Typed `injector.get`:** When the injector is built from typed modules, `injector.get('apiUrl')` infers its return type from the registration — no generic parameter needed. Passing an unregistered name is a compile-time error (`Argument of type '"xyz"' is not assignable to parameter of type '"apiUrl" | "config" | "logger"'`).
+- **Typed factories:** Factory functions can declare typed dependency parameters that match the registered services.
+- **`$inject` annotation:** The `$inject` property is typed as `readonly string[]`.
+- **No `any` leakage:** The internal implementation must use `unknown` instead of `any`, narrowing with type guards where needed. The only acceptable `any` is at the annotation-parsing boundary if unavoidable, with a comment explaining why.
+- **Ergonomic escape hatch:** For advanced cases, `injector.get<T>(name)` still accepts an explicit generic as a fallback when the registry-based inference is not usable.
+
+**Example of desired developer experience:**
+
+```typescript
+const mod = createModule('app', [])
+  .value('apiUrl', 'https://api.example.com')    // registers 'apiUrl': string
+  .value('config', { timeout: 30 })              // registers 'config': { timeout: number }
+  .factory('logger', () => ({ log: (m: string) => {} })); // registers 'logger': { log: (m: string) => void }
+
+const injector = createInjector([mod]);
+injector.get('apiUrl');   // inferred as string — no generic needed
+injector.get('config');   // inferred as { timeout: number }
+injector.get('logger');   // inferred as { log: (m: string) => void }
+injector.get('unknown');  // compile error — 'unknown' is not a registered key
+```
 
 **Acceptance Criteria:**
 
 - [ ] `module.value('apiUrl', 'https://...')` infers the value as `string`
-- [ ] `injector.get<HttpClient>('$http')` returns a typed `HttpClient`
+- [ ] Each `.value()` / `.constant()` / `.factory()` call returns a module type with the new service added to its registry (builder pattern)
+- [ ] `injector.get('apiUrl')` on a typed injector returns the correct type without an explicit generic parameter
+- [ ] `injector.get('nonexistent')` is a **compile-time** error on a typed injector (in addition to the runtime error)
+- [ ] `injector.get<HttpClient>('$http')` still works as an explicit-generic escape hatch
 - [ ] `pnpm typecheck` passes with zero errors across the DI module
-- [ ] No use of `any` in the DI source code (except in deliberate, commented escape hatches at the annotation-parsing boundary if unavoidable)
+- [ ] No use of `any` in the DI source code (except deliberate, commented escape hatches)
 - [ ] All public APIs have explicit types for parameters and return values
-- [ ] Generic type parameters are used for type inference wherever they provide value (service registration, `invoke`, `get`)
 
 ---
 

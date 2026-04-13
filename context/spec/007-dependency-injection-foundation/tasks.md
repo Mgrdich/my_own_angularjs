@@ -6,27 +6,32 @@
 ---
 
 - [ ] **Slice 1: Module Registry & Creation APIs**
-  - [ ] Create `src/di/di-types.ts` with core type definitions: `Annotated`, `InvokableArray`, `Invokable`, `ModuleAPI`, `Injector`. Export them as `type` exports. **[Agent: typescript-framework]**
+  - [ ] Create `src/di/di-types.ts` with core type definitions: `Annotated`, `InvokableArray`, `Invokable`, `ModuleAPI<Registry>` (generic over a Registry type), `Injector<Registry>` (generic over a merged registry). Export as `type` exports. **[Agent: typescript-framework]**
   - [ ] Create `src/di/module.ts` with a module-scoped `registry` Map, a `Module` class (minimal — just `name`, `requires`, `invokeQueue`), and a `resetRegistry()` test helper. **[Agent: typescript-framework]**
-  - [ ] Create `src/di/angular.ts` exporting the `angular` namespace object with a `module(name, requires?)` method, plus named exports `createModule(name, requires)` and `getModule(name)`. Both APIs share the same registry. **[Agent: typescript-framework]**
-  - [ ] Create `src/di/__tests__/di.test.ts` with a `describe('Module creation', ...)` block. Tests: create module, retrieve module, throw on missing, both APIs share registry, replacing a module works. Use `beforeEach(() => resetRegistry())` for test isolation. **[Agent: vitest-testing]**
+  - [ ] Create `src/di/angular.ts` exporting named `createModule(name, requires)` and `getModule(name)` as the canonical implementation, plus an `angular` namespace object whose `module()` method is a **thin wrapper** that delegates to `createModule` / `getModule` (no duplicate logic). **[Agent: typescript-framework]**
+  - [ ] Create `src/di/__tests__/di.test.ts` with a `describe('Module creation', ...)` block. Tests: create module, retrieve module, throw on missing, both APIs share registry, replacing a module works, `angular.module` delegates to the same code path as `createModule`/`getModule`. Use `beforeEach(() => resetRegistry())` for test isolation. **[Agent: vitest-testing]**
   - [ ] Create `src/di/index.ts` barrel exporting `angular`, `createModule`, `getModule`, and types. Verify: `pnpm test`, `pnpm typecheck`, `pnpm lint` pass. **[Agent: typescript-framework]**
 
 - [ ] **Slice 2: value/constant Registration & Basic Injector (no dependencies)**
-  - [ ] Add `value<T>(name, value)` and `constant<T>(name, value)` methods to the `Module` class. They push to the `invokeQueue`. Ensure types use generic `T` for value inference. **[Agent: typescript-framework]**
-  - [ ] Create `src/di/injector.ts` with `createInjector(moduleNames: string[])` that loads modules from the registry, walks the (flat, no deps yet) invoke queue, and builds a `providerCache: Map<string, unknown>` for values/constants. Return an `Injector` with `get<T>(name): T` and `has(name): boolean`. **[Agent: typescript-framework]**
-  - [ ] Add tests: `module.value('url', 'https://...')`, `module.constant('MAX', 3)`, `injector.get('url')`, `injector.has('url')`, `injector.get('unknown')` throws `'Unknown provider: unknown'`. **[Agent: vitest-testing]**
+  - [ ] Add `value<Name extends string, T>(name: Name, value: T)` and `constant<Name, T>(name, value)` methods to the `Module` class using the builder pattern. Each returns `ModuleAPI<Registry & { [K in Name]: T }>` so the registry type widens with each call. At runtime the same instance is returned (cast through the new type). **[Agent: typescript-framework]**
+  - [ ] Create `src/di/injector.ts` with `createInjector(modules)` that loads modules from the registry, walks the (flat, no deps yet) invoke queue, and builds a `providerCache: Map<string, unknown>` for values/constants. Return an `Injector<Registry>` with overloaded `get<K extends keyof Registry>(name: K): Registry[K]` (typed) and `get<T>(name: string): T` (escape hatch), plus `has(name): boolean`. **[Agent: typescript-framework]**
+  - [ ] Add runtime tests: `module.value('url', 'https://...')`, `module.constant('MAX', 3)`, `injector.get('url')`, `injector.has('url')`, `injector.get('unknown')` throws. **[Agent: vitest-testing]**
+  - [ ] Add type-safety tests using `expectTypeOf` or `satisfies`: `injector.get('url')` infers `string`, `injector.get('MAX')` infers `number`, `injector.get('nonexistent')` is a **compile-time error** on a typed injector. **[Agent: vitest-testing]**
   - [ ] Update `src/di/index.ts` to export `createInjector`. Verify: `pnpm test`, `pnpm typecheck`, `pnpm lint` pass. **[Agent: typescript-framework]**
 
 - [ ] **Slice 3: Module Dependency Graph**
   - [ ] Update `createInjector` to walk the dependency graph: given `['app']`, recursively load `app.requires` modules, then their requires, etc. Track loaded modules in a `Set<string>` to handle shared deps (load once). Throw `'Module not found: <name>'` for missing modules. **[Agent: typescript-framework]**
-  - [ ] Add tests: module `app` depends on `common`, service registered on `common` is visible in `app`. Transitive: `app → b → c`. Shared dep loaded once. Missing module throws. **[Agent: vitest-testing]**
+  - [ ] Add a `MergeRegistries` utility type that merges the typed registries of multiple modules. The injector built from several modules should have a combined registry type so `get('nameFromDep')` also has compile-time type inference. **[Agent: typescript-framework]**
+  - [ ] Add runtime tests: module `app` depends on `common`, service registered on `common` is visible in `app`. Transitive: `app → b → c`. Shared dep loaded once. Missing module throws. **[Agent: vitest-testing]**
+  - [ ] Add type-safety tests: services registered in a dependency module appear in the consuming module's typed registry (`get('serviceFromCommon')` infers the correct type). **[Agent: vitest-testing]**
   - [ ] Verify: `pnpm test`, `pnpm typecheck`, `pnpm lint` pass. **[Agent: typescript-framework]**
 
 - [ ] **Slice 4: factory Recipe with Dependency Injection**
   - [ ] Create `src/di/annotate.ts` with an `annotate(fn: Invokable): readonly string[]` helper. If `fn` is an array, split into `[...deps, actualFn]`. Else read `fn.$inject`. Throw clear error if neither. **[Agent: typescript-framework]**
-  - [ ] Add `factory(name, invokable)` method to the `Module` class. In `createInjector`, update provider resolution: factories are lazy — store the invokable, resolve dependencies on first `get(name)`, cache the result for singleton behavior. **[Agent: typescript-framework]**
-  - [ ] Add tests: factory with no deps, factory with `$inject` property, factory with array-style annotation, singleton caching (`get` returns same reference), factory accessing a `value` dependency. **[Agent: vitest-testing]**
+  - [ ] Add `factory<Name extends string, T>(name: Name, invokable)` method to the `Module` class using the same builder pattern — returns `ModuleAPI<Registry & { [K in Name]: T }>`. The factory's return type `T` should be inferable from the invokable's return type when possible. **[Agent: typescript-framework]**
+  - [ ] In `createInjector`, update provider resolution: factories are lazy — store the invokable, resolve dependencies on first `get(name)`, cache the result for singleton behavior. **[Agent: typescript-framework]**
+  - [ ] Add runtime tests: factory with no deps, factory with `$inject` property, factory with array-style annotation, singleton caching, factory accessing a `value` dependency. **[Agent: vitest-testing]**
+  - [ ] Add type-safety tests: `.factory('logger', () => ({ log: ... }))` — `injector.get('logger')` infers `{ log: ... }`. **[Agent: vitest-testing]**
   - [ ] Verify: `pnpm test`, `pnpm typecheck`, `pnpm lint` pass. **[Agent: typescript-framework]**
 
 - [ ] **Slice 5: Injector.invoke and Injector.annotate**
