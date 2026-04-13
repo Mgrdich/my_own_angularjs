@@ -12,38 +12,30 @@ The framework currently has a standalone Scope module and Expression Parser, but
 
 **Problem:** Without DI, there is no way for modules to declare dependencies, no way to share instances across the application, and no way to build the rest of AngularJS — the entire framework is built on top of the injector.
 
-**Desired outcome:** A working module system and injector that supports registering values, constants, and factories; resolves dependencies using `$inject` property or array-style annotations; detects missing dependencies with clear error messages; and detects circular dependencies before they cause stack overflow. Everything must be fully type-safe with TypeScript inference where possible. This spec covers the foundation; `service`, `provider`, `decorator` recipes and `config`/`run` blocks are deferred to Spec 008.
+**Desired outcome:** A working module system and injector that supports registering values, constants, and factories; resolves dependencies using `$inject` property or array-style annotations; detects missing dependencies with clear error messages; and detects circular dependencies before they cause stack overflow. Everything must be fully type-safe with TypeScript inference where possible, and exposed exclusively via modern ES module named exports (consistent with how `Scope`, `parse`, and all other public APIs already work in this codebase). This spec covers the foundation; `service`, `provider`, `decorator` recipes and `config`/`run` blocks are deferred to Spec 008. A classic `angular.module()`-style global namespace is **not** part of this spec — it will be introduced later as a dedicated AngularJS compatibility layer that wraps the ES module APIs.
 
 ---
 
 ## 2. Functional Requirements (The "What")
 
-### 2.1 Module Creation and Retrieval — Two API Styles
+### 2.1 Module Creation and Retrieval
 
-Developers must be able to create and retrieve modules using **both** the classic `angular.module()` global pattern **and** modern ES module imports. Both APIs are first-class and share the same underlying module registry.
+Developers create and retrieve modules using modern ES module named exports. This is consistent with how the rest of the framework is exposed (e.g., `Scope.create`, `parse` from the parser module) — everything is a named export, nothing lives on a global namespace.
 
-**Classic AngularJS style:**
+**API:**
 
-- `angular.module('myApp', ['dep1', 'dep2'])` — creates a new module named `myApp` that depends on `dep1` and `dep2`
-- `angular.module('myApp')` — retrieves the existing module (no dependencies argument means retrieval, not creation)
+- `createModule('myApp', ['dep1', 'dep2'])` — creates a new module named `myApp` that depends on `dep1` and `dep2`
+- `getModule('myApp')` — retrieves an existing module (throws if not found)
 
-**Modern ES module style (named exports):**
-
-- `createModule('myApp', ['dep1', 'dep2'])` — creates a module
-- `getModule('myApp')` — retrieves an existing module
-
-**Both APIs must share a single underlying implementation.** `angular.module()` is a thin wrapper that delegates to the same internal module registry and the same `createModule` / `getModule` code paths. There must not be two separate implementations — a module created via `createModule` is retrievable via `angular.module` and vice versa, because they are literally the same code behind the scenes.
+A classic `angular.module()` global namespace is explicitly **out of scope for this spec**. A future "AngularJS Compatibility Layer" phase will wrap these ES module APIs under an `angular` namespace constant so users migrating from classic AngularJS have the familiar entry points. Until then, there is one API surface.
 
 **Acceptance Criteria:**
 
-- [ ] `angular.module('app', [])` creates a new module named `app` with no dependencies
-- [ ] `angular.module('app', ['common'])` creates a module that depends on `common`
-- [ ] `angular.module('app')` (no dependencies arg) returns the previously created module
-- [ ] `angular.module('app')` throws a clear error if `app` was never created
+- [ ] `createModule('app', [])` creates a new module named `app` with no dependencies
+- [ ] `createModule('app', ['common'])` creates a module that depends on `common`
+- [ ] `getModule('app')` returns the previously created module
+- [ ] `getModule('app')` throws `Error('Module not found: app')` if `app` was never created
 - [ ] Creating a module with the same name twice replaces the previous registration
-- [ ] `createModule()` and `getModule()` named exports work identically to `angular.module()`
-- [ ] Modules created via one API are retrievable via the other (shared registry and shared code path)
-- [ ] `angular.module` is implemented by delegating to `createModule` / `getModule` — not a second parallel implementation
 
 ### 2.2 Module Dependency Graph
 
@@ -161,8 +153,8 @@ injector.get('unknown');  // compile error — 'unknown' is not a registered key
 
 ### In-Scope
 
-- Module system with **both** `angular.module()` (classic global) **and** `createModule()` / `getModule()` (modern ES imports) APIs
-- Shared module registry so both APIs are interchangeable
+- Module system with ES module named exports: `createModule()` / `getModule()`
+- Single module registry shared across all DI APIs
 - Module dependency graph (including transitive dependencies)
 - Three recipes: `value`, `constant`, `factory`
 - Injector with `get`, `has`, `invoke`, `annotate`
@@ -174,6 +166,7 @@ injector.get('unknown');  // compile error — 'unknown' is not a registered key
 
 ### Out-of-Scope (deferred to Spec 008 or later)
 
+- **`angular.module()` global namespace** — Deferred to the dedicated AngularJS Compatibility Layer milestone, which wraps the ES module APIs from this spec under an `angular` constant for users migrating from classic AngularJS
 - **`service`, `provider`, `decorator` recipes** — Spec 008
 - **`config()` and `run()` blocks** — Spec 008
 - **Function parameter inference** — Not supported (explicit `$inject` or array-style only)

@@ -6,6 +6,7 @@ export default defineConfig({
     alias: {
       '@core': path.resolve(__dirname, 'src/core'),
       '@parser': path.resolve(__dirname, 'src/parser'),
+      '@di': path.resolve(__dirname, 'src/di'),
     },
   },
   test: {

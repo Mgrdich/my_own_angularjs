@@ -5,15 +5,14 @@
 
 ---
 
-- [ ] **Slice 1: Module Registry & Creation APIs**
-  - [ ] Create `src/di/di-types.ts` with core type definitions: `Annotated`, `InvokableArray`, `Invokable`, `ModuleAPI<Registry>` (generic over a Registry type), `Injector<Registry>` (generic over a merged registry). Export as `type` exports. **[Agent: typescript-framework]**
-  - [ ] Create `src/di/module.ts` with a module-scoped `registry` Map, a `Module` class (minimal — just `name`, `requires`, `invokeQueue`), and a `resetRegistry()` test helper. **[Agent: typescript-framework]**
-  - [ ] Create `src/di/angular.ts` exporting named `createModule(name, requires)` and `getModule(name)` as the canonical implementation, plus an `angular` namespace object whose `module()` method is a **thin wrapper** that delegates to `createModule` / `getModule` (no duplicate logic). **[Agent: typescript-framework]**
-  - [ ] Create `src/di/__tests__/di.test.ts` with a `describe('Module creation', ...)` block. Tests: create module, retrieve module, throw on missing, both APIs share registry, replacing a module works, `angular.module` delegates to the same code path as `createModule`/`getModule`. Use `beforeEach(() => resetRegistry())` for test isolation. **[Agent: vitest-testing]**
-  - [ ] Create `src/di/index.ts` barrel exporting `angular`, `createModule`, `getModule`, and types. Verify: `pnpm test`, `pnpm typecheck`, `pnpm lint` pass. **[Agent: typescript-framework]**
+- [x] **Slice 1: Module Registry & Creation APIs**
+  - [x] Create `src/di/di-types.ts` with core type definitions: `Annotated`, `InvokableArray`, `Invokable`, `ModuleAPI<Registry>` (generic over a Registry type), `Injector<Registry>` (generic over a merged registry). Export as `type` exports. **[Agent: typescript-framework]**
+  - [x] Create `src/di/module.ts` with a module-scoped `registry` Map, a `Module` class (minimal — just `name`, `requires`, `invokeQueue`), `createModule(name, requires?)` and `getModule(name)` named exports, and a `resetRegistry()` test helper. **[Agent: typescript-framework]**
+  - [x] Create `src/di/__tests__/di.test.ts` with a `describe('createModule / getModule', ...)` block. Tests: create module, retrieve module, throw on missing, replacing a module works. Use `beforeEach(() => resetRegistry())` for test isolation. **[Agent: vitest-testing]**
+  - [x] Create `src/di/index.ts` barrel exporting `createModule`, `getModule`, and types. Verify: `pnpm test`, `pnpm typecheck`, `pnpm lint` pass. **[Agent: typescript-framework]**
 
 - [ ] **Slice 2: value/constant Registration & Basic Injector (no dependencies)**
-  - [ ] Add `value<Name extends string, T>(name: Name, value: T)` and `constant<Name, T>(name, value)` methods to the `Module` class using the builder pattern. Each returns `ModuleAPI<Registry & { [K in Name]: T }>` so the registry type widens with each call. At runtime the same instance is returned (cast through the new type). **[Agent: typescript-framework]**
+  - [x] Add `value<Name extends string, T>(name: Name, value: T)` and `constant<Name, T>(name, value)` methods to the `Module` class using the builder pattern. Each returns `ModuleAPI<Registry & { [K in Name]: T }>` so the registry type widens with each call. At runtime the same instance is returned (cast through the new type). **[Agent: typescript-framework]**
   - [ ] Create `src/di/injector.ts` with `createInjector(modules)` that loads modules from the registry, walks the (flat, no deps yet) invoke queue, and builds a `providerCache: Map<string, unknown>` for values/constants. Return an `Injector<Registry>` with overloaded `get<K extends keyof Registry>(name: K): Registry[K]` (typed) and `get<T>(name: string): T` (escape hatch), plus `has(name): boolean`. **[Agent: typescript-framework]**
   - [ ] Add runtime tests: `module.value('url', 'https://...')`, `module.constant('MAX', 3)`, `injector.get('url')`, `injector.has('url')`, `injector.get('unknown')` throws. **[Agent: vitest-testing]**
   - [ ] Add type-safety tests using `expectTypeOf` or `satisfies`: `injector.get('url')` infers `string`, `injector.get('MAX')` infers `number`, `injector.get('nonexistent')` is a **compile-time error** on a typed injector. **[Agent: vitest-testing]**
@@ -46,6 +45,6 @@
   - [ ] Verify: `pnpm test`, `pnpm typecheck`, `pnpm lint` pass. **[Agent: typescript-framework]**
 
 - [ ] **Slice 7: Public API Exports & Root Integration**
-  - [ ] Ensure `src/di/index.ts` exports everything: `angular`, `createModule`, `getModule`, `createInjector`, and all public types. Update `src/index.ts` to re-export from `./di/index`. **[Agent: typescript-framework]**
+  - [ ] Ensure `src/di/index.ts` exports everything: `createModule`, `getModule`, `createInjector`, and all public types. Update `src/index.ts` to re-export from `./di/index`. **[Agent: typescript-framework]**
   - [ ] Verify build: run `pnpm build`, check that `dist/esm/di/index.mjs`, `dist/cjs/di/index.cjs`, and `dist/types/di/index.d.ts` are all generated. **[Agent: rollup-build]**
   - [ ] Final verification: `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm build` all pass. **[Agent: typescript-framework]**

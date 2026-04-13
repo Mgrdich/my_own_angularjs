@@ -10,11 +10,11 @@
 
 Build the DI system as a new module under `src/di/`. The module has three main pieces:
 
-1. **Module registry** — A singleton `Map<string, Module>` that stores all modules by name. Both `angular.module()` and `createModule()` read/write this same registry, so the APIs are interchangeable.
+1. **Module registry** — A singleton `Map<string, Module>` that stores all modules by name. `createModule()` and `getModule()` read/write this registry.
 2. **Module class** — Generic over a `Registry` type parameter that tracks all registered services as a mapped type `{ [K in registered name]: service type }`. Each `.value()` / `.constant()` / `.factory()` call returns `Module<Registry & { [newName]: newType }>` — a builder-pattern approach that accumulates type information across chained calls. Registration is *declarative* — nothing is instantiated until the injector is created.
 3. **Injector** — Created from a root module. Walks the dependency graph, collects all queued registrations, and provides `get`, `has`, `invoke`, `annotate` for resolving services. Uses lazy instantiation with a cache for singletons. The injector type is generic over the merged registry of all modules in the graph, so `injector.get('name')` infers the correct return type from string literal lookup.
 
-The `angular` namespace is a **thin wrapper** over `createModule` / `getModule` — `angular.module(name, requires)` literally calls `createModule(name, requires)` and `angular.module(name)` calls `getModule(name)`. There is ONE implementation; `angular` just provides a familiar surface for users migrating from classic AngularJS. The `angular` namespace is a named export that consumers import explicitly (`import { angular } from 'my-own-angularjs/di'`).
+All public APIs are exposed as ES module named exports (`createModule`, `getModule`, `createInjector`), consistent with the rest of the framework (`Scope.create`, `parse`, etc.). No global `angular` namespace — that is deferred to a dedicated AngularJS Compatibility Layer milestone in the roadmap.
 
 No architectural changes. The new module plugs into existing `src/di/` (currently empty) and extends `src/di/index.ts` as a barrel.
 
@@ -29,11 +29,10 @@ No architectural changes. The new module plugs into existing `src/di/` (currentl
 | File          | Responsibility                                                                                   |
 |---------------|--------------------------------------------------------------------------------------------------|
 | `di-types.ts` | Interfaces: `Annotated`, `ModuleAPI`, `Injector`, `Invokable`, `Recipe`                          |
-| `module.ts`   | `Module` class with `value`, `constant`, `factory` methods; module registry map                  |
+| `module.ts`   | `Module` class with `value`, `constant`, `factory` methods; module registry map; `createModule`, `getModule`, `resetRegistry` named exports |
 | `injector.ts` | `createInjector(modules)` factory; `Injector` with `get`, `has`, `invoke`, `annotate`            |
 | `annotate.ts` | `annotate(fn)` helper — extracts dependency names from `$inject` property or array-style         |
-| `angular.ts`  | `angular` namespace object with `module()` method, and named exports `createModule`, `getModule` |
-| `index.ts`    | Barrel: re-export `angular`, `createModule`, `getModule`, `createInjector`, types                |
+| `index.ts`    | Barrel: re-export `createModule`, `getModule`, `createInjector`, types                           |
 
 **Test file:** `src/di/__tests__/di.test.ts` — single file with nested `describe` blocks per feature area.
 
@@ -42,7 +41,7 @@ No architectural changes. The new module plugs into existing `src/di/` (currentl
 ```
 consumer code
      ↓
- angular.module('app', ['common'])   (or createModule/getModule)
+ createModule('app', ['common'])   (or getModule to retrieve)
      ↓
  Module registry (Map<string, Module>)
      ↓
@@ -116,7 +115,6 @@ type MergeRegistries<Modules extends readonly ModuleAPI<any>[]> = /* ... */;
 | Resolution path stack | `Array<string>` tracking in-progress resolutions for cycle detection                                                        |
 | `annotate`            | If `fn` is an array, pop last element as the actual fn and use rest as `$inject`. Else read `fn.$inject`. Throw if neither. |
 | Error messages        | `Unknown provider: <name>`, `Module not found: <name>`, `Circular dependency: A <- B <- A`                                  |
-| `angular` namespace   | **Thin wrapper.** `angular.module(name, requires)` is literally `(name, requires) => requires !== undefined ? createModule(name, requires) : getModule(name)`. One shared implementation. |
 | Builder-pattern types | `value` / `constant` / `factory` methods return `ModuleAPI<Registry & { [Name]: T }>` — the type widens with each call. At runtime the same instance is returned (cast through the new type). |
 | Type-safe `get`       | `Injector<Registry>#get<K extends keyof Registry>(name: K)` returns `Registry[K]`, so calling `get('apiUrl')` infers the registered type. An overload `get<T>(name: string): T` provides the escape hatch. |
 
@@ -124,8 +122,8 @@ type MergeRegistries<Modules extends readonly ModuleAPI<any>[]> = /* ... */;
 
 - **File:** `src/di/index.ts` — barrel export
 - **Existing `package.json` exports map** already has `/di` entry pointing to `dist/esm/di/index.mjs`
-- Consumers: `import { angular } from 'my-own-angularjs/di'` or `import { createModule, createInjector } from 'my-own-angularjs/di'`
-- Root `src/index.ts` will also re-export DI for `import { angular } from 'my-own-angularjs'`
+- Consumers: `import { createModule, getModule, createInjector } from 'my-own-angularjs/di'`
+- Root `src/index.ts` will also re-export DI for `import { createModule } from 'my-own-angularjs'`
 
 ---
 
@@ -157,7 +155,7 @@ type MergeRegistries<Modules extends readonly ModuleAPI<any>[]> = /* ... */;
 - **Location:** `src/di/__tests__/di.test.ts`
 - **Framework:** Vitest
 - **Organization:** One top-level `describe` per feature area:
-  - `describe('angular.module / createModule / getModule', ...)` — module creation, retrieval, shared registry
+  - `describe('createModule / getModule', ...)` — module creation, retrieval, registry isolation
   - `describe('Module dependency graph', ...)` — transitive deps, shared deps loaded once, missing module
   - `describe('Module.value / constant / factory', ...)` — registration of each recipe
   - `describe('Injector.get / has', ...)` — resolution, singleton caching, unknown provider

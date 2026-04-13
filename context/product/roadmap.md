@@ -108,3 +108,26 @@ _Features that complete the full framework experience._
     - [ ] **TodoMVC:** A full TodoMVC implementation — the standard framework showcase app — demonstrating directives, two-way binding, and filtering.
     - [ ] **Form Validation Demo:** A form with validation rules demonstrating `ngModel`, built-in and custom validators, and form state tracking (`$dirty`, `$valid`, etc.).
     - [ ] **SPA with Routing:** A multi-page single-page application using `$routeProvider`, `ng-view`, route parameters, and navigation.
+
+---
+
+### Phase 5 — AngularJS Compatibility Layer
+
+_A final milestone that wraps the entire ES-module-first framework under a classic `angular` namespace, providing a familiar surface for developers migrating from original AngularJS 1.x._
+
+Throughout Phases 0–4, every feature is built and exposed as ES module named exports (`Scope`, `parse`, `createModule`, `createInjector`, `$http`, etc.) — there is no global `angular` object during development. This final phase adds a compatibility layer that wraps all of those APIs under a single `angular` constant so that code written against the classic AngularJS 1.x API can run with minimal changes._
+
+- [ ] **`angular` Namespace Constant**
+  - [ ] **Core helpers:** Expose `angular.isString`, `angular.isNumber`, `angular.isArray`, `angular.isObject`, `angular.isFunction`, `angular.isDefined`, `angular.equals`, `angular.copy`, `angular.forEach`, `angular.extend`, `angular.noop` — all delegating to the existing typed utility functions.
+  - [ ] **Module system:** `angular.module(name, requires?)` — thin wrapper over `createModule` / `getModule`.
+  - [ ] **Injector:** `angular.injector(modules)` — thin wrapper over `createInjector`.
+  - [ ] **Bootstrap:** `angular.bootstrap(element, modules, config?)` — DOM-based application startup using the existing injector and compiler.
+  - [ ] **Element wrapper:** `angular.element` — a lightweight jqLite-style wrapper (or re-export jQuery if present).
+  - [ ] **Version:** `angular.version` — compatibility version string.
+
+- [ ] **Classic API Compatibility Tests**
+  - [ ] **Snippet parity:** Run small classic AngularJS code snippets (from the official AngularJS docs) against the compatibility layer and verify they produce identical results.
+  - [ ] **Migration guide:** Document which classic AngularJS APIs are supported, which are deferred, and any behavioral differences.
+
+- [ ] **No Duplication**
+  - [ ] **Thin wrapper only:** Every entry on the `angular` namespace must delegate to an existing ES module export. No duplicated implementation, no parallel registries, no additional state.
