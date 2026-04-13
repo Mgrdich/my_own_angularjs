@@ -22,9 +22,19 @@ This project is being fully rewritten using [Claude Code](https://claude.ai/code
 - **Expression Parser** -- Lexer, AST builder, and tree-walking interpreter supporting literals, identifiers, member access, function calls, and scope/locals resolution
 - **Utility Functions** -- Type guards (`isString`, `isNumber`, `isObject`, etc.), deep equality (`isEqual`), deep clone (`copy`), iteration (`forEach`), and helpers (`noop`, `createMap`, `range`)
 
+### Improvements Over Original AngularJS
+
+While maintaining behavioral parity, this implementation introduces several enhancements:
+
+- **Configurable digest TTL** -- Set the maximum digest iterations per scope hierarchy via `Scope.create({ ttl: 20 })` instead of a hardcoded limit
+- **Improved error diagnostics** -- TTL breach errors include the watch function source to help identify unstable watchers
+- **Full TypeScript type guards** -- All type-checking functions (`isString`, `isObject`, etc.) are proper type guards that narrow types in conditionals
+- **Generic type safety** -- `Scope.create<T>()` provides typed scope properties, `isArray<T>()` preserves element types from union inputs
+- **Tree-walking interpreter** -- Expression parser uses a safe AST interpreter instead of `new Function()` code generation, eliminating CSP violations
+
 ### Upcoming
 
-- **Phase 1** -- Dependency Injection (modules, injector, providers)
+- **Phase 1** -- Configurable digest TTL, Dependency Injection (modules, injector, providers)
 - **Phase 2** -- Expressions & Filters, Directives & DOM Compilation
 - **Phase 3** -- HTTP, Forms & Validation, Promises
 - **Phase 4** -- Routing, Animations, npm Package
