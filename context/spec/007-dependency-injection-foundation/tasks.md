@@ -35,7 +35,7 @@
 
 - [ ] **Slice 5: Injector.invoke and Injector.annotate**
   - [x] Add `invoke<T>(fn: Invokable, self?: unknown, locals?: Record<string, unknown>): T` to the `Injector`. Use `annotate()` to get dep names, resolve each via `get()` or `locals[name]` if provided, call the function with `self` as `this`. **[Agent: typescript-framework]**
-  - [ ] Add `annotate(fn)` method on `Injector` that delegates to the `annotate` helper. **[Agent: typescript-framework]**
+  - [x] Add `annotate(fn)` method on `Injector` that delegates to the `annotate` helper. **[Agent: typescript-framework]**
   - [ ] Add tests: `invoke` with array-style, `invoke` with `$inject`, `invoke` with `self` binding, `invoke` with `locals` override, `invoke` with unannotated function throws, `annotate` returns dep names. **[Agent: vitest-testing]**
   - [ ] Verify: `pnpm test`, `pnpm typecheck`, `pnpm lint` pass. **[Agent: typescript-framework]**
 

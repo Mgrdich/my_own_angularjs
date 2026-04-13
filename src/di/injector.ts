@@ -16,14 +16,19 @@ import { isArray } from '@core/utils';
 
 import { annotate as annotateInvokable } from './annotate';
 import type { Injector, Invokable } from './di-types';
-import { getModule, type AnyModule, type Module } from './module';
+import { getModule, type AnyModule, type Module, type TypedModule } from './module';
 
 /**
- * Extract the `Registry` type parameter from a concrete {@link Module} type.
- * Resolves to `never` when the input is not a `Module`, which makes it a
- * safe building block inside a distributive conditional type.
+ * Extract the `Registry` type parameter from a concrete {@link Module} or
+ * {@link TypedModule} type. The `TypedModule` branch is tried first because
+ * `createModule` returns that typed view; `TypedModule<R, ...>` structurally
+ * also extends `Module<R, ...>`, but the extra factory overloads on
+ * `TypedModule` can confuse single-pattern inference in some cases, so we
+ * match it explicitly. Resolves to `never` when the input is neither, which
+ * keeps it safe inside a distributive conditional type.
  */
-type ExtractRegistry<M> = M extends Module<infer R> ? R : never;
+type ExtractRegistry<M> =
+  M extends TypedModule<infer R, string, readonly string[]> ? R : M extends Module<infer R> ? R : never;
 
 /**
  * Convert a union type `U` into the intersection of all its members.
@@ -200,9 +205,14 @@ export function createInjector<const Mods extends readonly AnyModule[]>(
     return actualFn.apply(self, resolvedDeps) as Return;
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- stub implementation, full version lands in Slice 5
+  /**
+   * Delegate to the shared `annotate` helper to extract the dependency name
+   * list from an {@link Invokable}. Exposed on the injector so that consumers
+   * (e.g. test harnesses, higher-level APIs) can inspect an invokable's
+   * declared dependencies without importing the helper directly.
+   */
   function annotate(fn: Invokable): readonly string[] {
-    throw new Error('injector.annotate is not yet implemented');
+    return annotateInvokable(fn);
   }
 
   // The `get` local is typed as the dynamic-name overload `<T>(name: string) => T`.

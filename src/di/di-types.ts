@@ -41,13 +41,28 @@ export type InvokableArray<Return = unknown> = readonly [...string[], (...deps: 
 export type Invokable<Return = unknown> = Annotated<(...args: never[]) => Return> | InvokableArray<Return>;
 
 /**
+ * Given a `Registry` and a tuple of dependency names, produce a tuple of the
+ * corresponding service types. Used by `Module.factory` to type a factory
+ * callback's parameters based on what the registry has registered.
+ *
+ * If a dependency name is not a key of `Registry` (for example, a name that
+ * comes from a transitively-required module), the slot resolves to `unknown`,
+ * which keeps the overload matchable while preserving type safety at call sites
+ * where every dep is statically known.
+ */
+export type ResolveDeps<Registry extends Record<string, unknown>, Deps extends readonly string[]> = {
+  [I in keyof Deps]: Deps[I] extends keyof Registry ? Registry[Deps[I]] : unknown;
+};
+
+/**
  * The module builder interface, generic over an accumulated registry of
  * registered service names to their types. Each registration method returns
  * a new `ModuleAPI` whose registry type has been extended with the new entry,
  * enabling precise type inference on downstream `injector.get(name)` calls.
  */
 export interface ModuleAPI<
-  Registry extends Record<string, unknown> = Record<string, never>,
+  // eslint-disable-next-line @typescript-eslint/no-empty-object-type -- see note on `Module` in module.ts: `{}` (not `Record<string, never>`) is the correct empty-registry starting type so that newly-added literal keys aren't swallowed by a wide `string` index signature, which would break the typed-factory overloads.
+  Registry extends Record<string, unknown> = {},
   Name extends string = string,
   Requires extends readonly string[] = readonly string[],
 > {
@@ -70,18 +85,50 @@ export interface ModuleAPI<
   constant<K extends string, T>(name: K, value: T): ModuleAPI<Registry & { [P in K]: T }, Name, Requires>;
 
   /**
-   * Register a factory under `name`. The factory is invoked lazily by the
-   * injector with its declared dependencies, and its return value is cached
-   * as the resolved service instance.
+   * Register a factory under `name` using an array-style annotation whose
+   * leading entries are keys of the current `Registry`. The trailing
+   * function's parameters are inferred from {@link ResolveDeps}, giving each
+   * dep argument the exact type recorded by an earlier `value` / `constant` /
+   * `factory` registration on this module.
    *
-   * `Return` is inferred from the trailing function of the supplied
-   * {@link Invokable}, so downstream `injector.get(name)` lookups resolve to
-   * the factory's actual return type without any explicit annotation. Callers
-   * may still supply `Return` explicitly as an escape hatch.
+   * **Typo detection limitation.** When a dep name does not exist on the
+   * module's `Registry` (e.g. because it's a typo, or because it comes from
+   * a transitively-required module), this typed overload silently fails to
+   * match and the call site falls through to the untyped fallback below.
+   * TypeScript's overload resolution is "first success wins," so the
+   * constraint error on this overload does not surface. Callback param
+   * inference still fires for valid dep lists; detecting typos via the type
+   * system would require a different, more invasive design and is out of
+   * scope here.
+   */
+  factory<const K extends string, const Deps extends readonly (keyof Registry & string)[], Return>(
+    name: K,
+    invokable: readonly [...Deps, (...args: ResolveDeps<Registry, Deps>) => Return],
+  ): ModuleAPI<Registry & { [P in K]: Return }, Name, Requires>;
+
+  /**
+   * Register a factory under `name` using a `$inject`-annotated function whose
+   * `$inject` property is a readonly literal tuple of keys of `Registry`. The
+   * function's parameter types are validated against {@link ResolveDeps}.
+   * Annotate `$inject` with `as const` (or a `readonly` tuple type) so the
+   * compiler can see the literal dep names.
+   */
+  factory<const K extends string, const Inject extends readonly (keyof Registry & string)[], Return>(
+    name: K,
+    invokable: ((...args: ResolveDeps<Registry, Inject>) => Return) & { $inject: Inject },
+  ): ModuleAPI<Registry & { [P in K]: Return }, Name, Requires>;
+
+  /**
+   * Fallback overload for factories whose dependencies cannot be validated at
+   * compile time against the current `Registry` — for example, factories that
+   * reference services from a transitively-required module, or those whose
+   * `$inject` property is typed as the wider `string[]`. Behaves exactly like
+   * the old untyped signature: `Return` is still inferred from the trailing
+   * function, but the callback's parameters are not typed from the registry.
    */
   factory<K extends string, Return>(
     name: K,
-    factory: Invokable<Return>,
+    invokable: Invokable<Return>,
   ): ModuleAPI<Registry & { [P in K]: Return }, Name, Requires>;
 }
 

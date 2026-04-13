@@ -1,4 +1,4 @@
-import type { Invokable } from './di-types';
+import type { Invokable, ResolveDeps } from './di-types';
 
 /**
  * Recipe types supported by the module system. At Slice 1 only the identifier
@@ -50,7 +50,8 @@ const registry = new Map<string, AnyModule>();
  */
 
 export class Module<
-  Registry extends Record<string, unknown> = Record<string, never>,
+  // eslint-disable-next-line @typescript-eslint/no-empty-object-type -- `{}` (not `Record<string, never>`) is the correct "empty registry" starting type: its `keyof` is `never`, which lets the typed-factory overloads reject dep names against newly-added literal keys. `Record<string, never>` has a wide `string` index signature that swallows literal keys and breaks `Module` subtype variance between the class and `AnyModule`.
+  Registry extends Record<string, unknown> = {},
   Name extends string = string,
   Requires extends readonly string[] = readonly string[],
 > {
@@ -115,6 +116,13 @@ export class Module<
    * without any explicit annotation. Callers may still provide `Return`
    * explicitly (e.g. `.factory<'svc', MyShape>(...)`) as an escape hatch.
    *
+   * Note: the compile-time typed overloads that validate dep names against
+   * this module's `Registry` live on {@link TypedModule}, not on the class.
+   * `createModule` returns the same runtime instance cast to `TypedModule`,
+   * which is where callers get the typed `.factory(...)` experience. Keeping
+   * the class signature wide here preserves the covariance of `Module` in
+   * `Registry`, which `AnyModule` and `createInjector` rely on.
+   *
    * @param name - The name to register the factory under.
    * @param invokable - The factory, as an array-style annotation or an
    *   `$inject`-annotated function.
@@ -126,6 +134,90 @@ export class Module<
     this.invokeQueue.push(['factory', name, invokable]);
     return this as unknown as Module<Registry & { [P in K]: Return }, Name, Requires>;
   }
+}
+
+/**
+ * Typed builder view of a {@link Module}, returned by {@link createModule}.
+ *
+ * At runtime this is exactly the same object as the underlying `Module` class
+ * instance. At the type level it overlays three additional `factory` overloads
+ * that validate dependency names against this module's own `Registry`:
+ *
+ * 1. **Array-style with typed deps** — each leading entry is constrained to
+ *    `keyof Registry & string`, and the trailing callback's parameters are
+ *    inferred from {@link ResolveDeps}. When every dep is a registered
+ *    literal key, the callback arguments come back typed; when some dep is
+ *    unknown to the local registry, the overload falls through to #3 below
+ *    (see the typo-detection note on the overload itself).
+ * 2. **`$inject`-annotated with typed deps** — the function's `$inject`
+ *    property must be a `readonly` literal tuple of `keyof Registry & string`
+ *    entries. Users must annotate `$inject` with `as const` (or a readonly
+ *    tuple type) so TypeScript sees the literal dep names.
+ * 3. **Untyped fallback** — the original `Invokable<Return>` signature,
+ *    preserved for backward compatibility with factories that reference deps
+ *    from transitively-required modules, factories whose `$inject` is a wider
+ *    `string[]`, and existing call sites that explicitly annotate
+ *    `.factory<'name', Shape>(...)`.
+ *
+ * The typed overloads live on this interface rather than on the class itself
+ * because adding Registry-dependent parameter types to a class method puts
+ * `Registry` in a contravariant position on the method. That breaks the
+ * covariant subtype relationship `Module<A> <: Module<B>` when `A <: B`,
+ * which `AnyModule` and `createInjector` rely on. Keeping the typed overloads
+ * on `TypedModule` sidesteps the variance conflict: the interface extends the
+ * class instance side but never participates in the `AnyModule` widening
+ * check — the cast to `AnyModule` goes through the bare `Module` class.
+ */
+export interface TypedModule<
+  Registry extends Record<string, unknown>,
+  Name extends string,
+  Requires extends readonly string[],
+> extends Module<Registry, Name, Requires> {
+  value<const K extends string, T>(name: K, value: T): TypedModule<Registry & { [P in K]: T }, Name, Requires>;
+
+  constant<const K extends string, T>(name: K, value: T): TypedModule<Registry & { [P in K]: T }, Name, Requires>;
+
+  /**
+   * Array-style factory with deps validated against `Registry`. Each leading
+   * entry must be a literal key of the current `Registry`, and the trailing
+   * callback's parameters are inferred from {@link ResolveDeps} — so each
+   * callback argument is typed from the earlier `value` / `constant` /
+   * `factory` registration on this module.
+   *
+   * **Typo detection limitation.** When a dep name is a typo (or a name that
+   * lives on a transitively-required module), this overload silently fails
+   * to match and call sites fall through to the untyped fallback overload
+   * below. TypeScript's overload resolution is "first success wins", so the
+   * constraint error on this overload does not surface. Typed param inference
+   * still works for valid cases; typo detection via the type system would
+   * require a different, more invasive design and is intentionally out of
+   * scope here.
+   */
+  factory<const K extends string, const Deps extends readonly (keyof Registry & string)[], Return>(
+    name: K,
+    invokable: readonly [...Deps, (...args: ResolveDeps<Registry, Deps>) => Return],
+  ): TypedModule<Registry & { [P in K]: Return }, Name, Requires>;
+
+  /**
+   * `$inject`-annotated factory with deps validated against `Registry`. The
+   * function's `$inject` property must be a `readonly` literal tuple whose
+   * entries are keys of `Registry`; the function's parameters are validated
+   * against {@link ResolveDeps}.
+   */
+  factory<const K extends string, const Inject extends readonly (keyof Registry & string)[], Return>(
+    name: K,
+    invokable: ((...args: ResolveDeps<Registry, Inject>) => Return) & { $inject: Inject },
+  ): TypedModule<Registry & { [P in K]: Return }, Name, Requires>;
+
+  /**
+   * Untyped fallback — used when deps can't be validated statically (e.g.
+   * cross-module deps from a `requires` dependency, wide `string[]` `$inject`
+   * properties, or explicit `.factory<'name', Shape>(...)` return annotations).
+   */
+  factory<K extends string, Return>(
+    name: K,
+    invokable: Invokable<Return>,
+  ): TypedModule<Registry & { [P in K]: Return }, Name, Requires>;
 }
 
 /**
@@ -146,10 +238,18 @@ export class Module<
 export function createModule<const TName extends string, const TRequires extends readonly string[] = readonly []>(
   name: TName,
   requires: TRequires = [] as unknown as TRequires,
-): Module<Record<string, never>, TName, TRequires> {
-  const module = new Module<Record<string, never>, TName, TRequires>(name, requires);
+  // eslint-disable-next-line @typescript-eslint/no-empty-object-type -- see note on the `Module` class declaration for why `{}` is the correct empty-registry starting type.
+): TypedModule<{}, TName, TRequires> {
+  // eslint-disable-next-line @typescript-eslint/no-empty-object-type -- see above.
+  const module = new Module<{}, TName, TRequires>(name, requires);
   registry.set(name, module as unknown as AnyModule);
-  return module;
+  // Cast through `unknown` to expose the same runtime instance under the
+  // typed-factory `TypedModule` view. The underlying `Module` class method is
+  // untyped (for variance reasons — see the class's `factory` JSDoc); the
+  // typed overloads live on `TypedModule` and are applied only from this
+  // public entry point.
+  // eslint-disable-next-line @typescript-eslint/no-empty-object-type -- see above.
+  return module as unknown as TypedModule<{}, TName, TRequires>;
 }
 
 /**
