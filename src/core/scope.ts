@@ -1,7 +1,6 @@
 import {
   initWatchVal,
   type AsyncTask,
-  type DeregisterFn,
   type EventListener,
   type ListenerFn,
   type ScopeEvent,
@@ -68,7 +67,7 @@ export class Scope {
   }
 
   /** Create a typed Scope instance with compile-time property access. */
-  static create<T extends Record<string, unknown> = Record<string, unknown>>(options?: ScopeOptions): TypedScope<T> {
+  static create<T extends Record<string, unknown> = Record<string, unknown>>(options?: ScopeOptions) {
     if (options?.ttl !== undefined && options.ttl < 2) {
       throw new Error('TTL must be at least 2');
     }
@@ -85,7 +84,7 @@ export class Scope {
    * @param valueEq - Whether to use deep equality (not implemented in Slice 1)
    * @returns A function that deregisters the watcher when called
    */
-  $watch<W>(watchFn: WatchFn<W>, listenerFn?: ListenerFn<W>, valueEq?: boolean): DeregisterFn {
+  $watch<W>(watchFn: WatchFn<W>, listenerFn?: ListenerFn<W>, valueEq?: boolean) {
     const watcher: Watcher<W> = {
       watchFn,
       listenerFn: listenerFn ?? noop,
@@ -121,7 +120,7 @@ export class Scope {
    * @param parent - Optional parent scope for hierarchy (defaults to `this`)
    * @returns The new child scope
    */
-  $new(isolated?: boolean, parent?: Scope): Scope {
+  $new(isolated?: boolean, parent?: Scope) {
     const effectiveParent = parent ?? this;
     let child: Scope;
 
@@ -224,7 +223,7 @@ export class Scope {
    *
    * @throws When the digest does not stabilize within TTL iterations
    */
-  $digest(): void {
+  $digest() {
     let ttl = this.$root.$$ttl;
     let dirty: boolean;
 
@@ -285,7 +284,7 @@ export class Scope {
    * @param locals - Optional locals object passed as second argument
    * @returns The result of the expression, or undefined if no expr provided
    */
-  $eval<R>(expr?: (scope: Scope, locals?: unknown) => R, locals?: unknown): R | undefined {
+  $eval<R>(expr?: (scope: Scope, locals?: unknown) => R, locals?: unknown) {
     if (expr) {
       return expr(this, locals);
     }
@@ -298,7 +297,7 @@ export class Scope {
    * @param expr - Optional expression to evaluate before digesting
    * @returns The result of the expression
    */
-  $apply<R>(expr?: WatchFn<R>): R | undefined {
+  $apply<R>(expr?: WatchFn<R>) {
     this.$beginPhase('$apply');
     try {
       return this.$eval(expr);
@@ -313,7 +312,7 @@ export class Scope {
    * Broadcasts a `$destroy` event to this scope and all descendants before cleanup.
    * Clears watchers and listeners to prevent further digest participation.
    */
-  $destroy(): void {
+  $destroy() {
     if (this === this.$root) {
       return;
     }
@@ -336,7 +335,7 @@ export class Scope {
    * Queue an expression for deferred execution within the current or next digest.
    * If no digest is already in progress, schedules one via setTimeout.
    */
-  $evalAsync(expr: WatchFn<unknown>): void {
+  $evalAsync(expr: WatchFn<unknown>) {
     if (!this.$root.$$phase && this.$root.$$asyncQueue.length === 0) {
       setTimeout(() => {
         if (this.$root.$$asyncQueue.length > 0) {
@@ -351,7 +350,7 @@ export class Scope {
    * Coalesce multiple apply calls into a single setTimeout + $apply.
    * All queued expressions are flushed together in one digest cycle.
    */
-  $applyAsync(expr: WatchFn<unknown>): void {
+  $applyAsync(expr: WatchFn<unknown>) {
     this.$$applyAsyncQueue.push({ scope: this, expression: expr });
 
     if (this.$root.$$applyAsyncId === null) {
@@ -367,7 +366,7 @@ export class Scope {
    * Register a function to run once after the next digest cycle completes.
    * The function is not run inside the digest and will not trigger further digestion.
    */
-  $$postDigest(fn: () => void): void {
+  $$postDigest(fn: () => void) {
     this.$$postDigestQueue.push(fn);
   }
 
@@ -379,7 +378,7 @@ export class Scope {
    * @param listenerFn - Called with [newValues[], oldValues[], scope]
    * @returns A function that deregisters all grouped watchers
    */
-  $watchGroup(watchFns: WatchFn<unknown>[], listenerFn: ListenerFn<unknown[]>): DeregisterFn {
+  $watchGroup(watchFns: WatchFn<unknown>[], listenerFn: ListenerFn<unknown[]>) {
     const newValues: unknown[] = new Array(watchFns.length);
     const oldValues: unknown[] = new Array(watchFns.length);
     let changeReactionScheduled = false;
@@ -437,7 +436,7 @@ export class Scope {
    * @param listenerFn - Called with (newValue, oldValue, scope) when changes are detected
    * @returns A function that deregisters the watcher when called
    */
-  $watchCollection(watchFn: WatchFn<unknown>, listenerFn: ListenerFn<unknown>): DeregisterFn {
+  $watchCollection(watchFn: WatchFn<unknown>, listenerFn: ListenerFn<unknown>) {
     let changeCount = 0;
     let oldValue: unknown;
     let newValue: unknown;
@@ -560,7 +559,7 @@ export class Scope {
    * @param listener - Callback invoked when the event fires
    * @returns A function that deregisters the listener when called
    */
-  $on(eventName: string, listener: EventListener): DeregisterFn {
+  $on(eventName: string, listener: EventListener) {
     let listeners = this.$$listeners[eventName];
     if (!listeners) {
       listeners = [];
@@ -584,7 +583,7 @@ export class Scope {
    * @param args - Additional arguments passed to each listener after the event object
    * @returns The event object
    */
-  $emit(eventName: string, ...args: unknown[]): ScopeEvent {
+  $emit(eventName: string, ...args: unknown[]) {
     const state = { propagationStopped: false };
 
     const event: ScopeEvent = {
@@ -622,7 +621,7 @@ export class Scope {
    * @param args - Additional arguments passed to each listener after the event object
    * @returns The event object
    */
-  $broadcast(eventName: string, ...args: unknown[]): ScopeEvent {
+  $broadcast(eventName: string, ...args: unknown[]) {
     const event: ScopeEvent = {
       name: eventName,
       targetScope: this,
@@ -653,7 +652,7 @@ export class Scope {
    * @param event - The event object being propagated
    * @param additionalArgs - Extra arguments passed to each listener
    */
-  $$fireEventOnScope(event: ScopeEvent, additionalArgs: unknown[]): void {
+  $$fireEventOnScope(event: ScopeEvent, additionalArgs: unknown[]) {
     event.currentScope = this;
     const listeners = this.$$listeners[event.name];
     if (listeners) {

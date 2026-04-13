@@ -176,7 +176,7 @@ export function isArrayLike(value: unknown) {
  * When `destination` is provided, properties are copied into it (after
  * clearing existing contents) rather than creating a new container.
  */
-export function copy<T>(source: T, destination?: T): T {
+export function copy<T>(source: T, destination?: T) {
   if (destination !== undefined && source === destination) {
     throw new Error('Cannot copy! Source and destination are identical.');
   }
@@ -184,7 +184,7 @@ export function copy<T>(source: T, destination?: T): T {
   return copyRecursive(source, destination, visited);
 }
 
-function copyRecursive<T>(source: T, destination: T | undefined, visited: Set<T>): T {
+function copyRecursive<T>(source: T, destination: T | undefined, visited: Set<T>) {
   // Primitives: return as-is
   if (source === null || typeof source !== 'object') {
     if (destination !== undefined) {
@@ -292,10 +292,10 @@ export function forEach(
 }
 
 /** Empty function that does nothing. */
-export function noop(): void {}
+export function noop() {}
 
 /** Creates a bare object with no prototype. */
-export function createMap<T = unknown>(): Record<string, T> {
+export function createMap<T = unknown>() {
   return Object.create(null) as Record<string, T>;
 }
 
@@ -306,7 +306,7 @@ export function createMap<T = unknown>(): Record<string, T> {
  * - `range(start, end)` produces values from start (inclusive) to end (exclusive)
  * - `range(start, end, step)` produces values with the given step
  */
-export function range(startOrEnd: number, end?: number, step?: number): number[] {
+export function range(startOrEnd: number, end?: number, step?: number) {
   let actualStart: number;
   let actualEnd: number;
   let actualStep: number;
