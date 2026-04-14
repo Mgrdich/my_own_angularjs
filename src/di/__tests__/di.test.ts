@@ -624,33 +624,21 @@ describe('dependency injection', () => {
     it('uses locals override when the dep name is present in locals', () => {
       const mod = createModule('app', []).value('name', 'Jane');
       const injector = createInjector([mod]);
-      const result = injector.invoke(
-        ['name', (name) => `hello ${name}`],
-        null,
-        { name: 'Bob' },
-      );
+      const result = injector.invoke(['name', (name) => `hello ${name}`], null, { name: 'Bob' });
       expect(result).toBe('hello Bob');
     });
 
     it('respects an explicit undefined in locals (hasOwnProperty check)', () => {
       const mod = createModule('app', []).value('name', 'Jane');
       const injector = createInjector([mod]);
-      const result = injector.invoke(
-        ['name', (name) => name],
-        null,
-        { name: undefined },
-      );
+      const result = injector.invoke(['name', (name) => name], null, { name: undefined });
       expect(result).toBeUndefined();
     });
 
     it('falls through to the injector when a dep is not in locals', () => {
       const mod = createModule('app', []).value('name', 'Jane').value('age', 30);
       const injector = createInjector([mod]);
-      const result = injector.invoke(
-        ['name', 'age', (n , a)=> `${n}:${String(a)}`],
-        null,
-        { name: 'Bob' },
-      );
+      const result = injector.invoke(['name', 'age', (n, a) => `${n}:${String(a)}`], null, { name: 'Bob' });
       expect(result).toBe('Bob:30');
     });
 
@@ -690,7 +678,7 @@ describe('dependency injection', () => {
 
     it('annotate returns dep names from an array-style invokable', () => {
       const injector = createInjector([]);
-      const deps = injector.annotate(['a', 'b', 'c', (a, b , c) => [a, b, c]]);
+      const deps = injector.annotate(['a', 'b', 'c', (a, b, c) => [a, b, c]]);
       expect(deps).toEqual(['a', 'b', 'c']);
     });
 
