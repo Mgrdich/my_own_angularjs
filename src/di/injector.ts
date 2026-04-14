@@ -110,6 +110,13 @@ export function createInjector<const Mods extends readonly AnyModule[]>(
   const providerCache = new Map<string, unknown>();
   const factoryInvokables = new Map<string, Invokable>();
   const loadedModules = new Set<string>();
+  // Stack of names currently being resolved by `get`. When a factory
+  // (transitively) requests a name already on the stack we have a service-
+  // level circular dependency; we surface the full chain in the error
+  // message so callers can see exactly which services form the cycle. The
+  // stack is push/pop-balanced via `try/finally` so a thrown dependency
+  // does not leak stale entries into later lookups.
+  const resolutionPath: string[] = [];
 
   /**
    * Recursively load `mod` and everything it transitively requires. The
@@ -158,6 +165,18 @@ export function createInjector<const Mods extends readonly AnyModule[]>(
       return providerCache.get(name) as T;
     }
     if (factoryInvokables.has(name)) {
+      // Circular dependency detection: if `name` is already on the resolution
+      // stack, a factory higher up the call chain (transitively) asked for a
+      // service that is still pending. Build a right-to-left chain of the
+      // pending names followed by `name` itself so the error shows the full
+      // cycle (e.g. `A <- B <- A`). The chain reads "A is waiting on B, which
+      // is waiting on A" -- the `<-` arrows point from the waiter to what it
+      // is waiting on.
+      if (resolutionPath.includes(name)) {
+        const chain = [...resolutionPath, name].join(' <- ');
+        throw new Error(`Circular dependency: ${chain}`);
+      }
+
       const invokable = factoryInvokables.get(name);
       if (invokable === undefined) {
         // Defensive: `Map.has` just said yes, so this branch is only reachable
@@ -165,19 +184,25 @@ export function createInjector<const Mods extends readonly AnyModule[]>(
         // same as an unregistered provider rather than silently returning.
         throw new Error(`Unknown provider: ${name}`);
       }
-      // Delete before invoking so that if the factory (transitively) requests
-      // itself during its own initialization we surface an "Unknown provider"
-      // error instead of silently re-entering and stack-overflowing. Proper
-      // cycle detection with a clear error message lands in Slice 6.
-      factoryInvokables.delete(name);
-      const deps = annotateInvokable(invokable);
-      const resolvedDeps = deps.map((depName) => get(depName));
-      const fn = isArray(invokable)
-        ? (invokable[invokable.length - 1] as (...args: unknown[]) => unknown)
-        : (invokable as unknown as (...args: unknown[]) => unknown);
-      const result = fn(...resolvedDeps);
-      providerCache.set(name, result);
-      return result as T;
+
+      resolutionPath.push(name);
+      try {
+        const deps = annotateInvokable(invokable);
+        const resolvedDeps = deps.map((depName) => get(depName));
+        const fn = isArray(invokable)
+          ? (invokable[invokable.length - 1] as (...args: unknown[]) => unknown)
+          : (invokable as unknown as (...args: unknown[]) => unknown);
+        const result = fn(...resolvedDeps);
+        providerCache.set(name, result);
+        // Now that the result is cached, the invokable is no longer pending
+        // and can be dropped from the factory map. Deleting *after* caching
+        // (rather than before resolving) is what lets the `resolutionPath`
+        // check above see the entry on re-entry and report a proper cycle.
+        factoryInvokables.delete(name);
+        return result as T;
+      } finally {
+        resolutionPath.pop();
+      }
     }
     throw new Error(`Unknown provider: ${name}`);
   }

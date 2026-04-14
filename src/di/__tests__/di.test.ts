@@ -492,6 +492,150 @@ describe('dependency injection', () => {
     });
   });
 
+  describe('injector.invoke / annotate', () => {
+    beforeEach(() => {
+      resetRegistry();
+    });
+
+    it('invokes an array-style invokable with resolved dependencies', () => {
+      const mod = createModule('app', []).value('name', 'Jane');
+      const injector = createInjector([mod]);
+      const result = injector.invoke(['name', (name) => `hello ${name}`]);
+      expect(result).toBe('hello Jane');
+    });
+
+    it('invokes a $inject-annotated function with resolved dependencies', () => {
+      function greet(name: string) {
+        return `hi ${name}`;
+      }
+      greet.$inject = ['name'] as const;
+      const mod = createModule('app', []).value('name', 'Jane');
+      const injector = createInjector([mod]);
+      expect(injector.invoke(greet)).toBe('hi Jane');
+    });
+
+    it('resolves multiple dependencies in order', () => {
+      const mod = createModule('app', []).value('first', 'Jane').value('last', 'Doe');
+      const injector = createInjector([mod]);
+      const result = injector.invoke(['first', 'last', (f: string, l: string) => `${f} ${l}`]);
+      expect(result).toBe('Jane Doe');
+    });
+
+    it('binds `this` to the provided self argument', () => {
+      const injector = createInjector([]);
+      const ctx = { label: 'context' };
+      function getLabel(this: { label: string }) {
+        return this.label;
+      }
+      getLabel.$inject = [] as readonly string[];
+      expect(injector.invoke(getLabel, ctx)).toBe('context');
+    });
+
+    it('uses locals override when the dep name is present in locals', () => {
+      const mod = createModule('app', []).value('name', 'Jane');
+      const injector = createInjector([mod]);
+      const result = injector.invoke(
+        ['name', (name) => `hello ${name}`],
+        null,
+        { name: 'Bob' },
+      );
+      expect(result).toBe('hello Bob');
+    });
+
+    it('respects an explicit undefined in locals (hasOwnProperty check)', () => {
+      const mod = createModule('app', []).value('name', 'Jane');
+      const injector = createInjector([mod]);
+      const result = injector.invoke(
+        ['name', (name) => name],
+        null,
+        { name: undefined },
+      );
+      expect(result).toBeUndefined();
+    });
+
+    it('falls through to the injector when a dep is not in locals', () => {
+      const mod = createModule('app', []).value('name', 'Jane').value('age', 30);
+      const injector = createInjector([mod]);
+      const result = injector.invoke(
+        ['name', 'age', (n , a)=> `${n}:${String(a)}`],
+        null,
+        { name: 'Bob' },
+      );
+      expect(result).toBe('Bob:30');
+    });
+
+    it('invokes a function that depends on a lazy factory', () => {
+      const mod = createModule('app', [])
+        .value('base', 2)
+        .factory('doubled', ['base', (base: number) => base * 2]);
+      const injector = createInjector([mod]);
+      const result = injector.invoke(['doubled', (d: number) => d + 1]);
+      expect(result).toBe(5);
+    });
+
+    it('throws when invoking a plain function without $inject', () => {
+      const injector = createInjector([]);
+      function unannotated() {
+        return 'never';
+      }
+      expect(() => injector.invoke(unannotated)).toThrow();
+    });
+
+    it('invokes a function with no dependencies (empty array-style)', () => {
+      const injector = createInjector([]);
+      const result = injector.invoke([() => 42]);
+      expect(result).toBe(42);
+    });
+
+    it('infers callback parameter types from the registry (no manual annotation)', () => {
+      const mod = createModule('app', []).value('name', 'Jane').value('age', 30);
+      const injector = createInjector([mod]);
+      // No type annotations on (name, age) — they're inferred from the registry
+      // via the typed array-style overload on `Injector.invoke`.
+      const result = injector.invoke(['name', 'age', (name, age) => `${name} is ${String(age)}`]);
+      expect(result).toBe('Jane is 30');
+      // Type-level check: the inference produced a `string` return.
+      expectTypeOf(result).toEqualTypeOf<string>();
+    });
+
+    it('annotate returns dep names from an array-style invokable', () => {
+      const injector = createInjector([]);
+      const deps = injector.annotate(['a', 'b', 'c', (a, b , c) => [a, b, c]]);
+      expect(deps).toEqual(['a', 'b', 'c']);
+    });
+
+    it('annotate returns $inject array from an annotated function', () => {
+      const injector = createInjector([]);
+      function svc() {
+        return 42;
+      }
+      svc.$inject = ['dep1', 'dep2'] as const;
+      expect(injector.annotate(svc)).toEqual(['dep1', 'dep2']);
+    });
+
+    it('annotate returns an empty array for a no-deps array-style', () => {
+      const injector = createInjector([]);
+      expect(injector.annotate([() => 1])).toEqual([]);
+    });
+
+    it('annotate returns an empty array for a function with empty $inject', () => {
+      const injector = createInjector([]);
+      function svc() {
+        return 42;
+      }
+      svc.$inject = [] as readonly string[];
+      expect(injector.annotate(svc)).toEqual([]);
+    });
+
+    it('annotate throws for a plain function without $inject', () => {
+      const injector = createInjector([]);
+      function unannotated() {
+        return 'never';
+      }
+      expect(() => injector.annotate(unannotated)).toThrow();
+    });
+  });
+
   describe('type safety', () => {
     beforeEach(() => {
       resetRegistry();

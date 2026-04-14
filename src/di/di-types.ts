@@ -157,11 +157,45 @@ export interface Injector<Registry extends Record<string, unknown> = Record<stri
   has(name: string): boolean;
 
   /**
-   * Invoke an {@link Invokable} with its dependencies resolved from the
-   * injector. An optional `self` binds `this`, and `locals` override specific
-   * dependency names for this call. `Return` is inferred from the supplied
-   * invokable's trailing function -- callers don't need to annotate it unless
-   * they want to widen or narrow the inferred type explicitly.
+   * Array-style invoke with deps validated against `Registry`. Each leading
+   * entry must be a literal key of this injector's registry, and the trailing
+   * callback's parameters are inferred from {@link ResolveDeps} — so each
+   * callback argument is typed from the earlier `value` / `constant` /
+   * `factory` registration that populated the registry.
+   *
+   * **Typo / cross-registry limitation.** When a dep name does not exist on
+   * the injector's `Registry` (for example, a typo or a service registered on
+   * a transitively-required module that isn't reflected in `Mods`), this
+   * overload silently fails to match and call sites fall through to the
+   * untyped fallback below. TypeScript's overload resolution is "first
+   * success wins," so the constraint error on this overload does not surface.
+   * Typed param inference still works for valid dep lists.
+   */
+  invoke<const Deps extends readonly (keyof Registry & string)[], Return>(
+    fn: readonly [...Deps, (...args: ResolveDeps<Registry, Deps>) => Return],
+    self?: unknown,
+    locals?: Record<string, unknown>,
+  ): Return;
+
+  /**
+   * `$inject`-annotated invoke with deps validated against `Registry`. The
+   * function's `$inject` property must be a `readonly` literal tuple whose
+   * entries are keys of `Registry`; the function's parameters are validated
+   * against {@link ResolveDeps}. Annotate `$inject` with `as const` (or a
+   * readonly tuple type) so the compiler can see the literal dep names.
+   */
+  invoke<const Inject extends readonly (keyof Registry & string)[], Return>(
+    fn: ((...args: ResolveDeps<Registry, Inject>) => Return) & { $inject: Inject },
+    self?: unknown,
+    locals?: Record<string, unknown>,
+  ): Return;
+
+  /**
+   * Fallback untyped overload — used when deps can't be validated statically
+   * (e.g. cross-module deps from a `requires` dependency, wide `string[]`
+   * `$inject` properties, or pre-built `Invokable<Return>` values passed as
+   * opaque variables). `Return` is still inferred from the trailing function
+   * so callers don't need to annotate it explicitly.
    */
   invoke<Return>(fn: Invokable<Return>, self?: unknown, locals?: Record<string, unknown>): Return;
 

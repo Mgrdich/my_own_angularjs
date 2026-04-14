@@ -33,11 +33,11 @@
   - [x] Add type-safety tests: `.factory('logger', () => ({ log: ... }))` — `injector.get('logger')` infers `{ log: ... }`. **[Agent: vitest-testing]**
   - [x] Verify: `pnpm test`, `pnpm typecheck`, `pnpm lint` pass. **[Agent: typescript-framework]**
 
-- [ ] **Slice 5: Injector.invoke and Injector.annotate**
+- [x] **Slice 5: Injector.invoke and Injector.annotate**
   - [x] Add `invoke<T>(fn: Invokable, self?: unknown, locals?: Record<string, unknown>): T` to the `Injector`. Use `annotate()` to get dep names, resolve each via `get()` or `locals[name]` if provided, call the function with `self` as `this`. **[Agent: typescript-framework]**
   - [x] Add `annotate(fn)` method on `Injector` that delegates to the `annotate` helper. **[Agent: typescript-framework]**
-  - [ ] Add tests: `invoke` with array-style, `invoke` with `$inject`, `invoke` with `self` binding, `invoke` with `locals` override, `invoke` with unannotated function throws, `annotate` returns dep names. **[Agent: vitest-testing]**
-  - [ ] Verify: `pnpm test`, `pnpm typecheck`, `pnpm lint` pass. **[Agent: typescript-framework]**
+  - [x] Add tests: `invoke` with array-style, `invoke` with `$inject`, `invoke` with `self` binding, `invoke` with `locals` override, `invoke` with unannotated function throws, `annotate` returns dep names. **[Agent: vitest-testing]**
+  - [x] Verify: `pnpm test`, `pnpm typecheck`, `pnpm lint` pass. **[Agent: typescript-framework]**
 
 - [ ] **Slice 6: Circular Dependency Detection**
   - [ ] Update `createInjector`'s factory resolution to track a resolution path stack (`Array<string>`). Before resolving a service, check if its name is already in the stack. If yes, throw `'Circular dependency: A <- B <- A'` with the full chain. Push before resolving, pop after. **[Agent: typescript-framework]**
