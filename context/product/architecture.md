@@ -10,6 +10,25 @@
 - **Runtime Target:** Modern evergreen browsers (Chrome, Firefox, Safari, Edge — latest 2 versions)
 - **Package Structure:** Single package with all modules in `src/` — one unified `my-own-angularjs` npm package
 
+### Public API Convention: ES Module Named Exports
+
+All public APIs are exposed exclusively as ES module named exports. The framework does **not** ship a global `angular` namespace constant as its primary interface — consumers import the functions and classes they need directly:
+
+```typescript
+import { Scope } from 'my-own-angularjs';
+import { parse } from 'my-own-angularjs';
+import { createModule, getModule, createInjector } from 'my-own-angularjs/di';
+```
+
+**Rationale:**
+
+- Consistent with modern TypeScript library conventions
+- Better tree-shaking — consumers only pay for what they import
+- Clearer dependency graphs and IDE auto-imports
+- No hidden global state
+
+**AngularJS compatibility layer (future milestone):** A dedicated roadmap item will add an `angular` constant that wraps all the ES module APIs (`angular.module()`, `angular.injector()`, etc.) for users migrating from classic AngularJS. This compatibility layer will be a thin wrapper — it will not duplicate any logic or maintain a separate registry. See the final phase of the roadmap for details.
+
 ---
 
 ## 2. Testing & Quality Assurance
