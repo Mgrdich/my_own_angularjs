@@ -26,9 +26,9 @@ describe('dependency injection', () => {
         expect(mod.requires.length).toBe(0);
       });
 
-      it('the returned module has an empty invokeQueue', () => {
+      it('the returned module has an empty $$invokeQueue', () => {
         const mod = createModule('app', []);
-        expect(mod.invokeQueue.length).toBe(0);
+        expect(mod.$$invokeQueue.length).toBe(0);
       });
     });
 
@@ -75,10 +75,10 @@ describe('dependency injection', () => {
       resetRegistry();
     });
 
-    it('pushes [value, name, value] to the invokeQueue', () => {
+    it('pushes [value, name, value] to the $$invokeQueue', () => {
       const mod = createModule('app', []);
       mod.value('apiUrl', 'https://example.com');
-      expect(mod.invokeQueue[0]).toEqual(['value', 'apiUrl', 'https://example.com']);
+      expect(mod.$$invokeQueue[0]).toEqual(['value', 'apiUrl', 'https://example.com']);
     });
 
     it('returns the same module instance (for chaining)', () => {
@@ -89,31 +89,31 @@ describe('dependency injection', () => {
 
     it('supports chaining multiple value calls', () => {
       const mod = createModule('app', []).value('a', 1).value('b', 2).value('c', 3);
-      expect(mod.invokeQueue.length).toBe(3);
-      expect(mod.invokeQueue[0]).toEqual(['value', 'a', 1]);
-      expect(mod.invokeQueue[1]).toEqual(['value', 'b', 2]);
-      expect(mod.invokeQueue[2]).toEqual(['value', 'c', 3]);
+      expect(mod.$$invokeQueue.length).toBe(3);
+      expect(mod.$$invokeQueue[0]).toEqual(['value', 'a', 1]);
+      expect(mod.$$invokeQueue[1]).toEqual(['value', 'b', 2]);
+      expect(mod.$$invokeQueue[2]).toEqual(['value', 'c', 3]);
     });
 
     it('accepts a string value', () => {
       const mod = createModule('app', []).value('s', 'hello');
-      expect(mod.invokeQueue[0]).toEqual(['value', 's', 'hello']);
+      expect(mod.$$invokeQueue[0]).toEqual(['value', 's', 'hello']);
     });
 
     it('accepts a number value', () => {
       const mod = createModule('app', []).value('n', 42);
-      expect(mod.invokeQueue[0]).toEqual(['value', 'n', 42]);
+      expect(mod.$$invokeQueue[0]).toEqual(['value', 'n', 42]);
     });
 
     it('accepts a boolean value', () => {
       const mod = createModule('app', []).value('b', true);
-      expect(mod.invokeQueue[0]).toEqual(['value', 'b', true]);
+      expect(mod.$$invokeQueue[0]).toEqual(['value', 'b', true]);
     });
 
     it('accepts an object value (preserving reference identity)', () => {
       const obj = { key: 'value' };
       const mod = createModule('app', []).value('o', obj);
-      const entry = mod.invokeQueue[0];
+      const entry = mod.$$invokeQueue[0];
       expect(entry).toEqual(['value', 'o', obj]);
       expect(entry).toBeDefined();
       if (entry !== undefined) {
@@ -124,7 +124,7 @@ describe('dependency injection', () => {
     it('accepts an array value (preserving reference identity)', () => {
       const arr = [1, 2, 3];
       const mod = createModule('app', []).value('a', arr);
-      const entry = mod.invokeQueue[0];
+      const entry = mod.$$invokeQueue[0];
       expect(entry).toEqual(['value', 'a', arr]);
       expect(entry).toBeDefined();
       if (entry !== undefined) {
@@ -134,19 +134,19 @@ describe('dependency injection', () => {
 
     it('accepts a null value', () => {
       const mod = createModule('app', []).value('nully', null);
-      expect(mod.invokeQueue[0]).toEqual(['value', 'nully', null]);
+      expect(mod.$$invokeQueue[0]).toEqual(['value', 'nully', null]);
     });
 
     it('accepts an undefined value', () => {
       const mod = createModule('app', []).value('undef', undefined);
-      expect(mod.invokeQueue[0]).toEqual(['value', 'undef', undefined]);
+      expect(mod.$$invokeQueue[0]).toEqual(['value', 'undef', undefined]);
     });
 
     it('replaces an existing value when the same name is registered twice (later wins at injector drain)', () => {
       const mod = createModule('app', []).value('x', 1).value('x', 2);
-      expect(mod.invokeQueue.length).toBe(2);
-      expect(mod.invokeQueue[0]).toEqual(['value', 'x', 1]);
-      expect(mod.invokeQueue[1]).toEqual(['value', 'x', 2]);
+      expect(mod.$$invokeQueue.length).toBe(2);
+      expect(mod.$$invokeQueue[0]).toEqual(['value', 'x', 1]);
+      expect(mod.$$invokeQueue[1]).toEqual(['value', 'x', 2]);
 
       const injector = createInjector([mod]);
       expect(injector.get('x')).toBe(2);
@@ -158,10 +158,10 @@ describe('dependency injection', () => {
       resetRegistry();
     });
 
-    it('pushes [constant, name, value] to the invokeQueue', () => {
+    it('pushes [constant, name, value] to the $$invokeQueue', () => {
       const mod = createModule('app', []);
       mod.constant('MAX', 100);
-      expect(mod.invokeQueue[0]).toEqual(['constant', 'MAX', 100]);
+      expect(mod.$$invokeQueue[0]).toEqual(['constant', 'MAX', 100]);
     });
 
     it('returns the same module instance (for chaining)', () => {
@@ -172,10 +172,10 @@ describe('dependency injection', () => {
 
     it('supports chaining with value', () => {
       const mod = createModule('app', []).value('a', 1).constant('MAX', 5).value('b', 2);
-      expect(mod.invokeQueue.length).toBe(3);
-      expect(mod.invokeQueue[0]).toEqual(['value', 'a', 1]);
-      expect(mod.invokeQueue[1]).toEqual(['constant', 'MAX', 5]);
-      expect(mod.invokeQueue[2]).toEqual(['value', 'b', 2]);
+      expect(mod.$$invokeQueue.length).toBe(3);
+      expect(mod.$$invokeQueue[0]).toEqual(['value', 'a', 1]);
+      expect(mod.$$invokeQueue[1]).toEqual(['constant', 'MAX', 5]);
+      expect(mod.$$invokeQueue[2]).toEqual(['value', 'b', 2]);
     });
   });
 
@@ -184,24 +184,24 @@ describe('dependency injection', () => {
       resetRegistry();
     });
 
-    it('pushes [factory, name, invokable] to invokeQueue (array-style)', () => {
+    it('pushes [factory, name, invokable] to $$invokeQueue (array-style)', () => {
       const invokable = ['dep', (dep: unknown) => ({ dep })] as const;
       const mod = createModule('app', []).factory('myService', invokable);
-      expect(mod.invokeQueue).toHaveLength(1);
-      const entry = mod.invokeQueue[0];
+      expect(mod.$$invokeQueue).toHaveLength(1);
+      const entry = mod.$$invokeQueue[0];
       expect(entry?.[0]).toBe('factory');
       expect(entry?.[1]).toBe('myService');
       expect(entry?.[2]).toBe(invokable);
     });
 
-    it('pushes [factory, name, invokable] to invokeQueue ($inject-annotated)', () => {
+    it('pushes [factory, name, invokable] to $$invokeQueue ($inject-annotated)', () => {
       function makeService(dep: unknown) {
         return { dep };
       }
       makeService.$inject = ['dep'];
       const mod = createModule('app', []).factory('myService', makeService);
-      expect(mod.invokeQueue).toHaveLength(1);
-      const entry = mod.invokeQueue[0];
+      expect(mod.$$invokeQueue).toHaveLength(1);
+      const entry = mod.$$invokeQueue[0];
       expect(entry?.[0]).toBe('factory');
       expect(entry?.[1]).toBe('myService');
       expect(entry?.[2]).toBe(makeService);
@@ -218,10 +218,10 @@ describe('dependency injection', () => {
         .value('v', 1)
         .constant('c', 2)
         .factory('f', [() => 'result']);
-      expect(mod.invokeQueue).toHaveLength(3);
-      expect(mod.invokeQueue[0]?.[0]).toBe('value');
-      expect(mod.invokeQueue[1]?.[0]).toBe('constant');
-      expect(mod.invokeQueue[2]?.[0]).toBe('factory');
+      expect(mod.$$invokeQueue).toHaveLength(3);
+      expect(mod.$$invokeQueue[0]?.[0]).toBe('value');
+      expect(mod.$$invokeQueue[1]?.[0]).toBe('constant');
+      expect(mod.$$invokeQueue[2]?.[0]).toBe('factory');
     });
   });
 
@@ -981,6 +981,786 @@ describe('dependency injection', () => {
       const injector = createInjector([mod]);
       expect(injector.get('greeting')).toBe('hi World');
       expectTypeOf(injector.get('greeting')).toEqualTypeOf<string>();
+    });
+  });
+
+  describe('spec 008 — advanced recipes & lifecycle', () => {
+    describe('Module.service', () => {
+      beforeEach(() => {
+        resetRegistry();
+      });
+
+      it('pushes [service, name, invokable] to $$invokeQueue (constructor form)', () => {
+        class UserService {
+          kind = 'user';
+        }
+        const mod = createModule('app', []).service('userService', UserService);
+        expect(mod.$$invokeQueue).toHaveLength(1);
+        const entry = mod.$$invokeQueue[0];
+        expect(entry?.[0]).toBe('service');
+        expect(entry?.[1]).toBe('userService');
+        expect(entry?.[2]).toBe(UserService);
+      });
+
+      it('pushes [service, name, invokable] to $$invokeQueue (array-style form)', () => {
+        class UserService {
+          constructor(public name: string) {}
+        }
+        const invokable = ['name', UserService] as const;
+        const mod = createModule('app', [])
+          .value('name', 'Jane')
+          .service('userService', invokable);
+        // The first entry is the value, the second is the service
+        expect(mod.$$invokeQueue).toHaveLength(2);
+        const entry = mod.$$invokeQueue[1];
+        expect(entry?.[0]).toBe('service');
+        expect(entry?.[1]).toBe('userService');
+        expect(entry?.[2]).toBe(invokable);
+      });
+
+      it('returns the same module instance (for chaining)', () => {
+        class SvcA {
+          tag = 'a';
+        }
+        const mod = createModule('app', []);
+        const chained = mod.service('a', SvcA);
+        expect(chained).toBe(mod);
+      });
+
+      it('supports chaining with value, constant, and factory', () => {
+        class SvcA {
+          tag = 'a';
+        }
+        const mod = createModule('app', [])
+          .value('v', 1)
+          .constant('c', 2)
+          .factory('f', [() => 'result'])
+          .service('a', SvcA);
+        expect(mod.$$invokeQueue).toHaveLength(4);
+        expect(mod.$$invokeQueue[3]?.[0]).toBe('service');
+      });
+    });
+
+    describe('createInjector (service recipe)', () => {
+      beforeEach(() => {
+        resetRegistry();
+      });
+
+      it('instantiates a service with no dependencies via `new`', () => {
+        class Counter {
+          static readonly $inject = [] as const;
+          value = 0;
+          increment() {
+            this.value++;
+          }
+        }
+        const mod = createModule('app', []).service('counter', Counter);
+        const injector = createInjector([mod]);
+        const counter = injector.get('counter');
+        expect(counter).toBeInstanceOf(Counter);
+      });
+
+      it('resolves the instance as a singleton (same reference)', () => {
+        class Counter {
+          static readonly $inject = [] as const;
+          value = 0;
+        }
+        const mod = createModule('app', []).service('counter', Counter);
+        const injector = createInjector([mod]);
+        const a = injector.get('counter');
+        const b = injector.get('counter');
+        expect(a).toBe(b);
+      });
+
+      it('resolves $inject-annotated constructor dependencies', () => {
+        class Logger {
+          static readonly $inject = [] as const;
+          log(msg: string) {
+            return `LOG: ${msg}`;
+          }
+        }
+        class Service {
+          static readonly $inject = ['logger'] as const;
+          constructor(public logger: Logger) {}
+          greet() {
+            return this.logger.log('hello');
+          }
+        }
+
+        const mod = createModule('app', [])
+          .service('logger', Logger)
+          .service('service', Service);
+        const injector = createInjector([mod]);
+        const svc = injector.get('service');
+        expect(svc.greet()).toBe('LOG: hello');
+      });
+
+      it('resolves array-style annotated constructor dependencies', () => {
+        class Config {
+          constructor(public defaults: Record<string, unknown>) {}
+        }
+        const defaultsValue = { retries: 3 };
+        const mod = createModule('app', [])
+          .value('defaults', defaultsValue)
+          .service('config', ['defaults', Config]);
+        const injector = createInjector([mod]);
+        const config = injector.get('config');
+        expect(config).toBeInstanceOf(Config);
+        expect(config.defaults).toBe(defaultsValue);
+      });
+
+      it('passes resolved dependencies as positional constructor args in order', () => {
+        class Service {
+          static readonly $inject = ['a', 'b', 'c'] as const;
+          constructor(
+            public a: string,
+            public b: number,
+            public c: boolean,
+          ) {}
+        }
+
+        const mod = createModule('app', [])
+          .value('a', 'hello')
+          .value('b', 42)
+          .value('c', true)
+          .service('service', Service);
+        const injector = createInjector([mod]);
+        const svc = injector.get('service');
+        expect(svc.a).toBe('hello');
+        expect(svc.b).toBe(42);
+        expect(svc.c).toBe(true);
+      });
+
+      it('the returned instance satisfies `instanceof` the original constructor', () => {
+        class UserService {
+          static readonly $inject = [] as const;
+          kind = 'user';
+        }
+        const mod = createModule('app', []).service('userService', UserService);
+        const injector = createInjector([mod]);
+        const svc = injector.get('userService');
+        expect(svc).toBeInstanceOf(UserService);
+      });
+
+      it('services can depend on factories, values, and constants', () => {
+        class Service {
+          static readonly $inject = ['url', 'max'] as const;
+          constructor(
+            public url: string,
+            public max: number,
+          ) {}
+        }
+
+        const mod = createModule('app', [])
+          .value('url', 'https://...')
+          .constant('max', 5)
+          .service('service', Service);
+        const injector = createInjector([mod]);
+        const svc = injector.get<Service>('service');
+        expect(svc.url).toBe('https://...');
+        expect(svc.max).toBe(5);
+      });
+
+      it('injector.has returns true for a registered service (before and after instantiation)', () => {
+        class Svc {
+          static readonly $inject = [] as const;
+          tag = 'svc';
+        }
+        const mod = createModule('app', []).service('svc', Svc);
+        const injector = createInjector([mod]);
+        expect(injector.has('svc')).toBe(true);
+        injector.get('svc');
+        expect(injector.has('svc')).toBe(true);
+      });
+
+      it('does not instantiate the service at load time (lazy)', () => {
+        let constructed = 0;
+        // eslint-disable-next-line @typescript-eslint/no-extraneous-class -- constructor side-effect is load-bearing to the test
+        class Svc {
+          constructor() {
+            constructed++;
+          }
+        }
+        const mod = createModule('app', []).service('svc', Svc);
+        createInjector([mod]);
+        expect(constructed).toBe(0);
+      });
+
+      it('detects a cycle involving services (service -> service -> service)', () => {
+        class A {
+          static readonly $inject = ['b'] as const;
+          constructor(public b: unknown) {}
+        }
+
+        class B {
+          static readonly $inject = ['a'] as const;
+          constructor(public a: unknown) {}
+        }
+
+        const mod = createModule('app', []).service('a', A).service('b', B);
+        const injector = createInjector([mod]);
+        expect(() => injector.get('a')).toThrow(/Circular dependency/);
+      });
+    });
+
+    describe('type safety — service recipe', () => {
+      beforeEach(() => {
+        resetRegistry();
+      });
+
+      it('constructor-only form infers InstanceType<Ctor> on injector.get', () => {
+        class UserService {
+          static readonly $inject = [] as const;
+          kind = 'user' as const;
+          greet(): string {
+            return 'hello';
+          }
+        }
+
+        const mod = createModule('app', []).service('userService', UserService);
+        const injector = createInjector([mod]);
+        expectTypeOf(injector.get('userService')).toEqualTypeOf<UserService>();
+      });
+
+      it('array-style form infers InstanceType<Ctor> on injector.get', () => {
+        class Config {
+          readonly defaults: Record<string, unknown>;
+          constructor(defaults: Record<string, unknown>) {
+            this.defaults = defaults;
+          }
+        }
+
+        const mod = createModule('app', [])
+          .value('defaults', { retries: 3 })
+          .service('config', ['defaults', Config]);
+        const injector = createInjector([mod]);
+        expectTypeOf(injector.get('config')).toEqualTypeOf<Config>();
+      });
+
+      it('array-style deps are typed from the module Registry', () => {
+        class Service {
+          readonly name: string;
+          readonly age: number;
+          constructor(name: string, age: number) {
+            this.name = name;
+            this.age = age;
+          }
+        }
+
+        const mod = createModule('app', [])
+          .value('name', 'Jane')
+          .value('age', 30)
+          .service('service', ['name', 'age', Service]);
+        const injector = createInjector([mod]);
+        expectTypeOf(injector.get('service')).toEqualTypeOf<Service>();
+      });
+
+      it('chained service calls widen the Registry correctly', () => {
+        class Logger {
+          static readonly $inject = [] as const;
+          kind = 'logger' as const;
+          log(msg: string): void {
+            void msg;
+          }
+        }
+
+        class Cache {
+          static readonly $inject = [] as const;
+          kind = 'cache' as const;
+          get(key: string): string | undefined {
+            void key;
+            return undefined;
+          }
+        }
+
+        const mod = createModule('app', []).service('logger', Logger).service('cache', Cache);
+        const injector = createInjector([mod]);
+        expectTypeOf(injector.get('logger')).toEqualTypeOf<Logger>();
+        expectTypeOf(injector.get('cache')).toEqualTypeOf<Cache>();
+      });
+
+      it('service merges alongside value, constant, and factory in the same Registry', () => {
+        class Greeter {
+          static readonly $inject = [] as const;
+          kind = 'greeter' as const;
+          hello(): string {
+            return 'hi';
+          }
+        }
+
+        const mod = createModule('app', [])
+          .value('name', 'Jane')
+          .constant('MAX', 5)
+          .factory<'logger', { log: (m: string) => void }>('logger', [
+            () => ({
+              log: (m: string): undefined => {
+                void m;
+                return undefined;
+              },
+            }),
+          ])
+          .service('greeter', Greeter);
+        const injector = createInjector([mod]);
+        expectTypeOf(injector.get('name')).toEqualTypeOf<string>();
+        expectTypeOf(injector.get('MAX')).toEqualTypeOf<number>();
+        expectTypeOf(injector.get('logger')).toEqualTypeOf<{ log: (m: string) => void }>();
+        expectTypeOf(injector.get('greeter')).toEqualTypeOf<Greeter>();
+      });
+
+      it('services from multiple modules merge into the injector type', () => {
+        class ServiceA {
+          static readonly $inject = [] as const;
+          kind = 'a' as const;
+        }
+
+        class ServiceB {
+          static readonly $inject = [] as const;
+          kind = 'b' as const;
+        }
+
+        const modA = createModule('a', []).service('serviceA', ServiceA);
+        const modB = createModule('b', []).service('serviceB', ServiceB);
+        const injector = createInjector([modA, modB]);
+        expectTypeOf(injector.get('serviceA')).toEqualTypeOf<ServiceA>();
+        expectTypeOf(injector.get('serviceB')).toEqualTypeOf<ServiceB>();
+      });
+
+      it('typed get rejects unknown keys for service-only registries', () => {
+        class UserService {
+          static readonly $inject = [] as const;
+          kind = 'user' as const;
+        }
+
+        const mod = createModule('app', []).service('userService', UserService);
+        const injector = createInjector([mod]);
+
+        // Isolate the typed overload so overload resolution doesn't fall through
+        // to the escape hatch. See spec 007's type-safety tests for the same trick.
+        type Registry = { userService: UserService };
+        type TypedGet = <K extends keyof Registry>(name: K) => Registry[K];
+        const typedGet: TypedGet = injector.get.bind(injector);
+
+        // Positive: registered key compiles.
+        expectTypeOf(typedGet('userService')).toEqualTypeOf<UserService>();
+
+        // Negative: unknown key is a compile error on the typed overload.
+        try {
+          // @ts-expect-error -- 'unknown' is not in the typed Registry
+          typedGet('unknown');
+        } catch {
+          /* expected: runtime throws on unregistered name */
+        }
+      });
+    });
+
+    describe('Module.provider', () => {
+      beforeEach(() => {
+        resetRegistry();
+      });
+
+      it('pushes [provider, name, source] to $$invokeQueue (Form 1: constructor)', () => {
+        function LoggerProvider(this: { $get: () => unknown }) {
+          this.$get = (): { log: (m: string) => undefined } => ({
+            log: () => undefined,
+          });
+        }
+        const mod = createModule('app', []).provider('logger', LoggerProvider);
+        expect(mod.$$invokeQueue).toHaveLength(1);
+        const entry = mod.$$invokeQueue[0];
+        expect(entry?.[0]).toBe('provider');
+        expect(entry?.[1]).toBe('logger');
+        expect(entry?.[2]).toBe(LoggerProvider);
+      });
+
+      it('pushes [provider, name, source] to $$invokeQueue (Form 2: object literal)', () => {
+        const providerObj = {
+          $get: (): { log: (m: string) => undefined } => ({
+            log: () => undefined,
+          }),
+        };
+        const mod = createModule('app', []).provider('logger', providerObj);
+        expect(mod.$$invokeQueue).toHaveLength(1);
+        const entry = mod.$$invokeQueue[0];
+        expect(entry?.[0]).toBe('provider');
+        expect(entry?.[1]).toBe('logger');
+        expect(entry?.[2]).toBe(providerObj);
+      });
+
+      it('pushes [provider, name, source] to $$invokeQueue (Form 3: array-style)', () => {
+        function LoggerProvider(
+          this: { level: string; $get: () => unknown },
+          level: string,
+        ) {
+          this.level = level;
+          this.$get = (): { level: string } => ({ level: this.level });
+        }
+        const providerArr = ['defaultLevel', LoggerProvider] as const;
+        const mod = createModule('app', [])
+          .constant('defaultLevel', 'info')
+          .provider('logger', providerArr);
+        expect(mod.$$invokeQueue).toHaveLength(2);
+        const entry = mod.$$invokeQueue[1];
+        expect(entry?.[0]).toBe('provider');
+        expect(entry?.[1]).toBe('logger');
+        expect(entry?.[2]).toBe(providerArr);
+      });
+
+      it('returns the same module instance (for chaining)', () => {
+        function Prov(this: { $get: () => unknown }) {
+          this.$get = (): string => 'value';
+        }
+        const mod = createModule('app', []);
+        const chained = mod.provider('p', Prov);
+        expect(chained).toBe(mod);
+      });
+
+      it('supports chaining with value, constant, factory, and service', () => {
+        function Prov(this: { $get: () => unknown }) {
+          this.$get = (): string => 'provValue';
+        }
+        const mod = createModule('app', [])
+          .value('v', 1)
+          .constant('c', 2)
+          .factory('f', [() => 'factoryValue'])
+          .provider('p', Prov);
+        expect(mod.$$invokeQueue).toHaveLength(4);
+        expect(mod.$$invokeQueue[3]?.[0]).toBe('provider');
+      });
+    });
+
+    describe('createInjector (provider recipe)', () => {
+      beforeEach(() => {
+        resetRegistry();
+      });
+
+      it('instantiates Form 1 (constructor) and resolves service via $get', () => {
+        function LoggerProvider(this: {
+          level: string;
+          $get: readonly [() => { log: (m: string) => string }];
+        }) {
+          this.level = 'info';
+          const level = this.level;
+          this.$get = [
+            (): { log: (m: string) => string } => ({
+              log: (m: string) => `[${level}] ${m}`,
+            }),
+          ] as const;
+        }
+        const mod = createModule('app', []).provider('logger', LoggerProvider);
+        const injector = createInjector([mod]);
+        const logger = injector.get<{ log: (m: string) => string }>('logger');
+        expect(logger.log('hello')).toBe('[info] hello');
+      });
+
+      it('instantiates Form 2 (object literal) and resolves service via $get', () => {
+        const providerObj = {
+          level: 'debug',
+          $get: [
+            function (this: { level: string }): { log: (m: string) => string } {
+              const level = this.level;
+              return { log: (m: string) => `[${level}] ${m}` };
+            },
+          ] as const,
+        };
+        const mod = createModule('app', []).provider('logger', providerObj);
+        const injector = createInjector([mod]);
+        const logger = injector.get<{ log: (m: string) => string }>('logger');
+        expect(logger.log('hi')).toBe('[debug] hi');
+      });
+
+      it('instantiates Form 3 (array-style with config-phase deps) and resolves service via $get', () => {
+        function LoggerProvider(
+          this: {
+            level: string;
+            $get: readonly [() => { log: (m: string) => string }];
+          },
+          defaultLevel: string,
+        ) {
+          this.level = defaultLevel;
+          const level = this.level;
+          this.$get = [
+            (): { log: (m: string) => string } => ({
+              log: (m: string) => `[${level}] ${m}`,
+            }),
+          ] as const;
+        }
+        const mod = createModule('app', [])
+          .constant('defaultLevel', 'warn')
+          .provider('logger', ['defaultLevel', LoggerProvider]);
+        const injector = createInjector([mod]);
+        const logger = injector.get<{ log: (m: string) => string }>('logger');
+        expect(logger.log('oops')).toBe('[warn] oops');
+      });
+
+      it('service produced by a provider is a singleton', () => {
+        let getCallCount = 0;
+        function CounterProvider(this: {
+          $get: readonly [() => { count: number }];
+        }) {
+          this.$get = [
+            (): { count: number } => {
+              getCallCount++;
+              return { count: 0 };
+            },
+          ] as const;
+        }
+        const mod = createModule('app', []).provider('counter', CounterProvider);
+        const injector = createInjector([mod]);
+        const a = injector.get('counter');
+        const b = injector.get('counter');
+        expect(a).toBe(b);
+        expect(getCallCount).toBe(1);
+      });
+
+      it('$get is NOT invoked at load time (lazy resolution)', () => {
+        let getCalls = 0;
+        function LazyProvider(this: { $get: readonly [() => string] }) {
+          this.$get = [
+            (): string => {
+              getCalls++;
+              return 'value';
+            },
+          ] as const;
+        }
+        const mod = createModule('app', []).provider('lazy', LazyProvider);
+        createInjector([mod]);
+        expect(getCalls).toBe(0);
+      });
+
+      it('$get can declare its own run-phase dependencies via array-style', () => {
+        function GreeterProvider(this: {
+          $get: readonly ['name', (name: string) => { greet: () => string }];
+        }) {
+          this.$get = [
+            'name',
+            (name: string) => ({ greet: () => `hello ${name}` }),
+          ] as const;
+        }
+        const mod = createModule('app', [])
+          .value('name', 'Jane')
+          .provider('greeter', GreeterProvider);
+        const injector = createInjector([mod]);
+        const greeter = injector.get<{ greet: () => string }>('greeter');
+        expect(greeter.greet()).toBe('hello Jane');
+      });
+
+      it('$get is invoked with `this` bound to the provider instance', () => {
+        const capturedInstances: unknown[] = [];
+        class ConfigurableProvider {
+          prefix = 'default';
+          $get = [
+            function (this: { prefix: string }): { format: (m: string) => string } {
+              // Verify `this` is the provider instance at call time by stashing
+              // the receiver; we later assert it matches the sole instance.
+              capturedInstances.push(this);
+              const capturedPrefix = this.prefix;
+              return { format: (m: string) => `${capturedPrefix}: ${m}` };
+            },
+          ] as const;
+          setPrefix(p: string): void {
+            this.prefix = p;
+          }
+        }
+        const mod = createModule('app', []).provider('configurable', ConfigurableProvider);
+        const injector = createInjector([mod]);
+        const svc = injector.get<{ format: (m: string) => string }>('configurable');
+        expect(svc.format('msg')).toBe('default: msg');
+        expect(capturedInstances).toHaveLength(1);
+        expect(capturedInstances[0]).toBeInstanceOf(ConfigurableProvider);
+      });
+
+      it('throws when the provider constructor does not set a $get method', () => {
+        function BrokenProvider(this: { foo: string }) {
+          this.foo = 'bar';
+          // deliberately no $get
+        }
+        const mod = createModule('app', []).provider('broken', BrokenProvider);
+        expect(() => createInjector([mod])).toThrow(/Provider "broken" has no \$get method/);
+      });
+
+      it('throws when the provider source is neither a function, object, nor array', () => {
+        const mod = createModule('app', []).provider('bad', 42 as unknown);
+        expect(() => createInjector([mod])).toThrow(
+          /Expected provider for "bad" to be a function, array, or object with \$get/,
+        );
+      });
+
+      it('injector.has returns true for a provider-backed service (before and after resolution)', () => {
+        function Prov(this: { $get: readonly [() => string] }) {
+          this.$get = [(): string => 'value'] as const;
+        }
+        const mod = createModule('app', []).provider('svc', Prov);
+        const injector = createInjector([mod]);
+        expect(injector.has('svc')).toBe(true);
+        injector.get('svc');
+        expect(injector.has('svc')).toBe(true);
+      });
+
+      it('detects a cycle between two providers via their $get deps', () => {
+        function AProvider(this: {
+          $get: readonly ['b', (b: unknown) => unknown];
+        }) {
+          this.$get = ['b', (b: unknown) => b] as const;
+        }
+        function BProvider(this: {
+          $get: readonly ['a', (a: unknown) => unknown];
+        }) {
+          this.$get = ['a', (a: unknown) => a] as const;
+        }
+        const mod = createModule('app', [])
+          .provider('a', AProvider)
+          .provider('b', BProvider);
+        const injector = createInjector([mod]);
+        expect(() => injector.get('a')).toThrow(/Circular dependency/);
+      });
+    });
+
+    describe('type safety — provider recipe', () => {
+      beforeEach(() => {
+        resetRegistry();
+      });
+
+      it('Form 1 (constructor) infers $get return type on injector.get', () => {
+        class LoggerProvider {
+          $get = [() => ({ log: (m: string): void => void m })] as const;
+        }
+
+        const mod = createModule('app', []).provider('logger', LoggerProvider);
+        const injector = createInjector([mod]);
+        expectTypeOf(injector.get('logger')).toEqualTypeOf<{ log: (m: string) => void }>();
+      });
+
+      it('Form 2 (object literal) infers $get return type on injector.get', () => {
+        const providerObj = {
+          level: 'info',
+          $get: [() => ({ log: (m: string): void => void m })] as const,
+        };
+
+        const mod = createModule('app', []).provider('logger', providerObj);
+        const injector = createInjector([mod]);
+        expectTypeOf(injector.get('logger')).toEqualTypeOf<{ log: (m: string) => void }>();
+      });
+
+      it('Form 3 (array-style) types config-phase deps from ConfigRegistry', () => {
+        class LoggerProvider {
+          readonly level: string;
+          $get = [() => ({ log: (m: string): void => void m })] as const;
+          constructor(defaultLevel: string) {
+            this.level = defaultLevel;
+          }
+        }
+
+        const mod = createModule('app', [])
+          .constant('defaultLevel', 'warn')
+          .provider('logger', ['defaultLevel', LoggerProvider]);
+        const injector = createInjector([mod]);
+        expectTypeOf(injector.get('logger')).toEqualTypeOf<{ log: (m: string) => void }>();
+      });
+
+      it('provider widens Registry with the service type', () => {
+        class GreeterProvider {
+          $get = [() => ({ hello: (): string => 'hi' })] as const;
+        }
+
+        const mod = createModule('app', [])
+          .value('name', 'Jane')
+          .provider('greeter', GreeterProvider);
+        const injector = createInjector([mod]);
+        expectTypeOf(injector.get('name')).toEqualTypeOf<string>();
+        expectTypeOf(injector.get('greeter')).toEqualTypeOf<{ hello: () => string }>();
+      });
+
+      it('providers from multiple modules merge into the injector type', () => {
+        class ClockProvider {
+          $get = [() => ({ now: (): number => Date.now() })] as const;
+        }
+
+        class RandomProvider {
+          $get = [() => ({ next: (): number => Math.random() })] as const;
+        }
+
+        const core = createModule('core', []).provider('clock', ClockProvider);
+        const rand = createModule('rand', []).provider('random', RandomProvider);
+        const injector = createInjector([core, rand]);
+
+        expectTypeOf(injector.get('clock')).toEqualTypeOf<{ now: () => number }>();
+        expectTypeOf(injector.get('random')).toEqualTypeOf<{ next: () => number }>();
+      });
+
+      it('provider merges alongside value, constant, factory, and service', () => {
+        class LoggerProvider {
+          $get = [() => ({ log: (m: string): void => void m })] as const;
+        }
+
+        class Greeter {
+          static readonly $inject = [] as const;
+          kind = 'greeter' as const;
+          hello(): string {
+            return 'hi';
+          }
+        }
+
+        const mod = createModule('app', [])
+          .value('name', 'Jane')
+          .constant('MAX', 5)
+          .factory<'counter', { count: number }>('counter', [() => ({ count: 0 })])
+          .service('greeter', Greeter)
+          .provider('logger', LoggerProvider);
+        const injector = createInjector([mod]);
+
+        expectTypeOf(injector.get('name')).toEqualTypeOf<string>();
+        expectTypeOf(injector.get('MAX')).toEqualTypeOf<number>();
+        expectTypeOf(injector.get('counter')).toEqualTypeOf<{ count: number }>();
+        expectTypeOf(injector.get('greeter')).toEqualTypeOf<Greeter>();
+        expectTypeOf(injector.get('logger')).toEqualTypeOf<{ log: (m: string) => void }>();
+      });
+
+      it('Form 3 accepts registered config-phase deps at compile time', () => {
+        class AProvider {
+          $get = [(): string => 'a'] as const;
+          constructor(defaultLevel: string) {
+            void defaultLevel;
+          }
+        }
+
+        // Positive: 'defaultLevel' is a registered constant and compiles via Form 3.
+        const mod = createModule('app', [])
+          .constant('defaultLevel', 'warn')
+          .provider('a', ['defaultLevel', AProvider]);
+        const injector = createInjector([mod]);
+        expectTypeOf(injector.get('a')).toEqualTypeOf<string>();
+
+        // Note: Typos in Form 3 dep names fall through to the untyped fallback
+        // overload at compile time (same limitation as spec 007's typed factory).
+        // Runtime validation catches the typo via `providerInjector.get` throwing
+        // 'Unknown provider' — see the runtime tests above.
+      });
+
+      it('typed get rejects unknown keys for provider-backed registries', () => {
+        class LoggerProvider {
+          $get = [() => ({ log: (m: string): void => void m })] as const;
+        }
+
+        const mod = createModule('app', []).provider('logger', LoggerProvider);
+        const injector = createInjector([mod]);
+
+        // Isolate the typed overload so overload resolution doesn't fall through
+        // to the escape hatch. See spec 007's type-safety tests for the same trick.
+        type Registry = { logger: { log: (m: string) => void } };
+        type TypedGet = <K extends keyof Registry>(name: K) => Registry[K];
+        const typedGet: TypedGet = injector.get.bind(injector);
+
+        // Positive: registered key compiles.
+        expectTypeOf(typedGet('logger')).toEqualTypeOf<{ log: (m: string) => void }>();
+
+        // Negative: unknown key is a compile error on the typed overload.
+        try {
+          // @ts-expect-error -- 'unknown' is not in the typed Registry
+          typedGet('unknown');
+        } catch {
+          /* expected: runtime throws on unregistered name */
+        }
+      });
     });
   });
 });

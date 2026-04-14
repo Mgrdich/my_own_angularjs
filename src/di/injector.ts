@@ -4,7 +4,7 @@
  * Slice 4 scope: supports `value`, `constant`, and `factory` recipes, and
  * walks the module dependency graph. `createInjector` recursively loads
  * each module's `requires` from the module registry before draining its
- * own `invokeQueue`, tracking loaded module names in a `Set<string>` so
+ * own `$$invokeQueue`, tracking loaded module names in a `Set<string>` so
  * that shared, diamond, and circular module-level dependencies are each
  * loaded at most once. Factory entries are stored as unresolved invokables
  * at load time and invoked lazily on the first `get(name)` call, with
@@ -12,7 +12,7 @@
  * until Slice 5.
  */
 
-import { isArray } from '@core/utils';
+import { isArray, isFunction } from '@core/utils';
 
 import { annotate as annotateInvokable } from './annotate';
 import type { Injector, Invokable } from './di-types';
@@ -28,7 +28,11 @@ import { getModule, type AnyModule, type Module, type TypedModule } from './modu
  * keeps it safe inside a distributive conditional type.
  */
 type ExtractRegistry<M> =
-  M extends TypedModule<infer R, string, readonly string[]> ? R : M extends Module<infer R> ? R : never;
+  M extends TypedModule<infer R, Record<string, unknown>, string, readonly string[]>
+    ? R
+    : M extends Module<infer R, Record<string, unknown>>
+      ? R
+      : never;
 
 /**
  * Convert a union type `U` into the intersection of all its members.
@@ -67,7 +71,7 @@ export type MergeRegistries<Mods extends readonly AnyModule[]> =
  * Slice 3 behavior: for every input module, the injector performs a
  * post-order walk of the module dependency graph. Each module in
  * `module.requires` is looked up in the module registry via {@link getModule}
- * and loaded recursively before the enclosing module's own `invokeQueue` is
+ * and loaded recursively before the enclosing module's own `$$invokeQueue` is
  * drained. A `Set<string>` of already-loaded module names guards the walk so
  * that:
  *
@@ -109,6 +113,24 @@ export function createInjector<const Mods extends readonly AnyModule[]>(
 ): Injector<MergeRegistries<Mods>> {
   const providerCache = new Map<string, unknown>();
   const factoryInvokables = new Map<string, Invokable>();
+  // Service constructors registered via `module.service(name, Ctor)`. Stored
+  // as raw `Invokable`s (either a bare constructor or a `[...deps, Ctor]`
+  // array) and instantiated lazily on first `get(name)` via `new Ctor(...)`.
+  // Mirrors `factoryInvokables` so services participate in the same lazy
+  // resolution, cycle detection, and singleton caching machinery.
+  const serviceCtors = new Map<string, Invokable>();
+  // Provider instances — one per `provider('name', ...)` registration.
+  // Keyed by the `<name>Provider` form (e.g. 'loggerProvider'), these are
+  // the configurable objects that config blocks inject and mutate before
+  // the run phase drains `$get` to produce the final service.
+  const providerInstances = new Map<string, unknown>();
+  // Lazy `$get` invokables — one per `provider('name', ...)` registration.
+  // Keyed by the service name (e.g. 'logger'), these are the unresolved
+  // `$get` functions that the run-phase `get` will invoke with the correct
+  // `this` binding once the service is first requested. The `providerInstance`
+  // slot carries the matching provider instance so `$get.apply(providerInstance, deps)`
+  // can be used.
+  const providerGetInvokables = new Map<string, { invokable: Invokable; providerInstance: unknown }>();
   const loadedModules = new Set<string>();
   // Stack of names currently being resolved by `get`. When a factory
   // (transitively) requests a name already on the stack we have a service-
@@ -117,6 +139,74 @@ export function createInjector<const Mods extends readonly AnyModule[]>(
   // stack is push/pop-balanced via `try/finally` so a thrown dependency
   // does not leak stale entries into later lookups.
   const resolutionPath: string[] = [];
+
+  /**
+   * Normalize a provider registration to a provider instance + lazy `$get`
+   * invokable. Handles all three registration forms:
+   *
+   * 1. **Array-style** `[...deps, Ctor]` — instantiate `Ctor` via the
+   *    config-phase injector so its dependencies resolve from the current
+   *    `providerCache` and `providerInstances`. The resulting object is
+   *    the provider instance.
+   * 2. **Constructor function** — call `new Ctor()` directly (no deps).
+   * 3. **Object literal** — use the value directly as the provider instance.
+   *
+   * Throws with a clear error if the source is none of these forms or if
+   * the resulting instance has no `$get` method.
+   */
+  function loadProvider(name: string, providerSource: unknown): void {
+    let providerInstance: { $get: Invokable };
+
+    if (isArray(providerSource)) {
+      // Form 3: array-style `[...deps, Ctor]`. Resolve deps via the
+      // config-phase injector so that providers can depend on constants and
+      // on other providers (via their `<name>Provider` key). We can't route
+      // through `providerInjector.invoke` because that calls the trailing
+      // function with `.apply(self, resolvedDeps)` — we need `new Ctor(...)`.
+      //
+      // `isArray` narrows a `T | readonly unknown[]` input to the
+      // array-shaped subtype via `Extract`, which collapses to `never`
+      // when the input is plain `unknown`, so we hold on to a separately
+      // typed alias of the source before indexing into it.
+      const providerArray = providerSource as readonly unknown[];
+      const deps = annotateInvokable(providerArray as unknown as Invokable);
+      const resolvedDeps = deps.map((depName) => providerInjector.get(depName));
+      const Ctor = providerArray[providerArray.length - 1] as new (...args: unknown[]) => unknown;
+      providerInstance = new Ctor(...resolvedDeps) as { $get: Invokable };
+    } else if (isFunction(providerSource)) {
+      // Form 1: bare constructor function with no deps.
+      const Ctor = providerSource as unknown as new () => unknown;
+      providerInstance = new Ctor() as { $get: Invokable };
+    } else if (providerSource !== null && typeof providerSource === 'object' && '$get' in providerSource) {
+      // Form 2: object literal with a `$get` method.
+      providerInstance = providerSource as { $get: Invokable };
+    } else {
+      throw new Error(`Expected provider for "${name}" to be a function, array, or object with $get`);
+    }
+
+    // All three forms must produce an instance with a `$get` method. Form 2
+    // is pre-checked by the `'$get' in providerSource` guard, but Form 1 and
+    // Form 3 may construct an object that omits `$get` (e.g. a constructor
+    // that forgets to assign it), so re-validate here as the single choke
+    // point for the error message. TypeScript already believes `$get` is
+    // present on `providerInstance` (we annotated it that way to keep the
+    // rest of the function honest), so we widen through `unknown` to run
+    // the runtime check without tripping `no-unnecessary-condition`.
+    if ((providerInstance as { $get?: unknown }).$get === undefined) {
+      throw new Error(`Provider "${name}" has no $get method`);
+    }
+
+    // Register the instance under its `<name>Provider` key so config blocks
+    // can inject and mutate it. Stash `$get` (with its owning provider
+    // instance as the `this` binding) into the lazy invocation map so a
+    // later sub-task can wire the run-phase `get` to materialize the final
+    // service singleton from it.
+    providerInstances.set(`${name}Provider`, providerInstance);
+    providerGetInvokables.set(name, {
+      invokable: providerInstance.$get,
+      providerInstance,
+    });
+  }
 
   /**
    * Recursively load `mod` and everything it transitively requires. The
@@ -141,22 +231,30 @@ export function createInjector<const Mods extends readonly AnyModule[]>(
       loadModule(required);
     }
 
-    for (const [recipe, name, value] of mod.invokeQueue) {
+    for (const [recipe, name, value] of mod.$$invokeQueue) {
       if (recipe === 'value' || recipe === 'constant') {
         providerCache.set(name, value);
-      } else {
-        // `recipe` narrows to `'factory'` here -- it is the only remaining
-        // member of `RecipeType`. Factories are lazy: stash the invokable
-        // now and invoke it on the first `get(name)` call. The invoke-queue
-        // entry's `value` slot holds the raw `Invokable` passed to
-        // `module.factory(name, invokable)`.
+      } else if (recipe === 'factory') {
+        // Factories are lazy: stash the invokable now and invoke it on the
+        // first `get(name)` call. The invoke-queue entry's `value` slot holds
+        // the raw `Invokable` passed to `module.factory(name, invokable)`.
         factoryInvokables.set(name, value as Invokable);
+      } else if (recipe === 'service') {
+        // Services are also lazy: stash the constructor now and `new`-it on
+        // the first `get(name)` call. The invoke-queue entry's `value` slot
+        // holds the raw `Invokable` passed to `module.service(name, invokable)`,
+        // which can be either a bare constructor or a `[...deps, Ctor]`
+        // array-style annotation.
+        serviceCtors.set(name, value as Invokable);
+      } else {
+        // `recipe` narrows to `'provider'` here -- the only remaining member
+        // of `RecipeType`. Normalize the registration source (Form 1/2/3)
+        // into a provider instance and extract its `$get` invokable. This
+        // runs eagerly so that later providers in the same invoke queue can
+        // depend on earlier ones via the config-phase injector.
+        loadProvider(name, value);
       }
     }
-  }
-
-  for (const module of modules) {
-    loadModule(module);
   }
 
   // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-parameters -- caller-provided type for dynamic-name escape hatch; the typed `Injector.get` overload relies on this signature.
@@ -204,11 +302,105 @@ export function createInjector<const Mods extends readonly AnyModule[]>(
         resolutionPath.pop();
       }
     }
+    if (serviceCtors.has(name)) {
+      // Service resolution mirrors the factory branch above: same cycle
+      // detection via `resolutionPath`, same recursive dependency walk via
+      // `annotateInvokable` + `get`, same singleton caching in
+      // `providerCache`. The only runtime difference is that the producer is
+      // invoked with `new Ctor(...deps)` instead of `fn(...deps)` so the
+      // constructed instance -- not its return value -- becomes the service.
+      if (resolutionPath.includes(name)) {
+        const chain = [...resolutionPath, name].join(' <- ');
+        throw new Error(`Circular dependency: ${chain}`);
+      }
+
+      const invokable = serviceCtors.get(name);
+      if (invokable === undefined) {
+        // Defensive: `Map.has` just said yes, so this branch is only reachable
+        // if an `undefined` was somehow stored under `name`. Treat it the
+        // same as an unregistered provider rather than silently returning.
+        throw new Error(`Unknown provider: ${name}`);
+      }
+
+      resolutionPath.push(name);
+      try {
+        const deps = annotateInvokable(invokable);
+        const resolvedDeps = deps.map((depName) => get(depName));
+        // For array-style `[...deps, Ctor]` the constructor is the last
+        // element; for a bare annotated constructor the invokable *is* the
+        // constructor. Both paths end up calling `new Ctor(...resolvedDeps)`.
+        const Ctor = isArray(invokable)
+          ? (invokable[invokable.length - 1] as unknown as new (...args: unknown[]) => unknown)
+          : (invokable as unknown as new (...args: unknown[]) => unknown);
+        const result = new Ctor(...resolvedDeps);
+        providerCache.set(name, result);
+        // Drop the pending constructor *after* caching so that a re-entry
+        // during dependency resolution hits the `resolutionPath` check above
+        // and reports a proper cycle instead of silently re-constructing.
+        serviceCtors.delete(name);
+        return result as T;
+      } finally {
+        resolutionPath.pop();
+      }
+    }
+    if (providerGetInvokables.has(name)) {
+      // Provider-backed services resolve their final value by invoking the
+      // stashed `$get` invokable against its owning provider instance. The
+      // branch mirrors the factory/service branches: same `resolutionPath`
+      // cycle detection, same recursive dependency walk, same singleton
+      // caching in `providerCache`. The two provider-specific wrinkles are
+      // (1) `$get` is called with `.apply(providerInstance, ...)` so inner
+      // references to `this.level`, `this.config`, etc. resolve against the
+      // configured provider, and (2) the pending entry is deleted from
+      // `providerGetInvokables` once the result is cached so later lookups
+      // fall through to the `providerCache.has` fast path.
+      if (resolutionPath.includes(name)) {
+        const chain = [...resolutionPath, name].join(' <- ');
+        throw new Error(`Circular dependency: ${chain}`);
+      }
+
+      const entry = providerGetInvokables.get(name);
+      if (entry === undefined) {
+        // Defensive: `Map.has` just said yes, so this branch is only reachable
+        // if an `undefined` was somehow stored under `name`. Treat it the
+        // same as an unregistered provider rather than silently returning.
+        throw new Error(`Unknown provider: ${name}`);
+      }
+
+      resolutionPath.push(name);
+      try {
+        const { invokable, providerInstance } = entry;
+        const deps = annotateInvokable(invokable);
+        const resolvedDeps = deps.map((depName) => get(depName));
+        // For array-style `[...deps, $get]` the actual `$get` function is the
+        // last element; for a bare function the invokable *is* `$get`. Both
+        // paths end up calling `.apply(providerInstance, resolvedDeps)` to
+        // bind `this` to the provider instance so AngularJS-style references
+        // like `this.level` inside `$get` continue to work.
+        const getFn = isArray(invokable)
+          ? (invokable[invokable.length - 1] as (...args: unknown[]) => unknown)
+          : (invokable as unknown as (...args: unknown[]) => unknown);
+        const result = getFn.apply(providerInstance, resolvedDeps);
+        providerCache.set(name, result);
+        // Drop the pending `$get` entry *after* caching so that a re-entry
+        // during dependency resolution hits the `resolutionPath` check above
+        // and reports a proper cycle instead of silently re-invoking `$get`.
+        providerGetInvokables.delete(name);
+        return result as T;
+      } finally {
+        resolutionPath.pop();
+      }
+    }
     throw new Error(`Unknown provider: ${name}`);
   }
 
   function has(name: string) {
-    return providerCache.has(name) || factoryInvokables.has(name);
+    return (
+      providerCache.has(name) ||
+      factoryInvokables.has(name) ||
+      serviceCtors.has(name) ||
+      providerGetInvokables.has(name)
+    );
   }
 
   function invoke<Return>(fn: Invokable<Return>, self?: unknown, locals?: Record<string, unknown>): Return {
@@ -238,6 +430,82 @@ export function createInjector<const Mods extends readonly AnyModule[]>(
    */
   function annotate(fn: Invokable): readonly string[] {
     return annotateInvokable(fn);
+  }
+
+  // ==================================================================
+  // Config-phase injector facade
+  // ==================================================================
+  //
+  // The provider injector runs during the config phase (before any service
+  // is instantiated). It has a strict, whitelisted view of the registry:
+  //
+  //   - `providerCache` for constants and values already drained by
+  //     `loadModule` (constants are the only recipe registered eagerly
+  //     and usable in both phases).
+  //   - `providerInstances` for provider instances registered under
+  //     their `<name>Provider` key via the `provider` recipe.
+  //
+  // Services (`factory`, `service`, and provider-produced services) are
+  // NOT visible during the config phase — attempting to inject them is
+  // a clear error. Run blocks get the full run-phase injector instead.
+
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-parameters -- caller-provided return type; mirrors the run-phase `get`
+  function providerGet<T = unknown>(name: string): T {
+    if (providerCache.has(name)) {
+      return providerCache.get(name) as T;
+    }
+    if (providerInstances.has(name)) {
+      return providerInstances.get(name) as T;
+    }
+    // If the name is a known service, give a helpful hint.
+    if (factoryInvokables.has(name) || serviceCtors.has(name) || providerGetInvokables.has(name)) {
+      throw new Error(`Cannot inject "${name}" during config phase; use "${name}Provider" instead`);
+    }
+    throw new Error(`Unknown provider: ${name}`);
+  }
+
+  function providerHas(name: string): boolean {
+    return providerCache.has(name) || providerInstances.has(name);
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-parameters -- caller-provided return type; mirrors the run-phase `invoke`
+  function providerInvoke<T = unknown>(fn: Invokable, self?: unknown, locals?: Record<string, unknown>): T {
+    const deps = annotateInvokable(fn);
+    const resolvedDeps = deps.map((depName) => {
+      if (locals !== undefined && Object.prototype.hasOwnProperty.call(locals, depName)) {
+        return locals[depName];
+      }
+      return providerGet(depName);
+    });
+    const actualFn = isArray(fn)
+      ? (fn[fn.length - 1] as (...args: unknown[]) => unknown)
+      : (fn as unknown as (...args: unknown[]) => unknown);
+    return actualFn.apply(self, resolvedDeps) as T;
+  }
+
+  function providerAnnotate(fn: Invokable): readonly string[] {
+    return annotateInvokable(fn);
+  }
+
+  const providerInjector: Injector = {
+    get: providerGet,
+    has: providerHas,
+    invoke: providerInvoke,
+    annotate: providerAnnotate,
+  };
+  // `providerInjector` is intentionally NOT returned from `createInjector`.
+  // It's used internally by `loadProvider` (to resolve array-style provider
+  // deps during the config phase) and will later drive config blocks.
+
+  // Drain modules *after* `providerInjector` is declared. `loadProvider`
+  // closes over `providerInjector` to resolve array-style provider deps
+  // during the config phase, so invoking `loadModule` earlier would trip
+  // the `const`'s temporal dead zone. The recipe storage maps
+  // (`providerCache`, `factoryInvokables`, `serviceCtors`,
+  // `providerInstances`, `providerGetInvokables`) are all declared at the
+  // top of `createInjector` and are safe to mutate from here.
+  for (const module of modules) {
+    loadModule(module);
   }
 
   // The `get` local is typed as the dynamic-name overload `<T>(name: string) => T`.

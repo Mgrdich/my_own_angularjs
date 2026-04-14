@@ -21,6 +21,22 @@ import type { Annotated, Invokable, InvokableArray } from './di-types';
  *    everything in the tuple except the last element (the function itself).
  * 2. **`$inject` property:** A function with `fn.$inject = ['dep1', 'dep2']`.
  *
+ * **For classes**, the idiomatic TypeScript form is a `static readonly $inject`
+ * class member -- semantically identical to `Class.$inject = [...]` at runtime
+ * (both land on the constructor function as the same own property) but avoids
+ * post-hoc casts in typed code:
+ *
+ * ```typescript
+ * class UserService {
+ *   static readonly $inject = ['logger'] as const;
+ *   constructor(public logger: Logger) {}
+ * }
+ * ```
+ *
+ * The trailing `as const` is important: it preserves the literal tuple type so
+ * that typed consumers (e.g. `TypedModule.service`) can infer the dependency
+ * names rather than collapsing them to `string[]`.
+ *
  * Function-parameter inference (parsing `fn.toString()` to read parameter
  * names) is intentionally NOT supported -- callers must use one of the two
  * explicit forms above. This keeps the annotation contract robust under
@@ -32,7 +48,7 @@ import type { Annotated, Invokable, InvokableArray } from './di-types';
  * @throws {Error} when `fn` is a plain function without a `$inject` property.
  * @throws {Error} when `fn` is neither an array nor a function.
  */
-export function annotate(fn: Invokable): readonly string[] {
+export function annotate(fn: Invokable) {
   if (isArray(fn)) {
     // Array-style annotation: ['dep1', 'dep2', fn]. The `InvokableArray` type
     // guarantees the trailing element is the function, so everything before

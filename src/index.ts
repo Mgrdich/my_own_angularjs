@@ -6,7 +6,6 @@ export type { ExpressionFn, Token, ASTNode } from './parser/index';
 export { Module, createModule, getModule, resetRegistry, createInjector } from './di/index';
 export type {
   AnyModule,
-  InvokeQueueEntry,
   RecipeType,
   TypedModule,
   MergeRegistries,
