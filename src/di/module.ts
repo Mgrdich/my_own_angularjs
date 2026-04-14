@@ -5,7 +5,7 @@ import type { Invokable, InvokableReturn, ResolveDeps } from './di-types';
  * strings are needed -- the actual `value`, `constant`, and `factory` methods
  * will be added to the `Module` class in later slices.
  */
-export type RecipeType = 'value' | 'constant' | 'factory' | 'service' | 'provider';
+export type RecipeType = 'value' | 'constant' | 'factory' | 'service' | 'provider' | 'decorator';
 
 /**
  * @internal
@@ -84,10 +84,23 @@ export class Module<
    */
   readonly $$invokeQueue: InvokeQueueEntry[];
 
+  /**
+   * @internal
+   * Config-phase lifecycle blocks accumulated by calls to `config`. Drained by
+   * `createInjector` after the module graph has been loaded but before any
+   * service, value, or factory is instantiated — giving config blocks access
+   * to providers (via `<name>Provider` names) and constants, but not to
+   * run-phase services. Prefixed with `$$` to match the AngularJS internal-
+   * state convention used alongside {@link $$invokeQueue} — not part of the
+   * public API and subject to change without notice.
+   */
+  readonly $$configBlocks: Invokable[];
+
   constructor(name: Name, requires: Requires) {
     this.name = name;
     this.requires = requires;
     this.$$invokeQueue = [];
+    this.$$configBlocks = [];
   }
 
   /**
@@ -241,6 +254,60 @@ export class Module<
       Name,
       Requires
     >;
+  }
+
+  /**
+   * Register a decorator that wraps an existing service by name. The
+   * decorator invokable must include `'$delegate'` as a dep — the injector
+   * binds `$delegate` to the original (or previously-decorated) service
+   * instance via a locals override at invocation time. The decorator can
+   * also inject other services from the run-phase registry alongside
+   * `$delegate`. The return value replaces the service in the injector's
+   * cache.
+   *
+   * Decorators chain in registration order: each decorator sees the result
+   * of the previous one as `$delegate`. Decorating a service name that has
+   * no registered producer throws a clear error at injector creation time.
+   *
+   * The registration is appended to {@link $$invokeQueue} as
+   * `['decorator', name, invokable]`. Returns the same module instance
+   * with its `Registry` type unchanged — at the wide-signature level,
+   * neither the runtime nor the types know what the decorator returns,
+   * so we leave `Registry` untouched. The typed overload on
+   * `TypedModule.decorator` uses `Omit<Registry, K> & { [P in K]: Return }`
+   * to replace the service type with the decorator's return type.
+   *
+   * @param name - The name of the service to decorate.
+   * @param invokable - The decorator function, as an `$inject`-annotated
+   *   function or an array-style invokable `['$delegate', ...deps, fn]`.
+   */
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-parameters -- explicit `K` literal type parameter preserved so the typed overload on `TypedModule.decorator` can narrow `Registry` under this exact name.
+  decorator<K extends string>(name: K, invokable: Invokable): Module<Registry, ConfigRegistry, Name, Requires> {
+    this.$$invokeQueue.push(['decorator', name, invokable]);
+    return this as unknown as Module<Registry, ConfigRegistry, Name, Requires>;
+  }
+
+  /**
+   * Register a config-phase lifecycle block. The invokable runs during
+   * `createInjector`, after the module graph has been loaded but before
+   * any service, value, or factory is instantiated. Config blocks may
+   * inject providers (via `<name>Provider` names) and constants, but not
+   * services — attempting to inject a service during the config phase
+   * throws at run time. The typed overload on `TypedModule.config` enforces
+   * the config-phase constraint at compile time.
+   *
+   * Unlike the recipe methods, `config` does not widen `Registry` or
+   * `ConfigRegistry`: it registers a side-effecting hook, not a service.
+   * The block is appended to {@link $$configBlocks} and executed in
+   * registration order within the module and dependency order across
+   * the module graph.
+   *
+   * @param invokable - The config block, as an `$inject`-annotated
+   *   function or an array-style invokable.
+   */
+  config(invokable: Invokable): Module<Registry, ConfigRegistry, Name, Requires> {
+    this.$$configBlocks.push(invokable);
+    return this as unknown as Module<Registry, ConfigRegistry, Name, Requires>;
   }
 }
 
@@ -455,6 +522,91 @@ export interface TypedModule<
     Name,
     Requires
   >;
+
+  /**
+   * Array-style decorator with deps validated against `Registry`. The first
+   * entry of the invokable must be the literal string `'$delegate'`, followed
+   * by zero or more additional dep names that are keys of the current
+   * `Registry`. The trailing callback receives `$delegate` typed as
+   * `Registry[K]` (the current type of the service being decorated) and the
+   * remaining parameters inferred from {@link ResolveDeps}.
+   *
+   * The decorator's `Return` type replaces the existing service type in the
+   * registry via `Omit<Registry, K> & { [P in K]: Return }`, so chained
+   * decorators can narrow or widen the service type. Because `K` is
+   * constrained to `keyof Registry & string`, decorating a name that is not
+   * already registered is a compile error — typos surface immediately rather
+   * than failing at injector creation time.
+   *
+   * **Typo detection limitation.** As with the typed `factory` / `service`
+   * overloads, when a dep name beyond `$delegate` is a typo (or lives on a
+   * transitively-required module), overload resolution silently falls through
+   * to the untyped fallback below. Typed param inference still works for
+   * valid cases.
+   */
+  decorator<const K extends keyof Registry & string, const Deps extends readonly (keyof Registry & string)[], Return>(
+    name: K,
+    invokable: readonly ['$delegate', ...Deps, (delegate: Registry[K], ...rest: ResolveDeps<Registry, Deps>) => Return],
+  ): TypedModule<Omit<Registry, K> & { [P in K]: Return }, ConfigRegistry, Name, Requires>;
+
+  /**
+   * Untyped fallback for `decorator` — used when deps can't be validated
+   * statically (e.g. cross-module deps from a `requires` dependency, wide
+   * `string[]` `$inject` properties, or pre-built invokables). Matches the
+   * wide signature on the `Module` class and leaves `Registry` unchanged.
+   */
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-parameters -- explicit `K` literal type parameter preserved to match the wide-signature shape on the `Module` class `decorator` method.
+  decorator<K extends string>(name: K, invokable: Invokable): TypedModule<Registry, ConfigRegistry, Name, Requires>;
+
+  /**
+   * Array-style config block with deps validated against `ConfigRegistry`
+   * (not `Registry`). Each leading entry must be a literal key of the current
+   * `ConfigRegistry` — i.e. a constant or a `<name>Provider` entry registered
+   * earlier in the builder chain — and the trailing callback's parameters are
+   * inferred from {@link ResolveDeps} applied to `ConfigRegistry`. This gives
+   * config blocks compile-time enforcement of the config-phase constraint:
+   * referencing a run-phase-only service (e.g. `'logger'` instead of
+   * `'loggerProvider'`) is a type error because that name is not a key of
+   * `ConfigRegistry`.
+   *
+   * The callback return type is `void` — config blocks are side-effecting
+   * hooks, and their return value is discarded by the injector. Return type
+   * of the method is `TypedModule<Registry, ConfigRegistry, Name, Requires>`
+   * unchanged — `config` does not widen either registry.
+   *
+   * **Typo / cross-module fallback.** As with the typed `factory` / `service`
+   * / `decorator` overloads, when a dep name is a typo (or lives on a
+   * transitively-required module's `ConfigRegistry`), this overload silently
+   * fails to match and call sites fall through to the untyped fallback below.
+   * Typed param inference still works for valid cases.
+   *
+   * **Variance note.** The callback is routed through a `Fn` type parameter
+   * constrained to `(...args: ResolveDeps<ConfigRegistry, Deps>) => void`
+   * rather than being written inline as a parameter type. Inlining
+   * `ResolveDeps<ConfigRegistry, Deps>` directly would put `ConfigRegistry`
+   * in a contravariant position on the method, which breaks the structural
+   * assignability check `ExtractRegistry` performs against
+   * `TypedModule<infer R, Record<string, unknown>, string, readonly string[]>`
+   * in `injector.ts` — callers of `createInjector` would lose all registry
+   * inference. Routing through `Fn` keeps `ConfigRegistry` in constraint
+   * position only, matching the pattern used by the typed `provider`
+   * overloads above.
+   */
+  config<
+    const Deps extends readonly (keyof ConfigRegistry & string)[],
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-parameters -- `Fn` is intentionally a single-use type parameter to keep `ConfigRegistry` out of the method parameter's variance position; see the variance note above.
+    Fn extends (...args: ResolveDeps<ConfigRegistry, Deps>) => void,
+  >(
+    invokable: readonly [...Deps, Fn],
+  ): TypedModule<Registry, ConfigRegistry, Name, Requires>;
+
+  /**
+   * Untyped fallback for `config` — used when deps can't be validated
+   * statically (e.g. cross-module config deps from a `requires` dependency,
+   * wide `string[]` `$inject` properties, or pre-built invokables). Matches
+   * the wide signature on the `Module` class `config` method.
+   */
+  config(invokable: Invokable): TypedModule<Registry, ConfigRegistry, Name, Requires>;
 }
 
 /**

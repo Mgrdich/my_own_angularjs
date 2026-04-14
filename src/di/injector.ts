@@ -131,7 +131,43 @@ export function createInjector<const Mods extends readonly AnyModule[]>(
   // slot carries the matching provider instance so `$get.apply(providerInstance, deps)`
   // can be used.
   const providerGetInvokables = new Map<string, { invokable: Invokable; providerInstance: unknown }>();
+  /**
+   * Per-service decorator chains. Keyed by service name, each entry holds a
+   * list of decorator invokables in registration order. During `get`
+   * resolution (next sub-task), the producer's output is piped through each
+   * decorator via a `$delegate` locals override, producing the
+   * fully-decorated singleton that gets cached in `providerCache`.
+   *
+   * Decorating a service whose name has no registered producer is a hard
+   * error, validated at the end of module loading.
+   */
+  const decorators = new Map<string, Invokable[]>();
   const loadedModules = new Set<string>();
+  /**
+   * Ordered list of config-phase lifecycle blocks collected during the
+   * dependency-graph walk. Populated by `loadModule`: required modules
+   * contribute their blocks first (post-order), then the current module's
+   * own blocks are appended in registration order. This ordering matches
+   * AngularJS semantics: deps-first across the graph, declaration-order
+   * within a module.
+   *
+   * The blocks are executed post-drain via `providerInjector.invoke`
+   * in a separate sub-task; this sub-task only collects them.
+   */
+
+  const collectedConfigBlocks: Invokable[] = [];
+  // Forward declaration of the run-phase injector facade. `applyDecoratorChain`
+  // closes over this binding so it can route decorator invocations through
+  // `runInjector.invoke(..., { $delegate })`, but the facade itself is only
+  // constructed after `get`/`has`/`invoke`/`annotate` are defined below. The
+  // binding is safe to reference from the helper because the helper is only
+  // *called* at runtime (after module loading has finished wiring everything
+  // up) -- not during the synchronous body of `createInjector`. `let` is
+  // required because the assignment is deferred; ESLint's `prefer-const` rule
+  // can't see the flow-sensitive initialization so we silence it locally.
+  // eslint-disable-next-line prefer-const -- deferred initialization; `runInjector` is assigned once further down in the same scope, after the run-phase functions are in place.
+  let runInjector: Injector;
+
   // Stack of names currently being resolved by `get`. When a factory
   // (transitively) requests a name already on the stack we have a service-
   // level circular dependency; we surface the full chain in the error
@@ -209,6 +245,38 @@ export function createInjector<const Mods extends readonly AnyModule[]>(
   }
 
   /**
+   * Run the decorator chain for `name` on an already-produced service value,
+   * piping `$delegate` through each decorator via a `locals` override on
+   * `runInjector.invoke`. The final return value is what gets cached in
+   * `providerCache`.
+   *
+   * Each decorator in the chain receives the *current* value as `$delegate`
+   * and its return value becomes the `$delegate` for the next decorator, so
+   * decorators compose in registration order. A decorator that forgets to
+   * return something passes `undefined` to the next link in the chain --
+   * mirroring AngularJS's behavior.
+   *
+   * If no decorators are registered for `name`, returns `current` unchanged.
+   * Decorators that throw will propagate the error; the caller is responsible
+   * for `resolutionPath` cleanup via its own `try/finally`.
+   *
+   * `runInjector` is declared further down in `createInjector`, but this
+   * helper only runs at call time (well after the closure assignment), so
+   * the late-binding reference is safe.
+   */
+  function applyDecoratorChain(name: string, current: unknown): unknown {
+    const chain = decorators.get(name);
+    if (chain === undefined || chain.length === 0) {
+      return current;
+    }
+    let result = current;
+    for (const decoratorInvokable of chain) {
+      result = runInjector.invoke(decoratorInvokable, null, { $delegate: result });
+    }
+    return result;
+  }
+
+  /**
    * Recursively load `mod` and everything it transitively requires. The
    * traversal is post-order: dependencies are drained into `providerCache`
    * before the enclosing module's own queue, which matches AngularJS's
@@ -246,6 +314,18 @@ export function createInjector<const Mods extends readonly AnyModule[]>(
         // which can be either a bare constructor or a `[...deps, Ctor]`
         // array-style annotation.
         serviceCtors.set(name, value as Invokable);
+      } else if (recipe === 'decorator') {
+        // Decorators are stashed per target service name in registration
+        // order. The actual wrapping happens later during `get` resolution
+        // (next sub-task) via a `$delegate` locals override. Appending here
+        // preserves the intra-module ordering that the queue drain relies on;
+        // cross-module ordering is governed by the post-order module walk.
+        const existing = decorators.get(name);
+        if (existing === undefined) {
+          decorators.set(name, [value as Invokable]);
+        } else {
+          existing.push(value as Invokable);
+        }
       } else {
         // `recipe` narrows to `'provider'` here -- the only remaining member
         // of `RecipeType`. Normalize the registration source (Form 1/2/3)
@@ -255,11 +335,48 @@ export function createInjector<const Mods extends readonly AnyModule[]>(
         loadProvider(name, value);
       }
     }
+
+    // After draining the invoke queue, append this module's config blocks to
+    // the collected list. Because `loadModule` is a post-order walk -- required
+    // modules recurse first -- and because the idempotence guard at the top
+    // prevents re-visits, each module's blocks are appended exactly once and
+    // in the correct order: all deps first, then the current module in
+    // registration order.
+    for (const block of mod.$$configBlocks) {
+      collectedConfigBlocks.push(block);
+    }
   }
 
   // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-parameters -- caller-provided type for dynamic-name escape hatch; the typed `Injector.get` overload relies on this signature.
   function get<T>(name: string): T {
     if (providerCache.has(name)) {
+      // Values and constants are written directly into `providerCache` by
+      // `loadModule`, so their producer pass has already happened by the time
+      // we reach `get`. If a decorator chain is still pending for `name`, we
+      // need to apply it lazily on the first read -- decorators themselves may
+      // inject other services through `runInjector.invoke`, and those may not
+      // be resolvable until the full module graph has loaded. After the chain
+      // runs we overwrite the cache entry with the decorated value and delete
+      // the `decorators` entry so subsequent reads short-circuit here.
+      if (decorators.has(name)) {
+        // A decorator for `name` might itself depend on `name`, which would
+        // form a cycle; use the same `resolutionPath` push/pop guard that the
+        // producer branches use so the error surface stays uniform.
+        if (resolutionPath.includes(name)) {
+          const chain = [...resolutionPath, name].join(' <- ');
+          throw new Error(`Circular dependency: ${chain}`);
+        }
+        const raw = providerCache.get(name);
+        resolutionPath.push(name);
+        try {
+          const decorated = applyDecoratorChain(name, raw);
+          providerCache.set(name, decorated);
+          decorators.delete(name);
+          return decorated as T;
+        } finally {
+          resolutionPath.pop();
+        }
+      }
       return providerCache.get(name) as T;
     }
     if (factoryInvokables.has(name)) {
@@ -290,14 +407,23 @@ export function createInjector<const Mods extends readonly AnyModule[]>(
         const fn = isArray(invokable)
           ? (invokable[invokable.length - 1] as (...args: unknown[]) => unknown)
           : (invokable as unknown as (...args: unknown[]) => unknown);
-        const result = fn(...resolvedDeps);
-        providerCache.set(name, result);
+        const rawResult = fn(...resolvedDeps);
+        // Pipe the raw producer output through any registered decorators
+        // before caching so the singleton stored in `providerCache` is the
+        // fully-decorated value. `applyDecoratorChain` is a no-op when no
+        // decorators are registered for `name`.
+        const finalResult = applyDecoratorChain(name, rawResult);
+        providerCache.set(name, finalResult);
         // Now that the result is cached, the invokable is no longer pending
         // and can be dropped from the factory map. Deleting *after* caching
         // (rather than before resolving) is what lets the `resolutionPath`
         // check above see the entry on re-entry and report a proper cycle.
         factoryInvokables.delete(name);
-        return result as T;
+        // Drop the consumed decorator chain so that a subsequent `get` call
+        // doesn't see `decorators.has(name)` in the cache-hit branch and
+        // double-decorate the already-wrapped singleton.
+        decorators.delete(name);
+        return finalResult as T;
       } finally {
         resolutionPath.pop();
       }
@@ -332,13 +458,19 @@ export function createInjector<const Mods extends readonly AnyModule[]>(
         const Ctor = isArray(invokable)
           ? (invokable[invokable.length - 1] as unknown as new (...args: unknown[]) => unknown)
           : (invokable as unknown as new (...args: unknown[]) => unknown);
-        const result = new Ctor(...resolvedDeps);
-        providerCache.set(name, result);
+        const rawInstance = new Ctor(...resolvedDeps);
+        // Pipe the freshly-constructed instance through any registered
+        // decorators so downstream consumers see the fully-decorated service.
+        const finalInstance = applyDecoratorChain(name, rawInstance);
+        providerCache.set(name, finalInstance);
         // Drop the pending constructor *after* caching so that a re-entry
         // during dependency resolution hits the `resolutionPath` check above
         // and reports a proper cycle instead of silently re-constructing.
         serviceCtors.delete(name);
-        return result as T;
+        // Drop the consumed decorator chain so a later `get` doesn't
+        // re-decorate the already-wrapped singleton via the cache-hit branch.
+        decorators.delete(name);
+        return finalInstance as T;
       } finally {
         resolutionPath.pop();
       }
@@ -380,13 +512,19 @@ export function createInjector<const Mods extends readonly AnyModule[]>(
         const getFn = isArray(invokable)
           ? (invokable[invokable.length - 1] as (...args: unknown[]) => unknown)
           : (invokable as unknown as (...args: unknown[]) => unknown);
-        const result = getFn.apply(providerInstance, resolvedDeps);
-        providerCache.set(name, result);
+        const rawService = getFn.apply(providerInstance, resolvedDeps);
+        // Pipe the provider's raw `$get` output through any registered
+        // decorators so the cached singleton reflects the full chain.
+        const finalService = applyDecoratorChain(name, rawService);
+        providerCache.set(name, finalService);
         // Drop the pending `$get` entry *after* caching so that a re-entry
         // during dependency resolution hits the `resolutionPath` check above
         // and reports a proper cycle instead of silently re-invoking `$get`.
         providerGetInvokables.delete(name);
-        return result as T;
+        // Drop the consumed decorator chain so a later `get` doesn't
+        // re-decorate the already-wrapped singleton via the cache-hit branch.
+        decorators.delete(name);
+        return finalService as T;
       } finally {
         resolutionPath.pop();
       }
@@ -497,6 +635,19 @@ export function createInjector<const Mods extends readonly AnyModule[]>(
   // It's used internally by `loadProvider` (to resolve array-style provider
   // deps during the config phase) and will later drive config blocks.
 
+  // Assign the run-phase injector facade that `applyDecoratorChain` closes
+  // over. This must happen before any code path that can invoke a decorator
+  // (i.e. before the first `get` call), so we wire it up here -- after all
+  // the run-phase functions are defined but before module loading kicks off.
+  // Decorators are only consulted at `get` time, not during `loadModule`,
+  // but assigning eagerly keeps the lifecycle invariant obvious.
+  runInjector = {
+    get,
+    has,
+    invoke,
+    annotate,
+  };
+
   // Drain modules *after* `providerInjector` is declared. `loadProvider`
   // closes over `providerInjector` to resolve array-style provider deps
   // during the config phase, so invoking `loadModule` earlier would trip
@@ -508,15 +659,46 @@ export function createInjector<const Mods extends readonly AnyModule[]>(
     loadModule(module);
   }
 
+  // Validate decorators against registered producers. A decorator for a
+  // service that doesn't exist anywhere in the loaded module graph is a
+  // hard error — we refuse to build an injector that would later silently
+  // ignore the decorator. Validation runs *after* the full graph loads so
+  // cross-module decoration (a module decorating a service registered in a
+  // module it `requires`) works regardless of load order.
+  for (const decoratedName of decorators.keys()) {
+    const hasProducer =
+      providerCache.has(decoratedName) ||
+      factoryInvokables.has(decoratedName) ||
+      serviceCtors.has(decoratedName) ||
+      providerGetInvokables.has(decoratedName);
+    if (!hasProducer) {
+      throw new Error(`Cannot decorate unknown service: "${decoratedName}"`);
+    }
+  }
+
+  // Phase 2 — Config blocks. Execute every collected config block through
+  // the config-phase injector. This runs after the full module graph has
+  // been loaded (so every provider is registered and every `<name>Provider`
+  // key is resolvable) and after decorator validation (so a config block
+  // that references a provider whose decorator would later throw still
+  // surfaces the clearer "unknown service" error first). Config blocks
+  // run strictly before any service is instantiated: `providerInjector.get`
+  // only exposes constants and provider instances, so a block that tries
+  // to inject a service/value/factory hits the config-phase enforcement
+  // error rather than silently pulling from the cache.
+  //
+  // Blocks are executed in `collectedConfigBlocks` order, which `loadModule`
+  // populates post-order (deps first, registration order within each
+  // module) — matching AngularJS semantics.
+  for (const block of collectedConfigBlocks) {
+    providerInjector.invoke(block);
+  }
+
   // The `get` local is typed as the dynamic-name overload `<T>(name: string) => T`.
   // The public `Injector<Registry>` interface exposes a second, registry-keyed
   // overload that narrows the return type at call sites. Both overloads share
-  // the same runtime implementation, so we widen through `unknown` here rather
-  // than duplicating the overload signatures on the local function expression.
-  return {
-    get,
-    has,
-    invoke,
-    annotate,
-  };
+  // the same runtime implementation, so we return the same `runInjector` facade
+  // that `applyDecoratorChain` closes over -- widened to the caller's registry
+  // shape via the function's declared return type.
+  return runInjector as unknown as Injector<MergeRegistries<Mods>>;
 }
