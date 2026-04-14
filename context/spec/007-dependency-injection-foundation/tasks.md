@@ -1,7 +1,7 @@
 # Tasks: Dependency Injection — Foundation
 
 - **Specification:** `context/spec/007-dependency-injection-foundation/`
-- **Status:** Not Started
+- **Status:** Complete
 
 ---
 
@@ -39,12 +39,12 @@
   - [x] Add tests: `invoke` with array-style, `invoke` with `$inject`, `invoke` with `self` binding, `invoke` with `locals` override, `invoke` with unannotated function throws, `annotate` returns dep names. **[Agent: vitest-testing]**
   - [x] Verify: `pnpm test`, `pnpm typecheck`, `pnpm lint` pass. **[Agent: typescript-framework]**
 
-- [ ] **Slice 6: Circular Dependency Detection**
-  - [ ] Update `createInjector`'s factory resolution to track a resolution path stack (`Array<string>`). Before resolving a service, check if its name is already in the stack. If yes, throw `'Circular dependency: A <- B <- A'` with the full chain. Push before resolving, pop after. **[Agent: typescript-framework]**
-  - [ ] Add tests: direct cycle (`A` depends on `A`), 2-level cycle (`A → B → A`), 3-level cycle (`A → B → C → A`). Error message includes the full chain. **[Agent: vitest-testing]**
-  - [ ] Verify: `pnpm test`, `pnpm typecheck`, `pnpm lint` pass. **[Agent: typescript-framework]**
+- [x] **Slice 6: Circular Dependency Detection**
+  - [x] Update `createInjector`'s factory resolution to track a resolution path stack (`Array<string>`). Before resolving a service, check if its name is already in the stack. If yes, throw `'Circular dependency: A <- B <- A'` with the full chain. Push before resolving, pop after. **[Agent: typescript-framework]**
+  - [x] Add tests: direct cycle (`A` depends on `A`), 2-level cycle (`A → B → A`), 3-level cycle (`A → B → C → A`). Error message includes the full chain. **[Agent: vitest-testing]**
+  - [x] Verify: `pnpm test`, `pnpm typecheck`, `pnpm lint` pass. **[Agent: typescript-framework]**
 
-- [ ] **Slice 7: Public API Exports & Root Integration**
-  - [ ] Ensure `src/di/index.ts` exports everything: `createModule`, `getModule`, `createInjector`, and all public types. Update `src/index.ts` to re-export from `./di/index`. **[Agent: typescript-framework]**
-  - [ ] Verify build: run `pnpm build`, check that `dist/esm/di/index.mjs`, `dist/cjs/di/index.cjs`, and `dist/types/di/index.d.ts` are all generated. **[Agent: rollup-build]**
-  - [ ] Final verification: `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm build` all pass. **[Agent: typescript-framework]**
+- [x] **Slice 7: Public API Exports & Root Integration**
+  - [x] Ensure `src/di/index.ts` exports everything: `createModule`, `getModule`, `createInjector`, and all public types. Update `src/index.ts` to re-export from `./di/index`. **[Agent: typescript-framework]**
+  - [x] Verify build: run `pnpm build`, check that `dist/esm/di/index.mjs`, `dist/cjs/di/index.cjs`, and `dist/types/di/index.d.ts` are all generated. **[Agent: rollup-build]**
+  - [x] Final verification: `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm build` all pass. **[Agent: typescript-framework]**

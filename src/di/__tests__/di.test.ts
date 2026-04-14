@@ -492,6 +492,96 @@ describe('dependency injection', () => {
     });
   });
 
+  describe('createInjector (circular dependency detection)', () => {
+    beforeEach(() => {
+      resetRegistry();
+    });
+
+    it('throws when a factory depends on itself directly (A -> A)', () => {
+      const mod = createModule('app', []).factory('A', ['A', (a: unknown) => a]);
+      const injector = createInjector([mod]);
+      expect(() => injector.get('A')).toThrow('Circular dependency: A <- A');
+    });
+
+    it('throws on a 2-level cycle (A -> B -> A)', () => {
+      const mod = createModule('app', [])
+        .factory('A', ['B', (b: unknown) => b])
+        .factory('B', ['A', (a: unknown) => a]);
+      const injector = createInjector([mod]);
+      expect(() => injector.get('A')).toThrow('Circular dependency: A <- B <- A');
+    });
+
+    it('throws on a 3-level cycle (A -> B -> C -> A)', () => {
+      const mod = createModule('app', [])
+        .factory('A', ['B', (b: unknown) => b])
+        .factory('B', ['C', (c: unknown) => c])
+        .factory('C', ['A', (a: unknown) => a]);
+      const injector = createInjector([mod]);
+      expect(() => injector.get('A')).toThrow('Circular dependency: A <- B <- C <- A');
+    });
+
+    it('throws on a cycle detected from a non-root entry point', () => {
+      const mod = createModule('app', [])
+        .factory('A', ['B', (b: unknown) => b])
+        .factory('B', ['C', (c: unknown) => c])
+        .factory('C', ['B', (b: unknown) => b]); // B and C form a cycle
+      const injector = createInjector([mod]);
+      // Starting from A pulls in B which tries to pull in C which tries to pull in B.
+      // The full resolution path is retained; the cycle is at the tail.
+      expect(() => injector.get('A')).toThrow('Circular dependency: A <- B <- C <- B');
+    });
+
+    it('still resolves non-cyclic services when an unrelated cycle exists in the module', () => {
+      const mod = createModule('app', [])
+        .value('safe', 'ok')
+        .factory('A', ['B', (b: unknown) => b])
+        .factory('B', ['A', (a: unknown) => a]);
+      const injector = createInjector([mod]);
+      // The safe value is accessible
+      expect(injector.get('safe')).toBe('ok');
+      // Touching the cycle still throws
+      expect(() => injector.get('A')).toThrow(/Circular dependency/);
+    });
+
+    it('error message includes the full dependency chain', () => {
+      const mod = createModule('app', [])
+        .factory('A', ['B', (b: unknown) => b])
+        .factory('B', ['C', (c: unknown) => c])
+        .factory('C', ['A', (a: unknown) => a]);
+      const injector = createInjector([mod]);
+      try {
+        injector.get('A');
+        expect.fail('expected injector.get to throw');
+      } catch (err) {
+        expect(err).toBeInstanceOf(Error);
+        expect((err as Error).message).toContain('Circular dependency:');
+        expect((err as Error).message).toContain('A');
+        expect((err as Error).message).toContain('B');
+        expect((err as Error).message).toContain('C');
+      }
+    });
+
+    it('detects a cycle when invoke triggers the resolution', () => {
+      const mod = createModule('app', [])
+        .factory('A', ['B', (b: unknown) => b])
+        .factory('B', ['A', (a: unknown) => a]);
+      const injector = createInjector([mod]);
+      expect(() => injector.invoke(['A', (a: unknown) => a])).toThrow(/Circular dependency/);
+    });
+
+    it('does not leak the resolution path after a cycle error', () => {
+      const mod = createModule('app', [])
+        .value('safe', 'ok')
+        .factory('A', ['B', (b: unknown) => b])
+        .factory('B', ['A', (a: unknown) => a]);
+      const injector = createInjector([mod]);
+      // First call throws
+      expect(() => injector.get('A')).toThrow(/Circular dependency/);
+      // Subsequent call for an unrelated service still works
+      expect(injector.get('safe')).toBe('ok');
+    });
+  });
+
   describe('injector.invoke / annotate', () => {
     beforeEach(() => {
       resetRegistry();

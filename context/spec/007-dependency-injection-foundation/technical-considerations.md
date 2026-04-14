@@ -1,7 +1,7 @@
 # Technical Specification: Dependency Injection — Foundation
 
 - **Functional Specification:** `context/spec/007-dependency-injection-foundation/functional-spec.md`
-- **Status:** Draft
+- **Status:** Completed
 - **Author(s):** Mgrdich
 
 ---

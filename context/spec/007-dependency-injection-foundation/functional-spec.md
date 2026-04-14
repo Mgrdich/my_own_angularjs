@@ -1,7 +1,7 @@
 # Functional Specification: Dependency Injection — Foundation
 
 - **Roadmap Item:** Phase 1 — Core Runtime Foundation > Dependency Injection
-- **Status:** Draft
+- **Status:** Completed
 - **Author:** Mgrdich
 
 ---
@@ -31,11 +31,11 @@ A classic `angular.module()` global namespace is explicitly **out of scope for t
 
 **Acceptance Criteria:**
 
-- [ ] `createModule('app', [])` creates a new module named `app` with no dependencies
-- [ ] `createModule('app', ['common'])` creates a module that depends on `common`
-- [ ] `getModule('app')` returns the previously created module
-- [ ] `getModule('app')` throws `Error('Module not found: app')` if `app` was never created
-- [ ] Creating a module with the same name twice replaces the previous registration
+- [x] `createModule('app', [])` creates a new module named `app` with no dependencies
+- [x] `createModule('app', ['common'])` creates a module that depends on `common`
+- [x] `getModule('app')` returns the previously created module
+- [x] `getModule('app')` throws `Error('Module not found: app')` if `app` was never created
+- [x] Creating a module with the same name twice replaces the previous registration
 
 ### 2.2 Module Dependency Graph
 
@@ -43,10 +43,10 @@ Modules can depend on other modules. When a module is loaded, all its transitive
 
 **Acceptance Criteria:**
 
-- [ ] When `app` depends on `common`, services registered on `common` are available in `app`
-- [ ] Transitive dependencies work: if `app` depends on `b`, and `b` depends on `c`, services from `c` are visible in `app`
-- [ ] Each module is loaded only once, even if referenced by multiple modules in the graph
-- [ ] Missing module dependencies throw a clear error (e.g., `Module not found: 'common'`)
+- [x] When `app` depends on `common`, services registered on `common` are available in `app`
+- [x] Transitive dependencies work: if `app` depends on `b`, and `b` depends on `c`, services from `c` are visible in `app`
+- [x] Each module is loaded only once, even if referenced by multiple modules in the graph
+- [x] Missing module dependencies throw a clear error (e.g., `Module not found: 'common'`)
 
 ### 2.3 Registering Services (value, constant, factory)
 
@@ -58,12 +58,12 @@ Modules must provide methods to register services using three recipes:
 
 **Acceptance Criteria:**
 
-- [ ] `module.value('apiUrl', 'https://api.example.com')` registers a string value
-- [ ] `module.value('config', { timeout: 30 })` registers an object value
-- [ ] `module.constant('MAX_RETRIES', 3)` registers a constant
-- [ ] `module.factory('logger', () => ({ log: (msg) => console.log(msg) }))` registers a factory with no dependencies
-- [ ] `module.factory('userService', ['$http', ($http) => ({ ... })])` registers a factory with dependencies using array-style annotation
-- [ ] `module.factory('userService', userServiceFn)` with `userServiceFn.$inject = ['$http']` works using the `$inject` property
+- [x] `module.value('apiUrl', 'https://api.example.com')` registers a string value
+- [x] `module.value('config', { timeout: 30 })` registers an object value
+- [x] `module.constant('MAX_RETRIES', 3)` registers a constant
+- [x] `module.factory('logger', () => ({ log: (msg) => console.log(msg) }))` registers a factory with no dependencies
+- [x] `module.factory('userService', ['$http', ($http) => ({ ... })])` registers a factory with dependencies using array-style annotation
+- [x] `module.factory('userService', userServiceFn)` with `userServiceFn.$inject = ['$http']` works using the `$inject` property
 
 ### 2.4 Injector — get and has
 
@@ -74,12 +74,12 @@ An injector must be created from a module (and its dependency graph). The inject
 
 **Acceptance Criteria:**
 
-- [ ] `injector.get('apiUrl')` returns the registered value
-- [ ] `injector.get('logger')` calls the factory function and returns its result
-- [ ] Services are singletons — `injector.get('logger') === injector.get('logger')` (same reference on every call)
-- [ ] `injector.has('apiUrl')` returns `true` for registered services
-- [ ] `injector.has('nonexistent')` returns `false`
-- [ ] `injector.get('nonexistent')` throws `Error('Unknown provider: nonexistent')`
+- [x] `injector.get('apiUrl')` returns the registered value
+- [x] `injector.get('logger')` calls the factory function and returns its result
+- [x] Services are singletons — `injector.get('logger') === injector.get('logger')` (same reference on every call)
+- [x] `injector.has('apiUrl')` returns `true` for registered services
+- [x] `injector.has('nonexistent')` returns `false`
+- [x] `injector.get('nonexistent')` throws `Error('Unknown provider: nonexistent')`
 
 ### 2.5 Injector — invoke and annotate
 
@@ -90,12 +90,12 @@ The injector must be able to invoke arbitrary functions with their dependencies 
 
 **Acceptance Criteria:**
 
-- [ ] `injector.invoke(['$http', ($http) => ...])` calls the function with `$http` injected
-- [ ] `injector.invoke(fn)` where `fn.$inject = ['$http']` also works
-- [ ] `injector.invoke(fn, self)` sets `this` to `self` inside `fn`
-- [ ] `injector.invoke(fn, null, { $http: mockHttp })` uses the mock instead of the registered `$http`
-- [ ] `injector.annotate(fn)` returns `['$http']` for both array-style and `$inject` annotated functions
-- [ ] `injector.annotate` throws a clear error if a function has no annotations (function parameter inference is not supported)
+- [x] `injector.invoke(['$http', ($http) => ...])` calls the function with `$http` injected
+- [x] `injector.invoke(fn)` where `fn.$inject = ['$http']` also works
+- [x] `injector.invoke(fn, self)` sets `this` to `self` inside `fn`
+- [x] `injector.invoke(fn, null, { $http: mockHttp })` uses the mock instead of the registered `$http`
+- [x] `injector.annotate(fn)` returns `['$http']` for both array-style and `$inject` annotated functions
+- [x] `injector.annotate` throws a clear error if a function has no annotations (function parameter inference is not supported)
 
 ### 2.6 Circular Dependency Detection
 
@@ -103,9 +103,9 @@ If a service's factory function declares a dependency that (directly or transiti
 
 **Acceptance Criteria:**
 
-- [ ] Direct cycle (`A` depends on `A`) throws `Error('Circular dependency: A <- A')`
-- [ ] Indirect cycle (`A` depends on `B`, `B` depends on `A`) throws `Error('Circular dependency: A <- B <- A')`
-- [ ] Deeper cycles (`A → B → C → A`) throw with the full dependency chain in the message
+- [x] Direct cycle (`A` depends on `A`) throws `Error('Circular dependency: A <- A')`
+- [x] Indirect cycle (`A` depends on `B`, `B` depends on `A`) throws `Error('Circular dependency: A <- B <- A')`
+- [x] Deeper cycles (`A → B → C → A`) throw with the full dependency chain in the message
 
 ### 2.7 Type Safety and Inference
 
@@ -138,14 +138,14 @@ injector.get('unknown');  // compile error — 'unknown' is not a registered key
 
 **Acceptance Criteria:**
 
-- [ ] `module.value('apiUrl', 'https://...')` infers the value as `string`
-- [ ] Each `.value()` / `.constant()` / `.factory()` call returns a module type with the new service added to its registry (builder pattern)
-- [ ] `injector.get('apiUrl')` on a typed injector returns the correct type without an explicit generic parameter
-- [ ] `injector.get('nonexistent')` is a **compile-time** error on a typed injector (in addition to the runtime error)
-- [ ] `injector.get<HttpClient>('$http')` still works as an explicit-generic escape hatch
-- [ ] `pnpm typecheck` passes with zero errors across the DI module
-- [ ] No use of `any` in the DI source code (except deliberate, commented escape hatches)
-- [ ] All public APIs have explicit types for parameters and return values
+- [x] `module.value('apiUrl', 'https://...')` infers the value as `string`
+- [x] Each `.value()` / `.constant()` / `.factory()` call returns a module type with the new service added to its registry (builder pattern)
+- [x] `injector.get('apiUrl')` on a typed injector returns the correct type without an explicit generic parameter
+- [x] `injector.get('nonexistent')` is a **compile-time** error on a typed injector (in addition to the runtime error)
+- [x] `injector.get<HttpClient>('$http')` still works as an explicit-generic escape hatch
+- [x] `pnpm typecheck` passes with zero errors across the DI module
+- [x] No use of `any` in the DI source code (except deliberate, commented escape hatches)
+- [x] All public APIs have explicit types for parameters and return values
 
 ---
 
