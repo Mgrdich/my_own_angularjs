@@ -36,11 +36,11 @@ _Complete the essential building blocks that everything else depends on._
   - [x] **Phase tracking:** Implement `$beginPhase`, `$clearPhase`, and `$$postDigest` hooks.
   - [x] **TTL configuration:** Support configurable digest TTL and cycle detection.
 
-- [ ] **Dependency Injection**
+- [x] **Dependency Injection**
   - [x] **Module System:** Implement `createModule()` / `getModule()` (ES module style) with support for dependencies between modules. (spec 007)
   - [x] **Injector:** Implement the injector with `invoke`, `get`, `has`, `annotate`, and support for `$inject` annotations and array-style DI. (spec 007)
-  - [ ] **Providers & Recipes:** Implement `provider`, `factory`, `service`, `value`, `constant`, and `decorator`. _(spec 007 covers `value`, `constant`, `factory`; `service`/`provider`/`decorator` deferred to spec 008)_
-  - [ ] **Config & Run Blocks:** Support module-level `config()` and `run()` lifecycle hooks. _(spec 008)_
+  - [x] **Providers & Recipes:** Implement `provider`, `factory`, `service`, `value`, `constant`, and `decorator`. _(spec 007 covers `value`, `constant`, `factory`; `service`/`provider`/`decorator` deferred to spec 008)_
+  - [x] **Config & Run Blocks:** Support module-level `config()` and `run()` lifecycle hooks. _(spec 008)_
 
 ---
 

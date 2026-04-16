@@ -1,7 +1,7 @@
 # Technical Specification: Dependency Injection — Advanced Recipes & Lifecycle
 
 - **Functional Specification:** `context/spec/008-advanced-di-recipes-and-lifecycle/functional-spec.md`
-- **Status:** Draft
+- **Status:** Completed
 - **Author(s):** Mgrdich
 
 ---

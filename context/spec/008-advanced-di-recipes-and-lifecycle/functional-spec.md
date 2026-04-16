@@ -1,7 +1,7 @@
 # Functional Specification: Dependency Injection — Advanced Recipes & Lifecycle
 
 - **Roadmap Item:** Phase 1 — Core Runtime Foundation > Dependency Injection (Providers & Recipes + Config & Run Blocks)
-- **Status:** Draft
+- **Status:** Completed
 - **Author:** Mgrdich
 
 ---
@@ -45,11 +45,11 @@ module.service('userService', ['$http', UserService]);
 
 **Acceptance Criteria:**
 
-- [ ] `module.service('name', Ctor)` with `Ctor.$inject = [...]` registers a service instantiated via `new Ctor(...deps)` on first `get('name')`
-- [ ] `module.service('name', ['dep1', 'dep2', Ctor])` registers a service via array-style annotation
-- [ ] Services are singletons — `injector.get('name') === injector.get('name')`
-- [ ] Service constructor receives resolved dependencies as positional args
-- [ ] The returned instance is `instanceof` the original constructor
+- [x] `module.service('name', Ctor)` with `Ctor.$inject = [...]` registers a service instantiated via `new Ctor(...deps)` on first `get('name')`
+- [x] `module.service('name', ['dep1', 'dep2', Ctor])` registers a service via array-style annotation
+- [x] Services are singletons — `injector.get('name') === injector.get('name')`
+- [x] Service constructor receives resolved dependencies as positional args
+- [x] The returned instance is `instanceof` the original constructor
 
 ### 2.2 `provider` Recipe
 
@@ -90,12 +90,12 @@ module.provider('logger', ['SomeConfigDep', function(cfg) {
 
 **Acceptance Criteria:**
 
-- [ ] All three forms register the provider correctly
-- [ ] During config phase, `<name>Provider` is injectable (e.g., `loggerProvider`); the service `<name>` is **not**
-- [ ] After config phase, the service `<name>` is injectable; `provider.$get(...)` is called exactly once
-- [ ] The `$get` method's dependencies are resolved from the run-phase injector
-- [ ] Services produced by providers are singletons
-- [ ] Missing `$get` on the provider throws a clear error
+- [x] All three forms register the provider correctly
+- [x] During config phase, `<name>Provider` is injectable (e.g., `loggerProvider`); the service `<name>` is **not**
+- [x] After config phase, the service `<name>` is injectable; `provider.$get(...)` is called exactly once
+- [x] The `$get` method's dependencies are resolved from the run-phase injector
+- [x] Services produced by providers are singletons
+- [x] Missing `$get` on the provider throws a clear error
 
 ### 2.3 `decorator` Recipe
 
@@ -114,11 +114,11 @@ Decorators chain — each decorator sees the result of the previous one as `$del
 
 **Acceptance Criteria:**
 
-- [ ] `module.decorator('name', ['$delegate', fn])` registers a decorator that wraps the existing service
-- [ ] The decorator function receives the original service as `$delegate`
-- [ ] `injector.get('name')` returns the decorated service
-- [ ] Multiple decorators on the same service chain in registration order
-- [ ] Decorating a nonexistent service throws a clear error at injector creation time
+- [x] `module.decorator('name', ['$delegate', fn])` registers a decorator that wraps the existing service
+- [x] The decorator function receives the original service as `$delegate`
+- [x] `injector.get('name')` returns the decorated service
+- [x] Multiple decorators on the same service chain in registration order
+- [x] Decorating a nonexistent service throws a clear error at injector creation time
 
 ### 2.4 `config()` Blocks
 
@@ -132,12 +132,12 @@ module.config(['loggerProvider', function(loggerProvider) {
 
 **Acceptance Criteria:**
 
-- [ ] `module.config(fn)` registers a config block
-- [ ] Config blocks run when `createInjector` is called, **before** any service is instantiated
-- [ ] Can inject `<name>Provider` names and constants
-- [ ] **Cannot** inject services, values, or factories — throws a clear error (e.g., `Cannot inject 'logger' during config phase; use 'loggerProvider' instead`)
-- [ ] Multiple config blocks run in registration order within a module and in dependency order across modules
-- [ ] Config blocks can mutate providers (e.g., `loggerProvider.setLevel(...)`)
+- [x] `module.config(fn)` registers a config block
+- [x] Config blocks run when `createInjector` is called, **before** any service is instantiated
+- [x] Can inject `<name>Provider` names and constants
+- [x] **Cannot** inject services, values, or factories — throws a clear error (e.g., `Cannot inject 'logger' during config phase; use 'loggerProvider' instead`)
+- [x] Multiple config blocks run in registration order within a module and in dependency order across modules
+- [x] Config blocks can mutate providers (e.g., `loggerProvider.setLevel(...)`)
 
 ### 2.5 `run()` Blocks
 
@@ -151,12 +151,12 @@ module.run(['$rootScope', 'logger', function($rootScope, logger) {
 
 **Acceptance Criteria:**
 
-- [ ] `module.run(fn)` registers a run block
-- [ ] Run blocks execute **after** all config blocks
-- [ ] Can inject services, values, constants, and factories
-- [ ] **Cannot** inject `<name>Provider` names (config phase is over)
-- [ ] Multiple run blocks run in registration order within a module and in dependency order across modules
-- [ ] Run blocks run exactly once per injector creation
+- [x] `module.run(fn)` registers a run block
+- [x] Run blocks execute **after** all config blocks
+- [x] Can inject services, values, constants, and factories
+- [x] **Cannot** inject `<name>Provider` names (config phase is over)
+- [x] Multiple run blocks run in registration order within a module and in dependency order across modules
+- [x] Run blocks run exactly once per injector creation
 
 ### 2.6 Type Safety and Inference — Full Parity with Spec 007
 
@@ -203,10 +203,10 @@ injector.get('userService');   // inferred as UserService
 
 **Acceptance Criteria:**
 
-- [ ] `module.service('userService', UserService)` widens `Registry` to include `userService: InstanceType<typeof UserService>`
-- [ ] `injector.get('userService')` returns an instance typed as `InstanceType<typeof UserService>` without explicit generics
-- [ ] Passing a non-constructor to `service` is a compile error
-- [ ] Constructor dependency types on the callback (if array-style) are inferred from `Registry`
+- [x] `module.service('userService', UserService)` widens `Registry` to include `userService: InstanceType<typeof UserService>`
+- [x] `injector.get('userService')` returns an instance typed as `InstanceType<typeof UserService>` without explicit generics
+- [x] Passing a non-constructor to `service` is a compile error
+- [x] Constructor dependency types on the callback (if array-style) are inferred from `Registry`
 
 #### 2.6.2 Typed `provider`
 
@@ -307,15 +307,15 @@ injector.get('logger');   // inferred as { log: (msg: string) => void }
 
 **Acceptance Criteria:**
 
-- [ ] `module.provider('logger', LoggerProvider)` adds `loggerProvider: InstanceType<typeof LoggerProvider>` to `ConfigRegistry`
-- [ ] Same call adds `logger: InvokableReturn<InstanceType<typeof LoggerProvider>['$get']>` to `Registry`
-- [ ] All three provider forms (constructor, object, array-style) produce correct type widening via separate typed overloads on `TypedModule.provider`
-- [ ] **Form 3 — Array-style constructor deps are typed against `ConfigRegistry`:** `module.provider('svc', ['configDep', function(configDep) { ... }])` with `'configDep'` not in `ConfigRegistry` is a compile error
-- [ ] **Form 3 — Constructor parameter types are inferred from `ResolveDeps<ConfigRegistry, Deps>`:** the callback's `configDep` parameter types automatically without manual annotation
-- [ ] **`$get` deps are typed against `Registry`:** when `$get` is an array-style invokable, its dep names must be `keyof Registry & string` — unregistered service names fall through to the untyped fallback overload
-- [ ] `injector.get('logger')` infers the service type from the provider's `$get` method
-- [ ] `config()` callbacks can inject `loggerProvider` with its full typed API
-- [ ] A provider without a `$get` method is a compile error
+- [x] `module.provider('logger', LoggerProvider)` adds `loggerProvider: InstanceType<typeof LoggerProvider>` to `ConfigRegistry`
+- [x] Same call adds `logger: InvokableReturn<InstanceType<typeof LoggerProvider>['$get']>` to `Registry`
+- [x] All three provider forms (constructor, object, array-style) produce correct type widening via separate typed overloads on `TypedModule.provider`
+- [x] **Form 3 — Array-style constructor deps are typed against `ConfigRegistry`:** `module.provider('svc', ['configDep', function(configDep) { ... }])` with `'configDep'` not in `ConfigRegistry` is a compile error
+- [x] **Form 3 — Constructor parameter types are inferred from `ResolveDeps<ConfigRegistry, Deps>`:** the callback's `configDep` parameter types automatically without manual annotation
+- [x] **`$get` deps are typed against `Registry`:** when `$get` is an array-style invokable, its dep names must be `keyof Registry & string` — unregistered service names fall through to the untyped fallback overload
+- [x] `injector.get('logger')` infers the service type from the provider's `$get` method
+- [x] `config()` callbacks can inject `loggerProvider` with its full typed API
+- [x] A provider without a `$get` method is a compile error
 
 #### 2.6.3 Typed `decorator`
 
@@ -358,12 +358,12 @@ mod.decorator('loggerr', [...]);   // ❌ compile error — 'loggerr' not in Reg
 
 **Acceptance Criteria:**
 
-- [ ] Decorator name is constrained to `keyof Registry & string`
-- [ ] Unknown decorator names are a compile error
-- [ ] The decorator callback's `$delegate` parameter is typed as `Registry[K]`
-- [ ] The decorator's return type replaces the existing service's type in the Registry
-- [ ] Chained decorators see the previous decorator's return type as `$delegate`
-- [ ] Other injected deps in the decorator callback are typed from `Registry`
+- [x] Decorator name is constrained to `keyof Registry & string`
+- [x] Unknown decorator names are a compile error
+- [x] The decorator callback's `$delegate` parameter is typed as `Registry[K]`
+- [x] The decorator's return type replaces the existing service's type in the Registry
+- [x] Chained decorators see the previous decorator's return type as `$delegate`
+- [x] Other injected deps in the decorator callback are typed from `Registry`
 
 #### 2.6.4 Typed `config()` and `run()`
 
@@ -421,23 +421,23 @@ mod.run(['loggerProvider', (p) => { ... }]);
 
 **Acceptance Criteria:**
 
-- [ ] `config()` callback parameters are typed from `ConfigRegistry`
-- [ ] `run()` callback parameters are typed from `Registry`
-- [ ] `config()` with a service name (not a provider name) is a compile error
-- [ ] `run()` with a provider name is a compile error
-- [ ] Typo'd dep names in either block are compile errors (fall through to untyped fallback overload if needed for backward compat)
+- [x] `config()` callback parameters are typed from `ConfigRegistry`
+- [x] `run()` callback parameters are typed from `Registry`
+- [x] `config()` with a service name (not a provider name) is a compile error
+- [x] `run()` with a provider name is a compile error
+- [x] Typo'd dep names in either block are compile errors (fall through to untyped fallback overload if needed for backward compat)
 
 #### 2.6.5 General Type Safety
 
 **Acceptance Criteria:**
 
-- [ ] `Module` class gains a new `ConfigRegistry` type parameter alongside `Registry`, `Name`, `Requires`
-- [ ] All spec-007 recipes (`value`, `constant`, `factory`) continue to compile unchanged — they only widen `Registry` and leave `ConfigRegistry` alone (with `constant` widening both since constants are config-injectable)
-- [ ] `constant` widens BOTH `Registry` and `ConfigRegistry` (constants are usable in both phases)
-- [ ] `provider` is the only recipe that widens `ConfigRegistry` with `<name>Provider` entries
-- [ ] `createInjector`'s `MergeRegistries` continues to merge the full `Registry` from all modules (no change to `ConfigRegistry` merging — it's module-local)
-- [ ] `pnpm typecheck` passes with zero errors
-- [ ] No `any` leakage in new source code
+- [x] `Module` class gains a new `ConfigRegistry` type parameter alongside `Registry`, `Name`, `Requires`
+- [x] All spec-007 recipes (`value`, `constant`, `factory`) continue to compile unchanged — they only widen `Registry` and leave `ConfigRegistry` alone (with `constant` widening both since constants are config-injectable)
+- [x] `constant` widens BOTH `Registry` and `ConfigRegistry` (constants are usable in both phases)
+- [x] `provider` is the only recipe that widens `ConfigRegistry` with `<name>Provider` entries
+- [x] `createInjector`'s `MergeRegistries` continues to merge the full `Registry` from all modules (no change to `ConfigRegistry` merging — it's module-local)
+- [x] `pnpm typecheck` passes with zero errors
+- [x] No `any` leakage in new source code
 
 ---
 

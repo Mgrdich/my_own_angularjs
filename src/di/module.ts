@@ -96,11 +96,24 @@ export class Module<
    */
   readonly $$configBlocks: Invokable[];
 
+  /**
+   * @internal
+   * Run-phase lifecycle blocks accumulated by calls to `run`. Drained by
+   * `createInjector` after all config blocks have executed and after the
+   * run-phase injector has been built — giving run blocks access to any
+   * service, value, constant, or factory (the full run-phase registry is
+   * available). Prefixed with `$$` to match the AngularJS internal-state
+   * convention used alongside {@link $$invokeQueue} and {@link $$configBlocks}
+   * — not part of the public API and subject to change without notice.
+   */
+  readonly $$runBlocks: Invokable[];
+
   constructor(name: Name, requires: Requires) {
     this.name = name;
     this.requires = requires;
     this.$$invokeQueue = [];
     this.$$configBlocks = [];
+    this.$$runBlocks = [];
   }
 
   /**
@@ -307,6 +320,28 @@ export class Module<
    */
   config(invokable: Invokable): Module<Registry, ConfigRegistry, Name, Requires> {
     this.$$configBlocks.push(invokable);
+    return this as unknown as Module<Registry, ConfigRegistry, Name, Requires>;
+  }
+
+  /**
+   * Register a run-phase lifecycle block. The invokable runs during
+   * `createInjector`, after all config blocks have executed and after
+   * the run-phase injector has been built. Run blocks may inject any
+   * service, value, constant, or factory — the full run-phase registry
+   * is available. The typed overload on `TypedModule.run` constrains
+   * dep names to `keyof Registry & string` at compile time.
+   *
+   * Unlike the recipe methods, `run` does not widen `Registry` or
+   * `ConfigRegistry`: it registers a side-effecting hook, not a service.
+   * The block is appended to {@link $$runBlocks} and executed in
+   * registration order within the module and dependency order across
+   * the module graph.
+   *
+   * @param invokable - The run block, as an `$inject`-annotated
+   *   function or an array-style invokable.
+   */
+  run(invokable: Invokable): Module<Registry, ConfigRegistry, Name, Requires> {
+    this.$$runBlocks.push(invokable);
     return this as unknown as Module<Registry, ConfigRegistry, Name, Requires>;
   }
 }
@@ -607,6 +642,55 @@ export interface TypedModule<
    * the wide signature on the `Module` class `config` method.
    */
   config(invokable: Invokable): TypedModule<Registry, ConfigRegistry, Name, Requires>;
+
+  /**
+   * Array-style run block with deps validated against `Registry` (the full
+   * run-phase registry). Each leading entry must be a literal key of the
+   * current `Registry` — i.e. any service, factory, value, or constant
+   * registered earlier in the builder chain — and the trailing callback's
+   * parameters are inferred from {@link ResolveDeps} applied to `Registry`.
+   * This gives run blocks compile-time enforcement of the run-phase
+   * constraint: referencing a name that is not a key of `Registry` is a type
+   * error because that name is unknown to the registry.
+   *
+   * The callback return type is `void` — run blocks are side-effecting hooks,
+   * and their return value is discarded by the injector. Return type of the
+   * method is `TypedModule<Registry, ConfigRegistry, Name, Requires>`
+   * unchanged — `run` does not widen either registry.
+   *
+   * **Typo / cross-module fallback.** As with the typed `factory` / `service`
+   * / `decorator` / `config` overloads, when a dep name is a typo (or lives
+   * on a transitively-required module's `Registry`), this overload silently
+   * fails to match and call sites fall through to the untyped fallback below.
+   * Typed param inference still works for valid cases.
+   *
+   * **Variance note.** The callback is routed through a `Fn` type parameter
+   * constrained to `(...args: ResolveDeps<Registry, Deps>) => void` rather
+   * than being written inline as a parameter type. Inlining
+   * `ResolveDeps<Registry, Deps>` directly would put `Registry` in a
+   * contravariant position on the method, which breaks the structural
+   * assignability check `ExtractRegistry` performs against
+   * `TypedModule<infer R, Record<string, unknown>, string, readonly string[]>`
+   * in `injector.ts` — callers of `createInjector` would lose all registry
+   * inference. Routing through `Fn` keeps `Registry` in constraint position
+   * only, matching the pattern used by the typed `config` and `provider`
+   * overloads above.
+   */
+  run<
+    const Deps extends readonly (keyof Registry & string)[],
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-parameters -- `Fn` is intentionally a single-use type parameter to keep `Registry` out of the method parameter's variance position; see the variance note on the `config` overload above.
+    Fn extends (...args: ResolveDeps<Registry, Deps>) => void,
+  >(
+    invokable: readonly [...Deps, Fn],
+  ): TypedModule<Registry, ConfigRegistry, Name, Requires>;
+
+  /**
+   * Untyped fallback for `run` — used when deps can't be validated statically
+   * (e.g. cross-module run deps from a `requires` dependency, wide `string[]`
+   * `$inject` properties, or pre-built invokables). Matches the wide
+   * signature on the `Module` class `run` method.
+   */
+  run(invokable: Invokable): TypedModule<Registry, ConfigRegistry, Name, Requires>;
 }
 
 /**

@@ -156,6 +156,18 @@ export function createInjector<const Mods extends readonly AnyModule[]>(
    */
 
   const collectedConfigBlocks: Invokable[] = [];
+  /**
+   * Ordered list of run-phase lifecycle blocks collected during the
+   * dependency-graph walk. Populated by `loadModule`: required modules
+   * contribute their blocks first (post-order), then the current module's
+   * own blocks are appended in registration order. This ordering matches
+   * AngularJS semantics: deps-first across the graph, declaration-order
+   * within a module.
+   *
+   * The blocks are executed post-config via `runInjector.invoke` after all
+   * config blocks have completed and the run injector is fully wired.
+   */
+  const collectedRunBlocks: Invokable[] = [];
   // Forward declaration of the run-phase injector facade. `applyDecoratorChain`
   // closes over this binding so it can route decorator invocations through
   // `runInjector.invoke(..., { $delegate })`, but the facade itself is only
@@ -344,6 +356,10 @@ export function createInjector<const Mods extends readonly AnyModule[]>(
     // registration order.
     for (const block of mod.$$configBlocks) {
       collectedConfigBlocks.push(block);
+    }
+
+    for (const block of mod.$$runBlocks) {
+      collectedRunBlocks.push(block);
     }
   }
 
@@ -692,6 +708,20 @@ export function createInjector<const Mods extends readonly AnyModule[]>(
   // module) — matching AngularJS semantics.
   for (const block of collectedConfigBlocks) {
     providerInjector.invoke(block);
+  }
+
+  // Phase 3 — Run blocks. Execute every collected run block through the
+  // run-phase injector. This runs after all config blocks have completed
+  // (so providers are fully configured) and uses the run injector (so
+  // blocks can inject services, values, constants, factories — anything
+  // in the full registry). Run blocks execute exactly once per
+  // `createInjector` call.
+  //
+  // Blocks are executed in `collectedRunBlocks` order, which `loadModule`
+  // populates post-order (deps first, registration order within each
+  // module) — matching AngularJS semantics.
+  for (const block of collectedRunBlocks) {
+    runInjector.invoke(block);
   }
 
   // The `get` local is typed as the dynamic-name overload `<T>(name: string) => T`.
