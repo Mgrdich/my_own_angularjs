@@ -1007,9 +1007,7 @@ describe('dependency injection', () => {
           constructor(public name: string) {}
         }
         const invokable = ['name', UserService] as const;
-        const mod = createModule('app', [])
-          .value('name', 'Jane')
-          .service('userService', invokable);
+        const mod = createModule('app', []).value('name', 'Jane').service('userService', invokable);
         // The first entry is the value, the second is the service
         expect(mod.$$invokeQueue).toHaveLength(2);
         const entry = mod.$$invokeQueue[1];
@@ -1087,9 +1085,7 @@ describe('dependency injection', () => {
           }
         }
 
-        const mod = createModule('app', [])
-          .service('logger', Logger)
-          .service('service', Service);
+        const mod = createModule('app', []).service('logger', Logger).service('service', Service);
         const injector = createInjector([mod]);
         const svc = injector.get('service');
         expect(svc.greet()).toBe('LOG: hello');
@@ -1100,9 +1096,7 @@ describe('dependency injection', () => {
           constructor(public defaults: Record<string, unknown>) {}
         }
         const defaultsValue = { retries: 3 };
-        const mod = createModule('app', [])
-          .value('defaults', defaultsValue)
-          .service('config', ['defaults', Config]);
+        const mod = createModule('app', []).value('defaults', defaultsValue).service('config', ['defaults', Config]);
         const injector = createInjector([mod]);
         const config = injector.get('config');
         expect(config).toBeInstanceOf(Config);
@@ -1151,10 +1145,7 @@ describe('dependency injection', () => {
           ) {}
         }
 
-        const mod = createModule('app', [])
-          .value('url', 'https://...')
-          .constant('max', 5)
-          .service('service', Service);
+        const mod = createModule('app', []).value('url', 'https://...').constant('max', 5).service('service', Service);
         const injector = createInjector([mod]);
         const svc = injector.get<Service>('service');
         expect(svc.url).toBe('https://...');
@@ -1230,9 +1221,7 @@ describe('dependency injection', () => {
           }
         }
 
-        const mod = createModule('app', [])
-          .value('defaults', { retries: 3 })
-          .service('config', ['defaults', Config]);
+        const mod = createModule('app', []).value('defaults', { retries: 3 }).service('config', ['defaults', Config]);
         const injector = createInjector([mod]);
         expectTypeOf(injector.get('config')).toEqualTypeOf<Config>();
       });
@@ -1387,17 +1376,12 @@ describe('dependency injection', () => {
       });
 
       it('pushes [provider, name, source] to $$invokeQueue (Form 3: array-style)', () => {
-        function LoggerProvider(
-          this: { level: string; $get: () => unknown },
-          level: string,
-        ) {
+        function LoggerProvider(this: { level: string; $get: () => unknown }, level: string) {
           this.level = level;
           this.$get = (): { level: string } => ({ level: this.level });
         }
         const providerArr = ['defaultLevel', LoggerProvider] as const;
-        const mod = createModule('app', [])
-          .constant('defaultLevel', 'info')
-          .provider('logger', providerArr);
+        const mod = createModule('app', []).constant('defaultLevel', 'info').provider('logger', providerArr);
         expect(mod.$$invokeQueue).toHaveLength(2);
         const entry = mod.$$invokeQueue[1];
         expect(entry?.[0]).toBe('provider');
@@ -1434,10 +1418,7 @@ describe('dependency injection', () => {
       });
 
       it('instantiates Form 1 (constructor) and resolves service via $get', () => {
-        function LoggerProvider(this: {
-          level: string;
-          $get: readonly [() => { log: (m: string) => string }];
-        }) {
+        function LoggerProvider(this: { level: string; $get: readonly [() => { log: (m: string) => string }] }) {
           this.level = 'info';
           const level = this.level;
           this.$get = [
@@ -1494,9 +1475,7 @@ describe('dependency injection', () => {
 
       it('service produced by a provider is a singleton', () => {
         let getCallCount = 0;
-        function CounterProvider(this: {
-          $get: readonly [() => { count: number }];
-        }) {
+        function CounterProvider(this: { $get: readonly [() => { count: number }] }) {
           this.$get = [
             (): { count: number } => {
               getCallCount++;
@@ -1528,17 +1507,10 @@ describe('dependency injection', () => {
       });
 
       it('$get can declare its own run-phase dependencies via array-style', () => {
-        function GreeterProvider(this: {
-          $get: readonly ['name', (name: string) => { greet: () => string }];
-        }) {
-          this.$get = [
-            'name',
-            (name: string) => ({ greet: () => `hello ${name}` }),
-          ] as const;
+        function GreeterProvider(this: { $get: readonly ['name', (name: string) => { greet: () => string }] }) {
+          this.$get = ['name', (name: string) => ({ greet: () => `hello ${name}` })] as const;
         }
-        const mod = createModule('app', [])
-          .value('name', 'Jane')
-          .provider('greeter', GreeterProvider);
+        const mod = createModule('app', []).value('name', 'Jane').provider('greeter', GreeterProvider);
         const injector = createInjector([mod]);
         const greeter = injector.get<{ greet: () => string }>('greeter');
         expect(greeter.greet()).toBe('hello Jane');
@@ -1597,19 +1569,13 @@ describe('dependency injection', () => {
       });
 
       it('detects a cycle between two providers via their $get deps', () => {
-        function AProvider(this: {
-          $get: readonly ['b', (b: unknown) => unknown];
-        }) {
+        function AProvider(this: { $get: readonly ['b', (b: unknown) => unknown] }) {
           this.$get = ['b', (b: unknown) => b] as const;
         }
-        function BProvider(this: {
-          $get: readonly ['a', (a: unknown) => unknown];
-        }) {
+        function BProvider(this: { $get: readonly ['a', (a: unknown) => unknown] }) {
           this.$get = ['a', (a: unknown) => a] as const;
         }
-        const mod = createModule('app', [])
-          .provider('a', AProvider)
-          .provider('b', BProvider);
+        const mod = createModule('app', []).provider('a', AProvider).provider('b', BProvider);
         const injector = createInjector([mod]);
         expect(() => injector.get('a')).toThrow(/Circular dependency/);
       });
@@ -1662,9 +1628,7 @@ describe('dependency injection', () => {
           $get = [() => ({ hello: (): string => 'hi' })] as const;
         }
 
-        const mod = createModule('app', [])
-          .value('name', 'Jane')
-          .provider('greeter', GreeterProvider);
+        const mod = createModule('app', []).value('name', 'Jane').provider('greeter', GreeterProvider);
         const injector = createInjector([mod]);
         expectTypeOf(injector.get('name')).toEqualTypeOf<string>();
         expectTypeOf(injector.get('greeter')).toEqualTypeOf<{ hello: () => string }>();
@@ -1724,9 +1688,7 @@ describe('dependency injection', () => {
         }
 
         // Positive: 'defaultLevel' is a registered constant and compiles via Form 3.
-        const mod = createModule('app', [])
-          .constant('defaultLevel', 'warn')
-          .provider('a', ['defaultLevel', AProvider]);
+        const mod = createModule('app', []).constant('defaultLevel', 'warn').provider('a', ['defaultLevel', AProvider]);
         const injector = createInjector([mod]);
         expectTypeOf(injector.get('a')).toEqualTypeOf<string>();
 
@@ -1783,10 +1745,7 @@ describe('dependency injection', () => {
 
       it('returns the same module instance (for chaining)', () => {
         const mod = createModule('app', []).value('logger', { log: (m: string) => void m });
-        const chained = mod.decorator('logger', [
-          '$delegate',
-          ($delegate: unknown) => $delegate,
-        ]);
+        const chained = mod.decorator('logger', ['$delegate', ($delegate: unknown) => $delegate]);
         expect(chained).toBe(mod);
       });
 
@@ -1957,13 +1916,8 @@ describe('dependency injection', () => {
       });
 
       it('throws Cannot decorate unknown service when the target is not registered', () => {
-        const mod = createModule('app', []).decorator('missing', [
-          '$delegate',
-          ($delegate: unknown) => $delegate,
-        ]);
-        expect(() => createInjector([mod])).toThrow(
-          /Cannot decorate unknown service: "missing"/,
-        );
+        const mod = createModule('app', []).decorator('missing', ['$delegate', ($delegate: unknown) => $delegate]);
+        expect(() => createInjector([mod])).toThrow(/Cannot decorate unknown service: "missing"/);
       });
 
       it('throws Cannot decorate unknown service for a cross-module unknown target', () => {
@@ -1972,9 +1926,7 @@ describe('dependency injection', () => {
           '$delegate',
           ($delegate: unknown) => $delegate,
         ]);
-        expect(() => createInjector([app])).toThrow(
-          /Cannot decorate unknown service: "nonexistent"/,
-        );
+        expect(() => createInjector([app])).toThrow(/Cannot decorate unknown service: "nonexistent"/);
       });
 
       it('decorator on a cross-module service works (module A has the value, module B decorates it)', () => {
@@ -2228,10 +2180,7 @@ describe('dependency injection', () => {
         const first = (x: unknown) => void x;
         const second = (x: unknown) => void x;
         const third = (x: unknown) => void x;
-        const mod = createModule('app', [])
-          .config(['MAX', first])
-          .config(['MAX', second])
-          .config(['MAX', third]);
+        const mod = createModule('app', []).config(['MAX', first]).config(['MAX', second]).config(['MAX', third]);
         expect(mod.$$configBlocks).toHaveLength(3);
         expect(mod.$$configBlocks[0]).toEqual(['MAX', first]);
         expect(mod.$$configBlocks[1]).toEqual(['MAX', second]);
@@ -2478,7 +2427,9 @@ describe('dependency injection', () => {
         type TypedConfig = <const Deps extends readonly (keyof ConfigRegistry)[]>(
           invokable: readonly [
             ...Deps,
-            (...args: { [I in keyof Deps]: Deps[I] extends keyof ConfigRegistry ? ConfigRegistry[Deps[I]] : never }) => void,
+            (
+              ...args: { [I in keyof Deps]: Deps[I] extends keyof ConfigRegistry ? ConfigRegistry[Deps[I]] : never }
+            ) => void,
           ],
         ) => unknown;
 
@@ -2495,7 +2446,12 @@ describe('dependency injection', () => {
 
         // Negative: 'logger' is a service (run-phase only), not in ConfigRegistry.
         // @ts-expect-error -- 'logger' is not a config-phase key; only 'loggerProvider' is.
-        typedConfig(['logger', (l) => { void l; }]);
+        typedConfig([
+          'logger',
+          (l) => {
+            void l;
+          },
+        ]);
       });
 
       it('config rejects typo in dep names at compile time', () => {
@@ -2503,7 +2459,9 @@ describe('dependency injection', () => {
         type TypedConfig = <const Deps extends readonly (keyof ConfigRegistry)[]>(
           invokable: readonly [
             ...Deps,
-            (...args: { [I in keyof Deps]: Deps[I] extends keyof ConfigRegistry ? ConfigRegistry[Deps[I]] : never }) => void,
+            (
+              ...args: { [I in keyof Deps]: Deps[I] extends keyof ConfigRegistry ? ConfigRegistry[Deps[I]] : never }
+            ) => void,
           ],
         ) => unknown;
 
@@ -2520,7 +2478,12 @@ describe('dependency injection', () => {
 
         // Negative: typo'd key is a compile error.
         // @ts-expect-error -- 'MAXX' is a typo; only 'MAX' exists in ConfigRegistry.
-        typedConfig(['MAXX', (max) => { void max; }]);
+        typedConfig([
+          'MAXX',
+          (max) => {
+            void max;
+          },
+        ]);
       });
     });
 
@@ -2532,16 +2495,21 @@ describe('dependency injection', () => {
       it('registers a run block via array-style invokable', () => {
         const mod = createModule('app', [])
           .constant('X', 1)
-          .run(['X', (x: unknown) => { void x; }]);
+          .run([
+            'X',
+            (x: unknown) => {
+              void x;
+            },
+          ]);
         expect(mod.$$runBlocks).toHaveLength(1);
       });
 
       it('registers a run block via $inject-annotated function', () => {
-        const fn = (x: unknown) => { void x; };
+        const fn = (x: unknown) => {
+          void x;
+        };
         fn.$inject = ['X'] as const;
-        const mod = createModule('app', [])
-          .constant('X', 1)
-          .run(fn);
+        const mod = createModule('app', []).constant('X', 1).run(fn);
         expect(mod.$$runBlocks).toHaveLength(1);
       });
 
@@ -2549,11 +2517,7 @@ describe('dependency injection', () => {
         const first = ['X', () => {}] as const;
         const second = ['X', () => {}] as const;
         const third = ['X', () => {}] as const;
-        const mod = createModule('app', [])
-          .constant('X', 1)
-          .run(first)
-          .run(second)
-          .run(third);
+        const mod = createModule('app', []).constant('X', 1).run(first).run(second).run(third);
         expect(mod.$$runBlocks).toHaveLength(3);
         expect(mod.$$runBlocks[0]).toBe(first);
         expect(mod.$$runBlocks[1]).toBe(second);
@@ -2564,8 +2528,18 @@ describe('dependency injection', () => {
         const mod = createModule('app', [])
           .value('name', 'Jane')
           .constant('MAX', 5)
-          .config(['MAX', (m: unknown) => { void m; }])
-          .run(['name', (n: unknown) => { void n; }]);
+          .config([
+            'MAX',
+            (m: unknown) => {
+              void m;
+            },
+          ])
+          .run([
+            'name',
+            (n: unknown) => {
+              void n;
+            },
+          ]);
         expect(mod.$$configBlocks).toHaveLength(1);
         expect(mod.$$runBlocks).toHaveLength(1);
       });
@@ -2650,9 +2624,7 @@ describe('dependency injection', () => {
               void p;
             },
           ]);
-        expect(() => createInjector([mod])).toThrow(
-          /Unknown provider: loggerProvider/,
-        );
+        expect(() => createInjector([mod])).toThrow(/Unknown provider: loggerProvider/);
       });
 
       it('multiple run blocks run in registration order within a module', () => {
@@ -2685,14 +2657,24 @@ describe('dependency injection', () => {
         let count = 0;
         const mod = createModule('app', [])
           .constant('X', 'x')
-          .run(['X', () => { count++; }]);
+          .run([
+            'X',
+            () => {
+              count++;
+            },
+          ]);
         createInjector([mod]);
         expect(count).toBe(1);
         // Creating a second injector with the same module runs the block again.
         resetRegistry();
         const mod2 = createModule('app', [])
           .constant('X', 'x')
-          .run(['X', () => { count++; }]);
+          .run([
+            'X',
+            () => {
+              count++;
+            },
+          ]);
         createInjector([mod2]);
         expect(count).toBe(2);
       });
@@ -2784,11 +2766,21 @@ describe('dependency injection', () => {
         const typedRun: TypedRun = mod.run.bind(mod) as TypedRun;
 
         // Positive: 'logger' is in Registry — compiles.
-        typedRun(['logger', (l) => { void l; }]);
+        typedRun([
+          'logger',
+          (l) => {
+            void l;
+          },
+        ]);
 
         // Negative: 'loggerProvider' is NOT in Registry (it's config-phase only).
         // @ts-expect-error -- 'loggerProvider' is not a run-phase key
-        typedRun(['loggerProvider', (p) => { void p; }]);
+        typedRun([
+          'loggerProvider',
+          (p) => {
+            void p;
+          },
+        ]);
       });
 
       it('run rejects typo in dep names at compile time', () => {
@@ -2804,11 +2796,21 @@ describe('dependency injection', () => {
         const typedRun: TypedRun = mod.run.bind(mod) as TypedRun;
 
         // Positive: known key compiles.
-        typedRun(['name', (n) => { void n; }]);
+        typedRun([
+          'name',
+          (n) => {
+            void n;
+          },
+        ]);
 
         // Negative: typo'd key is a compile error.
         // @ts-expect-error -- 'namee' is a typo; only 'name' exists in Registry
-        typedRun(['namee', (n) => { void n; }]);
+        typedRun([
+          'namee',
+          (n) => {
+            void n;
+          },
+        ]);
       });
     });
   });
