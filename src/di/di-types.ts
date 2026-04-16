@@ -55,6 +55,90 @@ export type ResolveDeps<Registry extends Record<string, unknown>, Deps extends r
 };
 
 /**
+ * A provider registered as a constructor function. The provider is
+ * instantiated via `new P()` at load time (or `new P(...deps)` for the
+ * array-style form). The instance must carry a `$get` method that the
+ * injector calls during the run phase to produce the actual service.
+ *
+ * **Structural utility type** — used in `extends` pattern matching, not for
+ * call-site validation. See `TypedModule.provider` overloads for the typed
+ * call-site signatures that validate dep names against `ConfigRegistry`.
+ */
+export type ProviderConstructor = new (...args: never[]) => { $get: Invokable };
+
+/**
+ * A provider registered as an object literal. Must have a `$get` method
+ * (plain function or array-style invokable) that the injector calls during
+ * the run phase to produce the actual service.
+ *
+ * **Structural utility type** — used in `extends` pattern matching.
+ */
+export type ProviderObject = { $get: Invokable };
+
+/**
+ * A provider registered in array-style form: `[...depNames, Ctor]`. The
+ * dep names are resolved from the **config-phase** injector and passed as
+ * positional args to `new Ctor(...)`. The resulting instance must carry a
+ * `$get` method.
+ *
+ * **Structural utility type** — dep names are plain `string[]` here because
+ * this type is used for inferring the provider shape from an existing value,
+ * not for validating dep names at a call site. See `TypedModule.provider`
+ * Form 3 for the typed version that constrains deps to
+ * `keyof ConfigRegistry & string`.
+ */
+export type ProviderArray = readonly [...string[], ProviderConstructor];
+
+/**
+ * Given an `Invokable`, extract the return type of its underlying function.
+ * For an array-style invokable `[...deps, fn]`, the return type comes from
+ * the trailing function. For an annotated function, the return type comes
+ * from the function itself.
+ *
+ * Returns `unknown` if the invokable shape doesn't match either pattern —
+ * a defensive fallback that keeps downstream mapped types from collapsing
+ * to `never`.
+ */
+export type InvokableReturn<I> = I extends readonly [...string[], (...args: never[]) => infer R]
+  ? R
+  : I extends (...args: never[]) => infer R
+    ? R
+    : unknown;
+
+/**
+ * Given a provider in any of the three registration forms (constructor
+ * function, object literal, or array-style with deps), extract the
+ * **provider instance** type — the object that carries the `$get` method
+ * and any user-defined configuration methods. This is the type that appears
+ * under `<name>Provider` in the config-phase registry.
+ *
+ * **Structural utility type** — used for mapping provider registrations
+ * to their `ConfigRegistry` entries in the typed `provider` overloads.
+ */
+export type ProviderInstance<P> = P extends ProviderConstructor
+  ? InstanceType<P>
+  : P extends ProviderArray
+    ? P extends readonly [...string[], infer Ctor]
+      ? Ctor extends ProviderConstructor
+        ? InstanceType<Ctor>
+        : never
+      : never
+    : P extends ProviderObject
+      ? P
+      : never;
+
+/**
+ * Given a provider, extract the **service** type — the return type of the
+ * provider instance's `$get` method. This is the type that appears under
+ * `<name>` in the run-phase `Registry`.
+ *
+ * Composes `ProviderInstance<P>` with `InvokableReturn<...$get>` so that
+ * both plain-function `$get` methods and array-style `$get` invokables
+ * have their return types extracted correctly.
+ */
+export type ProviderService<P> = ProviderInstance<P> extends { $get: infer G } ? InvokableReturn<G> : never;
+
+/**
  * The module builder interface, generic over an accumulated registry of
  * registered service names to their types. Each registration method returns
  * a new `ModuleAPI` whose registry type has been extended with the new entry,
