@@ -68,7 +68,25 @@ export function buildAST(tokens: Token[]): Program {
    * Parse the top-level program rule.
    */
   function program(): Program {
-    return { type: 'Program', body: primary() };
+    return { type: 'Program', body: unary() };
+  }
+
+  /**
+   * Parse a unary expression: an optional leading `!`, `+`, or `-`
+   * followed by another unary expression (right-associative), or
+   * falls through to a primary expression.
+   */
+  function unary(): ASTNode {
+    const token = peek();
+    if (token !== undefined && (token.text === '!' || token.text === '+' || token.text === '-')) {
+      cursor++;
+      return {
+        type: 'UnaryExpression',
+        operator: token.text,
+        argument: unary(),
+      };
+    }
+    return primary();
   }
 
   /**
@@ -117,7 +135,7 @@ export function buildAST(tokens: Token[]): Program {
         node = {
           type: 'MemberExpression',
           object: node,
-          property: primary(),
+          property: unary(),
           computed: true,
         };
         consume(']');
@@ -167,7 +185,7 @@ export function buildAST(tokens: Token[]): Program {
         if (peek(']') !== undefined) {
           break;
         }
-        elements.push(primary());
+        elements.push(unary());
       } while (expect(',') !== undefined);
     }
 
@@ -201,7 +219,7 @@ export function buildAST(tokens: Token[]): Program {
           key = { type: 'Literal', value: token.value as string | number | boolean | null };
         }
         consume(':');
-        const value = primary();
+        const value = unary();
         properties.push({ type: 'Property', key, value });
       } while (expect(',') !== undefined);
     }
@@ -217,7 +235,7 @@ export function buildAST(tokens: Token[]): Program {
     const args: ASTNode[] = [];
     if (peek(')') === undefined) {
       do {
-        args.push(primary());
+        args.push(unary());
       } while (expect(',') !== undefined);
     }
     return args;

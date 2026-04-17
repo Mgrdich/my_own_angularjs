@@ -95,5 +95,18 @@ export function evaluate(node: ASTNode, scope?: Record<string, unknown>, locals?
       const args = node.arguments.map((arg) => evaluate(arg, scope, locals));
       return (fn as (...a: unknown[]) => unknown).call(context, ...args);
     }
+
+    case 'UnaryExpression': {
+      const value = evaluate(node.argument, scope, locals);
+      switch (node.operator) {
+        case '!':
+          return !value;
+        case '-':
+          return -(value as number);
+        case '+':
+          // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-conversion -- runtime coercion of unknown to number (AngularJS parity)
+          return +(value as number);
+      }
+    }
   }
 }

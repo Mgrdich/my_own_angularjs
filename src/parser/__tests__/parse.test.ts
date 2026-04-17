@@ -348,3 +348,39 @@ describe('parse', () => {
     });
   });
 });
+
+describe('spec 009 — operators & assignment', () => {
+  describe('unary operators', () => {
+    it('evaluates !true as false', () => {
+      expect(parse('!true')({})).toBe(false);
+    });
+
+    it('evaluates !0 as true', () => {
+      expect(parse('!0')({})).toBe(true);
+    });
+
+    it("evaluates !'' as true", () => {
+      expect(parse("!''")({})).toBe(true);
+    });
+
+    it("evaluates !!'x' as true", () => {
+      expect(parse("!!'x'")({})).toBe(true);
+    });
+
+    it('evaluates -5 as -5', () => {
+      expect(parse('-5')({})).toBe(-5);
+    });
+
+    it('evaluates -a against scope as -3', () => {
+      expect(parse('-a')({ a: 3 })).toBe(-3);
+    });
+
+    it('evaluates +"42" as 42', () => {
+      expect(parse('+"42"')({})).toBe(42);
+    });
+
+    it('evaluates !!undefined as false', () => {
+      expect(parse('!!undefined')({})).toBe(false);
+    });
+  });
+});

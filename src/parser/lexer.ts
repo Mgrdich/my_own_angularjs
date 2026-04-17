@@ -29,7 +29,7 @@ const KEYWORDS = {
 } as const satisfies Record<string, boolean | null>;
 
 /** Characters that are single-character symbol tokens. */
-const SYMBOLS = new Set(['[', ']', '{', '}', '(', ')', ',', ':']);
+const SYMBOLS = new Set(['[', ']', '{', '}', '(', ')', ',', ':', '!', '+', '-']);
 
 /**
  * Check whether a character is an ASCII digit.

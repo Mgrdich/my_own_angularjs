@@ -5,13 +5,13 @@
 
 ---
 
-- [ ] **Slice 1: Unary Operators (`!`, `-`, `+`)**
-  - [ ] Add `UnaryExpression` node to `ASTNode` union in `src/parser/parse-types.ts` with `operator: '!' | '+' | '-'` and `argument: ASTNode`. **[Agent: typescript-framework]**
-  - [ ] Extend `lexer.ts` to emit `!` as a single-character symbol token (alongside existing `+`/`-` handling). Do NOT yet change `+`/`-` lexing — they still tokenize as operator chars. **[Agent: typescript-framework]**
-  - [ ] In `src/parser/ast.ts`, introduce `unary()` between `primary()` and the future cascade entry. If the current token is `!`/`+`/`-` and not the start of a number literal, consume it and wrap `unary()` recursively; otherwise delegate to `primary()`. Update `program()` to call `unary()`. **[Agent: typescript-framework]**
-  - [ ] In `src/parser/interpreter.ts`, add a `UnaryExpression` case that evaluates `argument` and applies the operator (`!x`, `-x`, `+x`). **[Agent: typescript-framework]**
-  - [ ] Add tests in `src/parser/__tests__/parse.test.ts` under a new `describe('spec 009 — operators & assignment', ...)` wrapper, sub-describe `unary operators`: (a) `!true` → false, (b) `!0`/`!''` → true, (c) `!!'x'` → true, (d) `-5` → -5, (e) `-a` with `a=3` → -3, (f) `+"42"` coerces to 42, (g) `!!undefined` → false. **[Agent: vitest-testing]**
-  - [ ] Verify all existing spec 003 parser tests still pass plus new unary tests. `pnpm lint`, `pnpm typecheck`, `pnpm test` must pass. **[Agent: typescript-framework]**
+- [x] **Slice 1: Unary Operators (`!`, `-`, `+`)**
+  - [x] Add `UnaryExpression` node to `ASTNode` union in `src/parser/parse-types.ts` with `operator: '!' | '+' | '-'` and `argument: ASTNode`. **[Agent: typescript-framework]**
+  - [x] Extend `lexer.ts` to emit `!` as a single-character symbol token (alongside existing `+`/`-` handling). Do NOT yet change `+`/`-` lexing — they still tokenize as operator chars. **[Agent: typescript-framework]**
+  - [x] In `src/parser/ast.ts`, introduce `unary()` between `primary()` and the future cascade entry. If the current token is `!`/`+`/`-` and not the start of a number literal, consume it and wrap `unary()` recursively; otherwise delegate to `primary()`. Update `program()` to call `unary()`. **[Agent: typescript-framework]**
+  - [x] In `src/parser/interpreter.ts`, add a `UnaryExpression` case that evaluates `argument` and applies the operator (`!x`, `-x`, `+x`). **[Agent: typescript-framework]**
+  - [x] Add tests in `src/parser/__tests__/parse.test.ts` under a new `describe('spec 009 — operators & assignment', ...)` wrapper, sub-describe `unary operators`: (a) `!true` → false, (b) `!0`/`!''` → true, (c) `!!'x'` → true, (d) `-5` → -5, (e) `-a` with `a=3` → -3, (f) `+"42"` coerces to 42, (g) `!!undefined` → false. **[Agent: vitest-testing]**
+  - [x] Verify all existing spec 003 parser tests still pass plus new unary tests. `pnpm lint`, `pnpm typecheck`, `pnpm test` must pass. **[Agent: typescript-framework]**
 
 - [ ] **Slice 2: Multiplicative & Additive Arithmetic (`*`, `/`, `%`, `+`, `-`)**
   - [ ] Add `BinaryExpression` node to `ASTNode` union with operator literal type covering `+ - * / % == != === !== < <= > >=`. **[Agent: typescript-framework]**

@@ -77,6 +77,13 @@ export interface CallExpression {
   readonly arguments: ASTNode[];
 }
 
+/** A unary operator expression: !x, -x, +x. */
+export interface UnaryExpression {
+  readonly type: 'UnaryExpression';
+  readonly operator: '!' | '+' | '-';
+  readonly argument: ASTNode;
+}
+
 /** Union of all AST node types used in the expression parser. */
 export type ASTNode =
   | Program
@@ -87,7 +94,8 @@ export type ASTNode =
   | ObjectExpression
   | PropertyNode
   | MemberExpression
-  | CallExpression;
+  | CallExpression
+  | UnaryExpression;
 
 // ──────────────────────────────────────────────────────────────────────────────
 // Public API types
