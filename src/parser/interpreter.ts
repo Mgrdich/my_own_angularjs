@@ -6,7 +6,7 @@
  * a cleaner TypeScript implementation with full type safety.
  */
 
-import type { ASTNode } from './parse-types';
+import type { ASTNode, Identifier, MemberExpression } from './parse-types';
 
 /**
  * Evaluate an AST node in the context of a scope and optional locals.
@@ -108,5 +108,130 @@ export function evaluate(node: ASTNode, scope?: Record<string, unknown>, locals?
           return +(value as number);
       }
     }
+
+    case 'BinaryExpression': {
+      const left = evaluate(node.left, scope, locals);
+      const right = evaluate(node.right, scope, locals);
+      // The `as number` casts silence TS's `unknown` arithmetic complaints;
+      // JS `+` is intentionally polymorphic at runtime (string concat, NaN for
+      // undefined), matching AngularJS behavior regardless of the static cast.
+      switch (node.operator) {
+        case '+':
+          return (left as number) + (right as number);
+        case '-':
+          return (left as number) - (right as number);
+        case '*':
+          return (left as number) * (right as number);
+        case '/':
+          return (left as number) / (right as number);
+        case '%':
+          return (left as number) % (right as number);
+        case '==':
+          return left == right;
+        case '!=':
+          return left != right;
+        case '===':
+          return left === right;
+        case '!==':
+          return left !== right;
+        case '<':
+          return (left as number) < (right as number);
+        case '<=':
+          return (left as number) <= (right as number);
+        case '>':
+          return (left as number) > (right as number);
+        case '>=':
+          return (left as number) >= (right as number);
+      }
+    }
+
+    case 'LogicalExpression': {
+      // Short-circuit evaluation: do NOT evaluate `right` unless needed.
+      // Returns the operand value (not a coerced boolean), matching JS semantics.
+      const left = evaluate(node.left, scope, locals);
+      if (node.operator === '&&') {
+        return left ? evaluate(node.right, scope, locals) : left;
+      }
+      // operator === '||'
+      return left ? left : evaluate(node.right, scope, locals);
+    }
+
+    case 'ConditionalExpression': {
+      // Only evaluate the selected branch.
+      return evaluate(node.test, scope, locals)
+        ? evaluate(node.consequent, scope, locals)
+        : evaluate(node.alternate, scope, locals);
+    }
+
+    case 'AssignmentExpression': {
+      const value = evaluate(node.right, scope, locals);
+      return assign(node.left, value, scope, locals);
+    }
   }
+}
+
+/**
+ * Write `value` to the location described by `node`.
+ *
+ * For identifiers, uses locals-first semantics (writes to locals only if the key
+ * already exists there; otherwise writes to scope). For member expressions,
+ * resolves the object chain via {@link ensurePath} and sets the final property.
+ */
+function assign(
+  node: Identifier | MemberExpression,
+  value: unknown,
+  scope?: Record<string, unknown>,
+  locals?: Record<string, unknown>,
+): unknown {
+  if (node.type === 'Identifier') {
+    // Locals-first: write to locals only if locals already has the key
+    if (locals !== undefined && Object.prototype.hasOwnProperty.call(locals, node.name)) {
+      locals[node.name] = value;
+    } else if (scope !== undefined) {
+      scope[node.name] = value;
+    }
+    return value;
+  }
+  // MemberExpression: resolve the object chain, creating intermediates as needed
+  const object = ensurePath(node.object, scope, locals);
+  const key = node.computed ? String(evaluate(node.property, scope, locals)) : (node.property as Identifier).name;
+  object[key] = value;
+  return value;
+}
+
+/**
+ * Resolve an object path, creating `{}` for any undefined/null intermediate.
+ * Used by {@link assign} to implement auto-create semantics (AngularJS parity).
+ */
+function ensurePath(
+  node: ASTNode,
+  scope?: Record<string, unknown>,
+  locals?: Record<string, unknown>,
+): Record<string, unknown> {
+  if (node.type === 'Identifier') {
+    const root = locals !== undefined && Object.prototype.hasOwnProperty.call(locals, node.name) ? locals : scope;
+    if (root === undefined) {
+      throw new Error('Cannot assign: no scope or locals');
+    }
+    if (root[node.name] === undefined || root[node.name] === null) {
+      root[node.name] = {};
+    }
+    return root[node.name] as Record<string, unknown>;
+  }
+  if (node.type === 'MemberExpression') {
+    const parent = ensurePath(node.object, scope, locals);
+    const key = node.computed ? String(evaluate(node.property, scope, locals)) : (node.property as Identifier).name;
+    if (parent[key] === undefined || parent[key] === null) {
+      parent[key] = {};
+    }
+    return parent[key] as Record<string, unknown>;
+  }
+  if (node.type === 'ThisExpression') {
+    if (scope === undefined) {
+      throw new Error('Cannot assign to `this` with no scope');
+    }
+    return scope;
+  }
+  // Other node types (Literal, CallExpression, etc.) aren't valid l-value roots
+  throw new Error(`Invalid assignment target: ${node.type}`);
 }

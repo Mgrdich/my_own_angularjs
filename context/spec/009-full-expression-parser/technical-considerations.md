@@ -1,7 +1,7 @@
 # Technical Specification: Expression Parser — Operators, Assignments, and Scope Integration
 
 - **Functional Specification:** `context/spec/009-full-expression-parser/functional-spec.md`
-- **Status:** Draft
+- **Status:** Completed
 - **Author(s):** Mgrdich
 
 ---

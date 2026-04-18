@@ -68,7 +68,167 @@ export function buildAST(tokens: Token[]): Program {
    * Parse the top-level program rule.
    */
   function program(): Program {
-    return { type: 'Program', body: unary() };
+    return { type: 'Program', body: assignment() };
+  }
+
+  /**
+   * Parse a simple assignment expression: `left = right`.
+   * The left-hand side must be an Identifier or MemberExpression (l-value).
+   * Right-associative so that `a = b = 5` parses as `a = (b = 5)`.
+   * Has lower precedence than ternary.
+   */
+  function assignment(): ASTNode {
+    const left = ternary();
+    if (expect('=') !== undefined) {
+      if (left.type !== 'Identifier' && left.type !== 'MemberExpression') {
+        throw new Error('Trying to assign a value to a non l-value');
+      }
+      const right = assignment();
+      return { type: 'AssignmentExpression', left, right };
+    }
+    return left;
+  }
+
+  /**
+   * Parse a ternary conditional expression: `test ? consequent : alternate`.
+   * Right-associative (`a ? b : c ? d : e` parses as `a ? b : (c ? d : e)`)
+   * and has lower precedence than logical OR.
+   */
+  function ternary(): ASTNode {
+    const test = logicalOR();
+    if (expect('?') !== undefined) {
+      const consequent = ternary();
+      consume(':');
+      const alternate = ternary();
+      return { type: 'ConditionalExpression', test, consequent, alternate };
+    }
+    return test;
+  }
+
+  /**
+   * Parse a logical OR expression: a logical AND expression optionally
+   * followed by `||` and another logical AND expression (left-associative).
+   * Lower precedence than `&&`.
+   */
+  function logicalOR(): ASTNode {
+    let left = logicalAND();
+    while (expect('||') !== undefined) {
+      left = {
+        type: 'LogicalExpression',
+        operator: '||',
+        left,
+        right: logicalAND(),
+      };
+    }
+    return left;
+  }
+
+  /**
+   * Parse a logical AND expression: an equality expression optionally
+   * followed by `&&` and another equality expression (left-associative).
+   * Higher precedence than `||`, lower than equality.
+   */
+  function logicalAND(): ASTNode {
+    let left = equality();
+    while (expect('&&') !== undefined) {
+      left = {
+        type: 'LogicalExpression',
+        operator: '&&',
+        left,
+        right: equality(),
+      };
+    }
+    return left;
+  }
+
+  /**
+   * Parse an equality expression: a relational expression optionally
+   * followed by `==`, `!=`, `===`, or `!==` and another relational
+   * expression (left-associative).
+   */
+  function equality(): ASTNode {
+    let left = relational();
+    let token: Token | undefined;
+    while (
+      (token = expect('==')) !== undefined ||
+      (token = expect('!=')) !== undefined ||
+      (token = expect('===')) !== undefined ||
+      (token = expect('!==')) !== undefined
+    ) {
+      left = {
+        type: 'BinaryExpression',
+        operator: token.text as '==' | '!=' | '===' | '!==',
+        left,
+        right: relational(),
+      };
+    }
+    return left;
+  }
+
+  /**
+   * Parse a relational expression: an additive expression optionally
+   * followed by `<`, `<=`, `>`, or `>=` and another additive expression
+   * (left-associative).
+   */
+  function relational(): ASTNode {
+    let left = additive();
+    let token: Token | undefined;
+    while (
+      (token = expect('<')) !== undefined ||
+      (token = expect('<=')) !== undefined ||
+      (token = expect('>')) !== undefined ||
+      (token = expect('>=')) !== undefined
+    ) {
+      left = {
+        type: 'BinaryExpression',
+        operator: token.text as '<' | '<=' | '>' | '>=',
+        left,
+        right: additive(),
+      };
+    }
+    return left;
+  }
+
+  /**
+   * Parse an additive expression: a multiplicative expression optionally
+   * followed by `+` or `-` and another multiplicative expression
+   * (left-associative).
+   */
+  function additive(): ASTNode {
+    let left = multiplicative();
+    let token: Token | undefined;
+    while ((token = expect('+')) !== undefined || (token = expect('-')) !== undefined) {
+      left = {
+        type: 'BinaryExpression',
+        operator: token.text as '+' | '-',
+        left,
+        right: multiplicative(),
+      };
+    }
+    return left;
+  }
+
+  /**
+   * Parse a multiplicative expression: a unary expression optionally
+   * followed by `*`, `/`, or `%` and another unary expression
+   * (left-associative).
+   */
+  function multiplicative(): ASTNode {
+    let left = unary();
+    let token: Token | undefined;
+    while (
+      (token = expect('*')) !== undefined ||
+      (token = expect('/')) !== undefined ||
+      (token = expect('%')) !== undefined
+    ) {
+      left = {
+        type: 'BinaryExpression',
+        operator: token.text as '*' | '/' | '%',
+        left,
+        right: unary(),
+      };
+    }
+    return left;
   }
 
   /**
@@ -96,7 +256,11 @@ export function buildAST(tokens: Token[]): Program {
   function primary(): ASTNode {
     let node: ASTNode;
 
-    if (expect('[') !== undefined) {
+    if (expect('(') !== undefined) {
+      // Parenthesized grouping — purely syntactic, returns the inner expression
+      node = assignment();
+      consume(')');
+    } else if (expect('[') !== undefined) {
       node = arrayDeclaration();
     } else if (expect('{') !== undefined) {
       node = objectDeclaration();
@@ -135,7 +299,7 @@ export function buildAST(tokens: Token[]): Program {
         node = {
           type: 'MemberExpression',
           object: node,
-          property: unary(),
+          property: assignment(),
           computed: true,
         };
         consume(']');
@@ -185,7 +349,7 @@ export function buildAST(tokens: Token[]): Program {
         if (peek(']') !== undefined) {
           break;
         }
-        elements.push(unary());
+        elements.push(assignment());
       } while (expect(',') !== undefined);
     }
 
@@ -219,7 +383,7 @@ export function buildAST(tokens: Token[]): Program {
           key = { type: 'Literal', value: token.value as string | number | boolean | null };
         }
         consume(':');
-        const value = unary();
+        const value = assignment();
         properties.push({ type: 'Property', key, value });
       } while (expect(',') !== undefined);
     }
@@ -235,7 +399,7 @@ export function buildAST(tokens: Token[]): Program {
     const args: ASTNode[] = [];
     if (peek(')') === undefined) {
       do {
-        args.push(unary());
+        args.push(assignment());
       } while (expect(',') !== undefined);
     }
     return args;

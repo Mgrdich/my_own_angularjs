@@ -29,7 +29,13 @@ const KEYWORDS = {
 } as const satisfies Record<string, boolean | null>;
 
 /** Characters that are single-character symbol tokens. */
-const SYMBOLS = new Set(['[', ']', '{', '}', '(', ')', ',', ':', '!', '+', '-']);
+const SYMBOLS = new Set(['[', ']', '{', '}', '(', ')', ',', ':', '!', '+', '-', '*', '/', '%', '<', '>', '?', '=']);
+
+/** Three-character operator tokens (matched before two-character operators). */
+const THREE_CHAR_OPS = ['===', '!=='];
+
+/** Two-character operator tokens (matched before single-character symbols). */
+const TWO_CHAR_OPS = ['==', '!=', '<=', '>=', '&&', '||'];
 
 /**
  * Check whether a character is an ASCII digit.
@@ -96,6 +102,20 @@ export function lex(input: string): Token[] {
     if (ch === '.') {
       tokens.push({ text: '.' });
       index++;
+      continue;
+    }
+
+    // Multi-character operators — greedy, longest match wins
+    const three = input.substring(index, index + 3);
+    if (THREE_CHAR_OPS.includes(three)) {
+      tokens.push({ text: three });
+      index += 3;
+      continue;
+    }
+    const two = input.substring(index, index + 2);
+    if (TWO_CHAR_OPS.includes(two)) {
+      tokens.push({ text: two });
+      index += 2;
       continue;
     }
 

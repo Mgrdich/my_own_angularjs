@@ -16,6 +16,14 @@ export type TypedScope<T extends Record<string, unknown> = Record<string, unknow
 /** Watch function passed to `$watch` -- evaluated on every digest cycle. */
 export type WatchFn<T> = (scope: Scope) => T;
 
+/**
+ * An expression that can be evaluated against a scope.
+ *
+ * Either a function (takes a `Scope`, returns a value) or a string
+ * expression that will be compiled via the parser.
+ */
+export type Parsable<T> = WatchFn<T> | string;
+
 /** Listener called when a watch value changes. */
 export type ListenerFn<T> = (newValue: T, oldValue: T, scope: Scope) => void;
 

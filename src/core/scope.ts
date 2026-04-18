@@ -1,8 +1,10 @@
+import { parse } from '@parser/index';
 import {
   initWatchVal,
   type AsyncTask,
   type EventListener,
   type ListenerFn,
+  type Parsable,
   type ScopeEvent,
   type ScopeOptions,
   type ScopePhase,
@@ -19,6 +21,20 @@ const TTL = 10;
 const noop: ListenerFn<unknown> = () => {
   /* intentionally empty */
 };
+
+/**
+ * Compile a Parsable expression into a WatchFn. Accepts either a function
+ * (returned as-is) or a string (parsed once via the expression parser).
+ *
+ * Parsing errors surface immediately at the call site, not during digest.
+ */
+function compileToWatchFn<T>(expr: Parsable<T>): WatchFn<T> {
+  if (typeof expr === 'function') {
+    return expr;
+  }
+  const exprFn = parse(expr);
+  return (scope: Scope) => exprFn(scope as unknown as Record<string, unknown>) as T;
+}
 
 /** Auto-incrementing counter for unique scope IDs. */
 let nextId = 0;
@@ -84,9 +100,10 @@ export class Scope {
    * @param valueEq - Whether to use deep equality (not implemented in Slice 1)
    * @returns A function that deregisters the watcher when called
    */
-  $watch<W>(watchFn: WatchFn<W>, listenerFn?: ListenerFn<W>, valueEq?: boolean) {
+  $watch<W>(watchFn: Parsable<W>, listenerFn?: ListenerFn<W>, valueEq?: boolean) {
+    const watchFnCompiled = compileToWatchFn(watchFn);
     const watcher: Watcher<W> = {
-      watchFn,
+      watchFn: watchFnCompiled,
       listenerFn: listenerFn ?? noop,
       last: initWatchVal,
       valueEq: valueEq ?? false,
@@ -284,8 +301,12 @@ export class Scope {
    * @param locals - Optional locals object passed as second argument
    * @returns The result of the expression, or undefined if no expr provided
    */
-  $eval<R>(expr?: (scope: Scope, locals?: unknown) => R, locals?: unknown) {
-    if (expr) {
+  $eval<R>(expr?: Parsable<R> | ((scope: Scope, locals?: unknown) => R), locals?: unknown) {
+    if (typeof expr === 'string') {
+      const exprFn = parse(expr);
+      return exprFn(this as unknown as Record<string, unknown>, locals as Record<string, unknown> | undefined) as R;
+    }
+    if (typeof expr === 'function') {
       return expr(this, locals);
     }
     return undefined;
@@ -297,7 +318,7 @@ export class Scope {
    * @param expr - Optional expression to evaluate before digesting
    * @returns The result of the expression
    */
-  $apply<R>(expr?: WatchFn<R>) {
+  $apply<R>(expr?: Parsable<R>) {
     this.$beginPhase('$apply');
     try {
       return this.$eval(expr);
@@ -335,7 +356,8 @@ export class Scope {
    * Queue an expression for deferred execution within the current or next digest.
    * If no digest is already in progress, schedules one via setTimeout.
    */
-  $evalAsync(expr: WatchFn<unknown>) {
+  $evalAsync(expr: Parsable<unknown>) {
+    const exprFn = compileToWatchFn(expr);
     if (!this.$root.$$phase && this.$root.$$asyncQueue.length === 0) {
       setTimeout(() => {
         if (this.$root.$$asyncQueue.length > 0) {
@@ -343,15 +365,16 @@ export class Scope {
         }
       });
     }
-    this.$$asyncQueue.push({ scope: this, expression: expr });
+    this.$$asyncQueue.push({ scope: this, expression: exprFn });
   }
 
   /**
    * Coalesce multiple apply calls into a single setTimeout + $apply.
    * All queued expressions are flushed together in one digest cycle.
    */
-  $applyAsync(expr: WatchFn<unknown>) {
-    this.$$applyAsyncQueue.push({ scope: this, expression: expr });
+  $applyAsync(expr: Parsable<unknown>) {
+    const exprFn = compileToWatchFn(expr);
+    this.$$applyAsyncQueue.push({ scope: this, expression: exprFn });
 
     if (this.$root.$$applyAsyncId === null) {
       this.$root.$$applyAsyncId = setTimeout(() => {
@@ -378,13 +401,14 @@ export class Scope {
    * @param listenerFn - Called with [newValues[], oldValues[], scope]
    * @returns A function that deregisters all grouped watchers
    */
-  $watchGroup(watchFns: WatchFn<unknown>[], listenerFn: ListenerFn<unknown[]>) {
-    const newValues: unknown[] = new Array(watchFns.length);
-    const oldValues: unknown[] = new Array(watchFns.length);
+  $watchGroup(watchFns: Parsable<unknown>[], listenerFn: ListenerFn<unknown[]>) {
+    const compiled = watchFns.map(compileToWatchFn);
+    const newValues: unknown[] = new Array(compiled.length);
+    const oldValues: unknown[] = new Array(compiled.length);
     let changeReactionScheduled = false;
     let firstRun = true;
 
-    if (watchFns.length === 0) {
+    if (compiled.length === 0) {
       let shouldCall = true;
       this.$evalAsync(() => {
         if (shouldCall) {
@@ -406,7 +430,7 @@ export class Scope {
       changeReactionScheduled = false;
     };
 
-    const deregisterFns = watchFns.map((watchFn, i) => {
+    const deregisterFns = compiled.map((watchFn, i) => {
       return this.$watch(watchFn, (newValue, oldValue) => {
         newValues[i] = newValue;
         oldValues[i] = oldValue;
@@ -436,7 +460,8 @@ export class Scope {
    * @param listenerFn - Called with (newValue, oldValue, scope) when changes are detected
    * @returns A function that deregisters the watcher when called
    */
-  $watchCollection(watchFn: WatchFn<unknown>, listenerFn: ListenerFn<unknown>) {
+  $watchCollection(watchFn: Parsable<unknown>, listenerFn: ListenerFn<unknown>) {
+    const watchFnCompiled = compileToWatchFn(watchFn);
     let changeCount = 0;
     let oldValue: unknown;
     let newValue: unknown;
@@ -446,7 +471,7 @@ export class Scope {
     let firstRun = true;
 
     const internalWatchFn = (scope: Scope) => {
-      newValue = watchFn(scope);
+      newValue = watchFnCompiled(scope);
 
       if (Array.isArray(newValue)) {
         if (!Array.isArray(oldValue)) {
