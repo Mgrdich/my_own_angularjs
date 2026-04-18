@@ -620,9 +620,7 @@ describe('spec 009 — operators & assignment', () => {
     });
 
     it('throws when assigning to a call expression on the LHS', () => {
-      expect(() => parse('fn() = 1')({ fn: () => ({}) })).toThrow(
-        'Trying to assign a value to a non l-value',
-      );
+      expect(() => parse('fn() = 1')({ fn: () => ({}) })).toThrow('Trying to assign a value to a non l-value');
     });
 
     it('writes to locals when the identifier resolves to locals (locals-first)', () => {
