@@ -63,12 +63,19 @@ export interface PropertyNode {
 }
 
 /** A member access expression, computed (`a[b]`) or non-computed (`a.b`). */
-export interface MemberExpression {
-  readonly type: 'MemberExpression';
-  readonly object: ASTNode;
-  readonly property: ASTNode;
-  readonly computed: boolean;
-}
+export type MemberExpression =
+  | {
+      readonly type: 'MemberExpression';
+      readonly object: ASTNode;
+      readonly property: Identifier;
+      readonly computed: false;
+    }
+  | {
+      readonly type: 'MemberExpression';
+      readonly object: ASTNode;
+      readonly property: ASTNode;
+      readonly computed: true;
+    };
 
 /** A function call expression (e.g. `fn(a, b)`). */
 export interface CallExpression {

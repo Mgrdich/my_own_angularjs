@@ -10,7 +10,6 @@ import {
   type ScopePhase,
   type TypedScope,
   type Watcher,
-  type WatchFn,
 } from './scope-types';
 import { isEqual } from './utils';
 
@@ -28,7 +27,7 @@ const noop: ListenerFn<unknown> = () => {
  *
  * Parsing errors surface immediately at the call site, not during digest.
  */
-function compileToWatchFn<T>(expr: Parsable<Record<string, unknown>, T>): WatchFn<Record<string, unknown>, T> {
+function compileToWatchFn<T>(expr: Parsable<Record<string, unknown>, T>) {
   if (typeof expr === 'function') {
     return expr;
   }

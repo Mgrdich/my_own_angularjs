@@ -11,6 +11,7 @@ import {
   isDefined,
   isArray,
   isObject,
+  isObjectLike,
   isDate,
   isRegExp,
   isNaN,
@@ -618,6 +619,55 @@ describe('isObject', () => {
     expect(isObject(ALL_VALUES.undefined)).toBe(false);
     expect(isObject(ALL_VALUES.function)).toBe(false);
     expect(isObject(ALL_VALUES.symbol)).toBe(false);
+  });
+});
+
+describe('isObjectLike', () => {
+  it('returns true for a plain object', () => {
+    expect(isObjectLike({})).toBe(true);
+  });
+
+  it('returns true for an array', () => {
+    expect(isObjectLike([])).toBe(true);
+  });
+
+  it('returns true for a Date instance', () => {
+    expect(isObjectLike(new Date())).toBe(true);
+  });
+
+  it('returns true for a RegExp instance', () => {
+    expect(isObjectLike(new RegExp('x'))).toBe(true);
+  });
+
+  it('returns true for an object created with Object.create(null)', () => {
+    expect(isObjectLike(Object.create(null))).toBe(true);
+  });
+
+  it('returns true for a function (unlike isObject)', () => {
+    expect(isObjectLike(ALL_VALUES.function)).toBe(true);
+    expect(isObjectLike(() => 42)).toBe(true);
+  });
+
+  it('returns true for a class instance', () => {
+    class Foo {
+      readonly kind = 'foo';
+    }
+    expect(isObjectLike(new Foo())).toBe(true);
+  });
+
+  it('returns false for null', () => {
+    expect(isObjectLike(null)).toBe(false);
+  });
+
+  it('returns false for primitives', () => {
+    expect(isObjectLike(ALL_VALUES.string)).toBe(false);
+    expect(isObjectLike(ALL_VALUES.number)).toBe(false);
+    expect(isObjectLike(ALL_VALUES.zero)).toBe(false);
+    expect(isObjectLike(ALL_VALUES.nan)).toBe(false);
+    expect(isObjectLike(ALL_VALUES.true)).toBe(false);
+    expect(isObjectLike(ALL_VALUES.false)).toBe(false);
+    expect(isObjectLike(ALL_VALUES.undefined)).toBe(false);
+    expect(isObjectLike(ALL_VALUES.symbol)).toBe(false);
   });
 });
 

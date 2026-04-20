@@ -113,6 +113,15 @@ export function isObject(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object';
 }
 
+/**
+ * Type guard for indexable values — plain objects, arrays, class instances,
+ * and functions (functions in JS are objects and can carry properties).
+ * Differs from {@link isObject} by also treating functions as object-like.
+ */
+export function isObjectLike(value: unknown): value is Record<string, unknown> {
+  return isObject(value) || isFunction(value);
+}
+
 export function isDate(value: unknown): value is Date {
   return value instanceof Date;
 }

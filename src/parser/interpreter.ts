@@ -7,6 +7,12 @@
  */
 
 import type { ASTNode, Identifier, MemberExpression } from './parse-types';
+import { isFunction, isObjectLike } from '@core/utils';
+
+/** Exhaustiveness helper — throws if a discriminated union case is missed. */
+function assertNever(value: never): never {
+  throw new Error(`Unexpected operator: ${String(value)}`);
+}
 
 /**
  * Evaluate an AST node in the context of a scope and optional locals.
@@ -54,17 +60,13 @@ export function evaluate(node: ASTNode, scope?: Record<string, unknown>, locals?
 
     case 'MemberExpression': {
       const object = evaluate(node.object, scope, locals);
-      if (object === undefined || object === null) {
+      if (!isObjectLike(object)) {
         return undefined;
       }
       if (node.computed) {
-        const property = evaluate(node.property, scope, locals);
-        return (object as Record<string, unknown>)[property as string];
+        return object[String(evaluate(node.property, scope, locals))];
       }
-      if (node.property.type === 'Identifier') {
-        return (object as Record<string, unknown>)[node.property.name];
-      }
-      return undefined;
+      return object[node.property.name];
     }
 
     case 'CallExpression': {
@@ -73,59 +75,61 @@ export function evaluate(node: ASTNode, scope?: Record<string, unknown>, locals?
       let fn: unknown;
 
       if (node.callee.type === 'MemberExpression') {
-        context = evaluate(node.callee.object, scope, locals);
-        if (context === undefined || context === null) {
+        const target = evaluate(node.callee.object, scope, locals);
+        if (!isObjectLike(target)) {
           return undefined;
         }
-        if (node.callee.computed) {
-          const prop = evaluate(node.callee.property, scope, locals);
-          fn = (context as Record<string, unknown>)[prop as string];
-        } else if (node.callee.property.type === 'Identifier') {
-          fn = (context as Record<string, unknown>)[node.callee.property.name];
-        }
+        context = target;
+        fn = node.callee.computed
+          ? target[String(evaluate(node.callee.property, scope, locals))]
+          : target[node.callee.property.name];
       } else {
         context = scope;
         fn = evaluate(node.callee, scope, locals);
       }
 
-      if (typeof fn !== 'function') {
+      if (!isFunction(fn)) {
         return undefined;
       }
 
       const args = node.arguments.map((arg) => evaluate(arg, scope, locals));
-      return (fn as (...a: unknown[]) => unknown).call(context, ...args);
+      return fn.call(context, ...args);
     }
 
     case 'UnaryExpression': {
       const value = evaluate(node.argument, scope, locals);
-      switch (node.operator) {
+      const { operator } = node;
+      switch (operator) {
         case '!':
           return !value;
         case '-':
-          return -(value as number);
+          return -Number(value);
         case '+':
-          // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-conversion -- runtime coercion of unknown to number (AngularJS parity)
-          return +(value as number);
+          return Number(value);
+        default:
+          return assertNever(operator);
       }
     }
 
     case 'BinaryExpression': {
       const left = evaluate(node.left, scope, locals);
       const right = evaluate(node.right, scope, locals);
-      // The `as number` casts silence TS's `unknown` arithmetic complaints;
-      // JS `+` is intentionally polymorphic at runtime (string concat, NaN for
-      // undefined), matching AngularJS behavior regardless of the static cast.
-      switch (node.operator) {
+      const { operator } = node;
+      switch (operator) {
+        // `+` preserves JS polymorphism: string concat if either operand is
+        // a string, otherwise numeric add with standard coercion.
         case '+':
-          return (left as number) + (right as number);
+          return typeof left === 'string' || typeof right === 'string'
+            ? String(left) + String(right)
+            : Number(left) + Number(right);
         case '-':
-          return (left as number) - (right as number);
+          return Number(left) - Number(right);
         case '*':
-          return (left as number) * (right as number);
+          return Number(left) * Number(right);
         case '/':
-          return (left as number) / (right as number);
+          return Number(left) / Number(right);
         case '%':
-          return (left as number) % (right as number);
+          return Number(left) % Number(right);
         case '==':
           return left == right;
         case '!=':
@@ -135,13 +139,15 @@ export function evaluate(node: ASTNode, scope?: Record<string, unknown>, locals?
         case '!==':
           return left !== right;
         case '<':
-          return (left as number) < (right as number);
+          return Number(left) < Number(right);
         case '<=':
-          return (left as number) <= (right as number);
+          return Number(left) <= Number(right);
         case '>':
-          return (left as number) > (right as number);
+          return Number(left) > Number(right);
         case '>=':
-          return (left as number) >= (right as number);
+          return Number(left) >= Number(right);
+        default:
+          return assertNever(operator);
       }
     }
 
@@ -182,7 +188,7 @@ function assign(
   value: unknown,
   scope?: Record<string, unknown>,
   locals?: Record<string, unknown>,
-): unknown {
+) {
   if (node.type === 'Identifier') {
     // Locals-first: write to locals only if locals already has the key
     if (locals !== undefined && Object.prototype.hasOwnProperty.call(locals, node.name)) {
@@ -194,7 +200,7 @@ function assign(
   }
   // MemberExpression: resolve the object chain, creating intermediates as needed
   const object = ensurePath(node.object, scope, locals);
-  const key = node.computed ? String(evaluate(node.property, scope, locals)) : (node.property as Identifier).name;
+  const key = node.computed ? String(evaluate(node.property, scope, locals)) : node.property.name;
   object[key] = value;
   return value;
 }
@@ -213,18 +219,12 @@ function ensurePath(
     if (root === undefined) {
       throw new Error('Cannot assign: no scope or locals');
     }
-    if (root[node.name] === undefined || root[node.name] === null) {
-      root[node.name] = {};
-    }
-    return root[node.name] as Record<string, unknown>;
+    return ensureChild(root, node.name);
   }
   if (node.type === 'MemberExpression') {
     const parent = ensurePath(node.object, scope, locals);
-    const key = node.computed ? String(evaluate(node.property, scope, locals)) : (node.property as Identifier).name;
-    if (parent[key] === undefined || parent[key] === null) {
-      parent[key] = {};
-    }
-    return parent[key] as Record<string, unknown>;
+    const key = node.computed ? String(evaluate(node.property, scope, locals)) : node.property.name;
+    return ensureChild(parent, key);
   }
   if (node.type === 'ThisExpression') {
     if (scope === undefined) {
@@ -234,4 +234,22 @@ function ensurePath(
   }
   // Other node types (Literal, CallExpression, etc.) aren't valid l-value roots
   throw new Error(`Invalid assignment target: ${node.type}`);
+}
+
+/**
+ * Read `parent[key]`; if absent or nullish, install a fresh object there.
+ * If the existing value is not object-like, throw — traversing through a
+ * primitive would silently drop writes at runtime.
+ */
+function ensureChild(parent: Record<string, unknown>, key: string): Record<string, unknown> {
+  const current = parent[key];
+  if (current === undefined || current === null) {
+    const fresh: Record<string, unknown> = {};
+    parent[key] = fresh;
+    return fresh;
+  }
+  if (isObjectLike(current)) {
+    return current;
+  }
+  throw new Error(`Cannot traverse non-object intermediate at "${key}"`);
 }
