@@ -489,3 +489,272 @@ describe('spec 010 — constant watch optimization', () => {
     expect(watchersAfter).toBe(1);
   });
 });
+
+describe('spec 010 — one-time bindings (non-literal)', () => {
+  it('stays live while the value is undefined and is not deregistered across digests', () => {
+    const scope = Scope.create<{ user?: { name: string } }>();
+    const listener = vi.fn();
+
+    scope.$watch('::user.name', listener);
+
+    // First digest: sentinel -> undefined is a change, so the listener fires
+    // once with (undefined, undefined). Matches AngularJS oneTimeWatchDelegate.
+    scope.$digest();
+    expect(listener).toHaveBeenCalledTimes(1);
+    expect(listener.mock.calls[0]?.[0]).toBeUndefined();
+
+    // Subsequent digests do NOT fire the listener — value stays undefined.
+    scope.$digest();
+    scope.$digest();
+    expect(listener).toHaveBeenCalledTimes(1);
+
+    // Watcher is still registered because the value has never stabilized.
+    const registered = (scope.$$watchers ?? []).filter((w) => w !== null).length;
+    expect(registered).toBe(1);
+  });
+
+  it('fires when the value becomes defined and deregisters post-digest', () => {
+    const scope = Scope.create<{ user?: { name: string } }>();
+    const listener = vi.fn();
+
+    scope.$watch('::user.name', listener);
+
+    // First digest fires the sentinel -> undefined transition.
+    scope.$digest();
+    listener.mockClear();
+
+    scope.user = { name: 'alice' };
+    scope.$digest();
+
+    expect(listener).toHaveBeenCalledTimes(1);
+    expect(listener.mock.calls[0]?.[0]).toBe('alice');
+
+    // After the stabilizing digest, the watcher slot should be nulled out.
+    const registered = (scope.$$watchers ?? []).filter((w) => w !== null).length;
+    expect(registered).toBe(0);
+  });
+
+  it('does not fire the listener for further changes after deregistration', () => {
+    const scope = Scope.create<{ user?: { name: string } }>();
+    const listener = vi.fn();
+
+    scope.$watch('::user.name', listener);
+
+    scope.user = { name: 'alice' };
+    scope.$digest();
+    // One fire for the sentinel -> 'alice' transition, then deregisters.
+    listener.mockClear();
+
+    // Subsequent mutations should not re-fire the deregistered listener.
+    scope.user.name = 'bob';
+    scope.$digest();
+    scope.user.name = 'carol';
+    scope.$digest();
+
+    expect(listener).not.toHaveBeenCalled();
+  });
+
+  it('treats null as a stable value and deregisters', () => {
+    const scope = Scope.create<{ value?: unknown }>();
+    const listener = vi.fn();
+
+    scope.$watch('::value', listener);
+    scope.value = null;
+    scope.$digest();
+
+    expect(listener).toHaveBeenCalledTimes(1);
+    expect(listener.mock.calls[0]?.[0]).toBeNull();
+
+    scope.value = 'changed';
+    scope.$digest();
+    expect(listener).toHaveBeenCalledTimes(1);
+  });
+
+  it('treats 0 as a stable value and deregisters', () => {
+    const scope = Scope.create<{ value?: number }>();
+    const listener = vi.fn();
+
+    scope.$watch('::value', listener);
+    scope.value = 0;
+    scope.$digest();
+
+    expect(listener).toHaveBeenCalledTimes(1);
+    expect(listener.mock.calls[0]?.[0]).toBe(0);
+
+    scope.value = 1;
+    scope.$digest();
+    expect(listener).toHaveBeenCalledTimes(1);
+  });
+
+  it('treats the empty string as a stable value and deregisters', () => {
+    const scope = Scope.create<{ value?: string }>();
+    const listener = vi.fn();
+
+    scope.$watch('::value', listener);
+    scope.value = '';
+    scope.$digest();
+
+    expect(listener).toHaveBeenCalledTimes(1);
+    expect(listener.mock.calls[0]?.[0]).toBe('');
+
+    scope.value = 'hello';
+    scope.$digest();
+    expect(listener).toHaveBeenCalledTimes(1);
+  });
+
+  it('treats false as a stable value and deregisters', () => {
+    const scope = Scope.create<{ value?: boolean }>();
+    const listener = vi.fn();
+
+    scope.$watch('::value', listener);
+    scope.value = false;
+    scope.$digest();
+
+    expect(listener).toHaveBeenCalledTimes(1);
+    expect(listener.mock.calls[0]?.[0]).toBe(false);
+
+    scope.value = true;
+    scope.$digest();
+    expect(listener).toHaveBeenCalledTimes(1);
+  });
+
+  it('treats NaN as a stable value and deregisters', () => {
+    const scope = Scope.create<{ value?: number }>();
+    const listener = vi.fn();
+
+    // Enable value-equality so the dirty-check does not treat NaN !== NaN
+    // as a persistent change on every pass.
+    scope.$watch('::value', listener, true);
+    scope.value = NaN;
+    scope.$digest();
+
+    expect(listener).toHaveBeenCalledTimes(1);
+    expect(Number.isNaN(listener.mock.calls[0]?.[0])).toBe(true);
+
+    scope.value = 42;
+    scope.$digest();
+    expect(listener).toHaveBeenCalledTimes(1);
+  });
+
+  it('never fires the listener when the deregister fn is called before stabilization', () => {
+    const scope = Scope.create<{ user?: { name: string } }>();
+    const listener = vi.fn();
+
+    const dereg = scope.$watch('::user.name', listener);
+    dereg();
+
+    scope.user = { name: 'alice' };
+    scope.$digest();
+    scope.user.name = 'bob';
+    scope.$digest();
+    scope.$digest();
+
+    expect(listener).not.toHaveBeenCalled();
+  });
+
+  it('keeps a never-stabilizing :: watcher alive across many digests', () => {
+    const scope = Scope.create<{ nothing?: unknown }>();
+    const listener = vi.fn();
+
+    scope.$watch('::nothing', listener);
+
+    for (let i = 0; i < 10; i += 1) {
+      scope.$digest();
+    }
+
+    // Listener fires exactly once — on the sentinel -> undefined transition
+    // during the first digest. After that the value is unchanged (stays
+    // undefined) so no further fires occur, yet the watcher remains live
+    // because `lastValue` never becomes defined.
+    expect(listener).toHaveBeenCalledTimes(1);
+    expect(listener.mock.calls[0]?.[0]).toBeUndefined();
+
+    // The watcher should still be registered since the value never stabilized.
+    const registered = (scope.$$watchers ?? []).filter((w) => w !== null).length;
+    expect(registered).toBe(1);
+  });
+
+  it('supports multiple :: watchers coexisting and deregistering independently', () => {
+    const scope = Scope.create<{ a?: number; b?: number; c?: number }>();
+    const spyA = vi.fn();
+    const spyB = vi.fn();
+    const spyC = vi.fn();
+
+    scope.$watch('::a', spyA);
+    scope.$watch('::b', spyB);
+    scope.$watch('::c', spyC);
+
+    // Warm-up digest: each spy fires once on the sentinel -> undefined
+    // transition. Clear all spies so the subsequent assertions focus on
+    // independent stabilization.
+    scope.$digest();
+    spyA.mockClear();
+    spyB.mockClear();
+    spyC.mockClear();
+
+    // Stabilize `a` first.
+    scope.a = 1;
+    scope.$digest();
+    expect(spyA).toHaveBeenCalledTimes(1);
+    expect(spyA.mock.calls[0]?.[0]).toBe(1);
+    expect(spyB).not.toHaveBeenCalled();
+    expect(spyC).not.toHaveBeenCalled();
+
+    // Stabilize `b` next; `a` should not re-fire.
+    scope.b = 2;
+    scope.$digest();
+    expect(spyA).toHaveBeenCalledTimes(1);
+    expect(spyB).toHaveBeenCalledTimes(1);
+    expect(spyB.mock.calls[0]?.[0]).toBe(2);
+    expect(spyC).not.toHaveBeenCalled();
+
+    // Stabilize `c` last; neither `a` nor `b` should re-fire.
+    scope.c = 3;
+    scope.$digest();
+    expect(spyA).toHaveBeenCalledTimes(1);
+    expect(spyB).toHaveBeenCalledTimes(1);
+    expect(spyC).toHaveBeenCalledTimes(1);
+    expect(spyC.mock.calls[0]?.[0]).toBe(3);
+
+    // All three watchers should be deregistered.
+    const registered = (scope.$$watchers ?? []).filter((w) => w !== null).length;
+    expect(registered).toBe(0);
+  });
+
+  it('does not deregister when the value flickers back to undefined within the same digest', () => {
+    const scope = Scope.create<{ value?: string | undefined }>();
+    const listener = vi.fn();
+
+    scope.$watch('::value', listener);
+
+    // A sibling watcher reverts `value` back to undefined as soon as it
+    // becomes defined, so the one-time watcher's lastValue settles at
+    // undefined on the final pass of the digest and postDigest must NOT
+    // deregister the watcher.
+    let reverted = false;
+    scope.$watch(
+      (s) => s.value,
+      (newValue, _oldValue, s) => {
+        if (newValue !== undefined && !reverted) {
+          reverted = true;
+          s.value = undefined;
+        }
+      },
+    );
+
+    scope.value = 'x';
+    scope.$digest();
+
+    // The one-time watcher must still be live because `lastValue` finished
+    // the digest as `undefined`. Two watchers registered: the one-time
+    // watcher and the flicker watcher.
+    const registered = (scope.$$watchers ?? []).filter((w) => w !== null).length;
+    expect(registered).toBe(2);
+
+    // Further digests without re-defining the value should not deregister.
+    scope.$digest();
+    scope.$digest();
+    const registeredAfter = (scope.$$watchers ?? []).filter((w) => w !== null).length;
+    expect(registeredAfter).toBe(2);
+  });
+});

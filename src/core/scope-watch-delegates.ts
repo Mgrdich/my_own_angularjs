@@ -47,3 +47,47 @@ export function constantWatchDelegate<T>(
   );
   return unwatch;
 }
+
+/**
+ * One-time watch delegate for non-literal `::`-prefixed expressions.
+ *
+ * The listener fires on each dirty-check while the value remains `undefined`;
+ * once the expression yields a defined value, the watcher is deregistered
+ * AFTER the current digest completes (via `$$postDigest`). The post-digest
+ * re-check guards against the edge case where the value briefly became
+ * defined then reverted to `undefined` within the same digest cycle --
+ * AngularJS keeps the watcher live in that case.
+ *
+ * The inner watch function is a plain function (not a string), so it carries
+ * no flags and will not re-enter a delegate on the recursive `$watch` call.
+ *
+ * Matches AngularJS `oneTimeWatchDelegate` at `src/ng/parse.js:1894`.
+ */
+export function oneTimeWatchDelegate<T>(
+  scope: Scope,
+  watchFn: WatchFn<Record<string, unknown>, T>,
+  listenerFn: ListenerFn<T>,
+  valueEq: boolean,
+): DeregisterFn {
+  let lastValue: T | undefined;
+
+  const unwatch = scope.$watch(
+    (s) => {
+      lastValue = watchFn(s);
+      if (lastValue !== undefined) {
+        scope.$$postDigest(() => {
+          // Re-check: a value that briefly became defined then reverted to
+          // undefined in the same digest should NOT deregister the watcher.
+          if (lastValue !== undefined) {
+            unwatch();
+          }
+        });
+      }
+      return lastValue;
+    },
+    listenerFn,
+    valueEq,
+  );
+
+  return unwatch;
+}

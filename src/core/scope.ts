@@ -1,5 +1,5 @@
 import { parse } from '@parser/index';
-import { constantWatchDelegate } from './scope-watch-delegates';
+import { constantWatchDelegate, oneTimeWatchDelegate } from './scope-watch-delegates';
 import {
   initWatchVal,
   type AsyncTask,
@@ -136,6 +136,17 @@ export class Scope {
     // can never change, so the listener only needs to fire once.
     if ((watchFnCompiled as { constant?: boolean }).constant === true) {
       return constantWatchDelegate(this, watchFnCompiled, listenerFn ?? noop, valueEq ?? false);
+    }
+
+    // Route non-literal one-time (`::`-prefixed) expressions through the
+    // one-time delegate: the watcher deregisters after the first digest in
+    // which the value stabilizes to a non-undefined result. The literal
+    // variant (objects/arrays) is handled by a separate delegate.
+    if (
+      (watchFnCompiled as { oneTime?: boolean }).oneTime === true &&
+      (watchFnCompiled as { literal?: boolean }).literal === false
+    ) {
+      return oneTimeWatchDelegate(this, watchFnCompiled, listenerFn ?? noop, valueEq ?? false);
     }
 
     const watcher: Watcher<W> = {
