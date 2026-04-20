@@ -1,5 +1,5 @@
 import { parse } from '@parser/index';
-import { constantWatchDelegate, oneTimeWatchDelegate } from './scope-watch-delegates';
+import { constantWatchDelegate, oneTimeLiteralWatchDelegate, oneTimeWatchDelegate } from './scope-watch-delegates';
 import {
   initWatchVal,
   type AsyncTask,
@@ -147,6 +147,17 @@ export class Scope {
       (watchFnCompiled as { literal?: boolean }).literal === false
     ) {
       return oneTimeWatchDelegate(this, watchFnCompiled, listenerFn ?? noop, valueEq ?? false);
+    }
+
+    // Route literal one-time (`::`-prefixed array/object literal) expressions
+    // through the literal one-time delegate: stability requires every
+    // top-level element/property to be non-undefined, not merely the outer
+    // literal reference (which is always freshly allocated and thus defined).
+    if (
+      (watchFnCompiled as { oneTime?: boolean }).oneTime === true &&
+      (watchFnCompiled as { literal?: boolean }).literal === true
+    ) {
+      return oneTimeLiteralWatchDelegate(this, watchFnCompiled, listenerFn ?? noop, valueEq ?? false);
     }
 
     const watcher: Watcher<W> = {
@@ -505,6 +516,13 @@ export class Scope {
    */
   $watchCollection(watchFn: Parsable<Record<string, unknown>, unknown>, listenerFn: ListenerFn<unknown>) {
     const watchFnCompiled = compileToWatchFn(watchFn);
+    // String-form expressions produce a FlaggedWatchFn carrying oneTime/constant
+    // classification; function-form inputs have no flags and opt out of one-time
+    // semantics. This matches AngularJS behavior where only string-form
+    // `$watchCollection('::items', ...)` engages one-time handling.
+    const flags = watchFnCompiled as { oneTime?: boolean; constant?: boolean };
+    const isOneTime = flags.oneTime === true;
+    const isConstant = flags.constant === true;
     let changeCount = 0;
     let oldValue: unknown;
     let newValue: unknown;
@@ -615,9 +633,24 @@ export class Scope {
           veryOldValue = newValue;
         }
       }
+
+      // One-time / one-shot deregistration for string-form expressions.
+      // - Constant collections fire once with the snapshot, then detach.
+      // - One-time collections detach once newValue stabilizes to a defined value.
+      // Deregistration runs post-digest so the current cycle completes cleanly.
+      if (isConstant) {
+        this.$$postDigest(() => {
+          deregister();
+        });
+      } else if (isOneTime && newValue !== undefined) {
+        this.$$postDigest(() => {
+          deregister();
+        });
+      }
     };
 
-    return this.$watch(internalWatchFn, internalListenerFn);
+    const deregister = this.$watch(internalWatchFn, internalListenerFn);
+    return deregister;
   }
 
   /**

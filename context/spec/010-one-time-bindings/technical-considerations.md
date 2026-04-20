@@ -1,7 +1,7 @@
 # Technical Specification: One-Time Bindings (`::` Prefix) & Constant Watch Optimization
 
 - **Functional Specification:** [`context/spec/010-one-time-bindings/functional-spec.md`](./functional-spec.md)
-- **Status:** Draft
+- **Status:** Completed
 - **Author(s):** Mgrdich
 
 ---
