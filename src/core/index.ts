@@ -3,6 +3,7 @@ export type {
   AsyncTask,
   DeregisterFn,
   EventListener,
+  FlaggedWatchFn,
   InitWatchVal,
   ListenerFn,
   ScopeEvent,

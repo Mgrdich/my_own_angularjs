@@ -144,4 +144,8 @@ export type ASTNode =
 // ──────────────────────────────────────────────────────────────────────────────
 
 /** Compiled expression function returned by `parse`. */
-export type ExpressionFn = (scope?: Record<string, unknown>, locals?: Record<string, unknown>) => unknown;
+export type ExpressionFn = ((scope?: Record<string, unknown>, locals?: Record<string, unknown>) => unknown) & {
+  readonly oneTime: boolean;
+  readonly constant: boolean;
+  readonly literal: boolean;
+};

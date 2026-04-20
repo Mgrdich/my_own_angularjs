@@ -1,8 +1,11 @@
 import { parse } from '@parser/index';
+import { constantWatchDelegate } from './scope-watch-delegates';
 import {
   initWatchVal,
   type AsyncTask,
+  type DeregisterFn,
   type EventListener,
+  type FlaggedWatchFn,
   type ListenerFn,
   type Parsable,
   type ScopeEvent,
@@ -10,6 +13,7 @@ import {
   type ScopePhase,
   type TypedScope,
   type Watcher,
+  type WatchFn,
 } from './scope-types';
 import { isEqual } from './utils';
 
@@ -25,14 +29,27 @@ const noop: ListenerFn<unknown> = () => {
  * Compile a Parsable expression into a WatchFn. Accepts either a function
  * (returned as-is) or a string (parsed once via the expression parser).
  *
+ * For string inputs, the returned wrapper carries the parser's classification
+ * flags (`oneTime`, `constant`, `literal`) as readonly properties, so
+ * `$watch` can route to specialized watch delegates without reparsing.
+ *
  * Parsing errors surface immediately at the call site, not during digest.
  */
-function compileToWatchFn<T>(expr: Parsable<Record<string, unknown>, T>) {
+function compileToWatchFn<T>(
+  expr: Parsable<Record<string, unknown>, T>,
+): WatchFn<Record<string, unknown>, T> | FlaggedWatchFn<Record<string, unknown>, T> {
   if (typeof expr === 'function') {
     return expr;
   }
   const exprFn = parse(expr);
-  return (scope: Scope) => exprFn(scope as unknown as Record<string, unknown>) as T;
+  const wrapper: WatchFn<Record<string, unknown>, T> = (scope: Scope) =>
+    exprFn(scope as unknown as Record<string, unknown>) as T;
+  Object.defineProperties(wrapper, {
+    oneTime: { value: exprFn.oneTime, writable: false, enumerable: true, configurable: false },
+    constant: { value: exprFn.constant, writable: false, enumerable: true, configurable: false },
+    literal: { value: exprFn.literal, writable: false, enumerable: true, configurable: false },
+  });
+  return wrapper as FlaggedWatchFn<Record<string, unknown>, T>;
 }
 
 /** Auto-incrementing counter for unique scope IDs. */
@@ -101,14 +118,12 @@ export class Scope {
    * @param valueEq - Whether to use deep equality (not implemented in Slice 1)
    * @returns A function that deregisters the watcher when called
    */
-  $watch<W>(watchFn: Parsable<Record<string, unknown>, W>, listenerFn?: ListenerFn<W>, valueEq?: boolean) {
+  $watch<W>(
+    watchFn: Parsable<Record<string, unknown>, W>,
+    listenerFn?: ListenerFn<W>,
+    valueEq?: boolean,
+  ): DeregisterFn {
     const watchFnCompiled = compileToWatchFn(watchFn);
-    const watcher: Watcher<W> = {
-      watchFn: watchFnCompiled,
-      listenerFn: listenerFn ?? noop,
-      last: initWatchVal,
-      valueEq: valueEq ?? false,
-    };
 
     if (this.$$watchers === null) {
       // Scope has been destroyed; silently ignore
@@ -116,6 +131,19 @@ export class Scope {
         /* noop for destroyed scope */
       };
     }
+
+    // Route constant expressions through the one-shot delegate: the value
+    // can never change, so the listener only needs to fire once.
+    if ((watchFnCompiled as { constant?: boolean }).constant === true) {
+      return constantWatchDelegate(this, watchFnCompiled, listenerFn ?? noop, valueEq ?? false);
+    }
+
+    const watcher: Watcher<W> = {
+      watchFn: watchFnCompiled,
+      listenerFn: listenerFn ?? noop,
+      last: initWatchVal,
+      valueEq: valueEq ?? false,
+    };
 
     this.$$watchers.push(watcher as Watcher<unknown>);
 
