@@ -63,18 +63,63 @@ export interface PropertyNode {
 }
 
 /** A member access expression, computed (`a[b]`) or non-computed (`a.b`). */
-export interface MemberExpression {
-  readonly type: 'MemberExpression';
-  readonly object: ASTNode;
-  readonly property: ASTNode;
-  readonly computed: boolean;
-}
+export type MemberExpression =
+  | {
+      readonly type: 'MemberExpression';
+      readonly object: ASTNode;
+      readonly property: Identifier;
+      readonly computed: false;
+    }
+  | {
+      readonly type: 'MemberExpression';
+      readonly object: ASTNode;
+      readonly property: ASTNode;
+      readonly computed: true;
+    };
 
 /** A function call expression (e.g. `fn(a, b)`). */
 export interface CallExpression {
   readonly type: 'CallExpression';
   readonly callee: ASTNode;
   readonly arguments: ASTNode[];
+}
+
+/** A unary operator expression: !x, -x, +x. */
+export interface UnaryExpression {
+  readonly type: 'UnaryExpression';
+  readonly operator: '!' | '+' | '-';
+  readonly argument: ASTNode;
+}
+
+/** A binary operator expression: arithmetic (+, -, *, /, %) or comparison (==, !=, ===, !==, <, <=, >, >=). */
+export interface BinaryExpression {
+  readonly type: 'BinaryExpression';
+  readonly operator: '+' | '-' | '*' | '/' | '%' | '==' | '!=' | '===' | '!==' | '<' | '<=' | '>' | '>=';
+  readonly left: ASTNode;
+  readonly right: ASTNode;
+}
+
+/** A short-circuit logical expression: && or ||. */
+export interface LogicalExpression {
+  readonly type: 'LogicalExpression';
+  readonly operator: '&&' | '||';
+  readonly left: ASTNode;
+  readonly right: ASTNode;
+}
+
+/** A ternary conditional expression: test ? consequent : alternate. */
+export interface ConditionalExpression {
+  readonly type: 'ConditionalExpression';
+  readonly test: ASTNode;
+  readonly consequent: ASTNode;
+  readonly alternate: ASTNode;
+}
+
+/** A simple assignment expression: identifier, dot, or computed member on the left. */
+export interface AssignmentExpression {
+  readonly type: 'AssignmentExpression';
+  readonly left: Identifier | MemberExpression;
+  readonly right: ASTNode;
 }
 
 /** Union of all AST node types used in the expression parser. */
@@ -87,7 +132,12 @@ export type ASTNode =
   | ObjectExpression
   | PropertyNode
   | MemberExpression
-  | CallExpression;
+  | CallExpression
+  | UnaryExpression
+  | BinaryExpression
+  | LogicalExpression
+  | ConditionalExpression
+  | AssignmentExpression;
 
 // ──────────────────────────────────────────────────────────────────────────────
 // Public API types

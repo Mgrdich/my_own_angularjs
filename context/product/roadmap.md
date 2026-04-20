@@ -49,7 +49,7 @@ _Complete the essential building blocks that everything else depends on._
 _The layer that connects the runtime to templates and the DOM._
 
 - [ ] **Expressions & Parser**
-  - [ ] **Expression Parser:** Implement a full expression parser supporting property access, method calls, operators, literals, and assignments and all the supported features of AngularJS 1.x, integration with scope.
+  - [x] **Expression Parser:** Implement a full expression parser supporting property access, method calls, operators, literals, and assignments and all the supported features of AngularJS 1.x, integration with scope.
   - [ ] **One-Time Bindings:** Support `::` prefix for expressions that unwatch after stabilization.
   - [ ] **Interpolation:** Implement `$interpolate` service for `{{expression}}` resolution in strings and templates.
 
