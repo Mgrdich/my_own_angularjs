@@ -28,7 +28,7 @@ const noop: ListenerFn<unknown> = () => {
  *
  * Parsing errors surface immediately at the call site, not during digest.
  */
-function compileToWatchFn<T>(expr: Parsable<T>): WatchFn<T> {
+function compileToWatchFn<T>(expr: Parsable<Record<string, unknown>, T>): WatchFn<Record<string, unknown>, T> {
   if (typeof expr === 'function') {
     return expr;
   }
@@ -83,13 +83,15 @@ export class Scope {
   }
 
   /** Create a typed Scope instance with compile-time property access. */
-  static create<T extends Record<string, unknown> = Record<string, unknown>>(options?: ScopeOptions) {
+  static create<T extends Record<string, unknown> = Record<string, unknown>>(
+    options?: ScopeOptions,
+  ): TypedScope<T> & T {
     if (options?.ttl !== undefined && options.ttl < 2) {
       throw new Error('TTL must be at least 2');
     }
     const scope = new Scope();
     scope.$$ttl = options?.ttl ?? TTL;
-    return scope as TypedScope<T>;
+    return scope as unknown as TypedScope<T> & T;
   }
 
   /**
@@ -100,7 +102,7 @@ export class Scope {
    * @param valueEq - Whether to use deep equality (not implemented in Slice 1)
    * @returns A function that deregisters the watcher when called
    */
-  $watch<W>(watchFn: Parsable<W>, listenerFn?: ListenerFn<W>, valueEq?: boolean) {
+  $watch<W>(watchFn: Parsable<Record<string, unknown>, W>, listenerFn?: ListenerFn<W>, valueEq?: boolean) {
     const watchFnCompiled = compileToWatchFn(watchFn);
     const watcher: Watcher<W> = {
       watchFn: watchFnCompiled,
@@ -301,7 +303,10 @@ export class Scope {
    * @param locals - Optional locals object passed as second argument
    * @returns The result of the expression, or undefined if no expr provided
    */
-  $eval<R>(expr?: Parsable<R> | ((scope: Scope, locals?: unknown) => R), locals?: unknown) {
+  $eval<R>(
+    expr?: Parsable<Record<string, unknown>, R> | ((scope: Scope, locals?: unknown) => R),
+    locals?: unknown,
+  ): R | undefined {
     if (typeof expr === 'string') {
       const exprFn = parse(expr);
       return exprFn(this as unknown as Record<string, unknown>, locals as Record<string, unknown> | undefined) as R;
@@ -318,7 +323,7 @@ export class Scope {
    * @param expr - Optional expression to evaluate before digesting
    * @returns The result of the expression
    */
-  $apply<R>(expr?: Parsable<R>) {
+  $apply<R>(expr?: Parsable<Record<string, unknown>, R>): R | undefined {
     this.$beginPhase('$apply');
     try {
       return this.$eval(expr);
@@ -356,7 +361,7 @@ export class Scope {
    * Queue an expression for deferred execution within the current or next digest.
    * If no digest is already in progress, schedules one via setTimeout.
    */
-  $evalAsync(expr: Parsable<unknown>) {
+  $evalAsync(expr: Parsable<Record<string, unknown>, unknown>) {
     const exprFn = compileToWatchFn(expr);
     if (!this.$root.$$phase && this.$root.$$asyncQueue.length === 0) {
       setTimeout(() => {
@@ -372,7 +377,7 @@ export class Scope {
    * Coalesce multiple apply calls into a single setTimeout + $apply.
    * All queued expressions are flushed together in one digest cycle.
    */
-  $applyAsync(expr: Parsable<unknown>) {
+  $applyAsync(expr: Parsable<Record<string, unknown>, unknown>) {
     const exprFn = compileToWatchFn(expr);
     this.$$applyAsyncQueue.push({ scope: this, expression: exprFn });
 
@@ -401,7 +406,7 @@ export class Scope {
    * @param listenerFn - Called with [newValues[], oldValues[], scope]
    * @returns A function that deregisters all grouped watchers
    */
-  $watchGroup(watchFns: Parsable<unknown>[], listenerFn: ListenerFn<unknown[]>) {
+  $watchGroup(watchFns: Parsable<Record<string, unknown>, unknown>[], listenerFn: ListenerFn<unknown[]>) {
     const compiled = watchFns.map(compileToWatchFn);
     const newValues: unknown[] = new Array(compiled.length);
     const oldValues: unknown[] = new Array(compiled.length);
@@ -460,7 +465,7 @@ export class Scope {
    * @param listenerFn - Called with (newValue, oldValue, scope) when changes are detected
    * @returns A function that deregisters the watcher when called
    */
-  $watchCollection(watchFn: Parsable<unknown>, listenerFn: ListenerFn<unknown>) {
+  $watchCollection(watchFn: Parsable<Record<string, unknown>, unknown>, listenerFn: ListenerFn<unknown>) {
     const watchFnCompiled = compileToWatchFn(watchFn);
     let changeCount = 0;
     let oldValue: unknown;
