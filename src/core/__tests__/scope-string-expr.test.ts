@@ -430,7 +430,9 @@ describe('spec 010 — constant watch optimization', () => {
     expect(listener).toHaveBeenCalledTimes(1);
 
     // Watcher already self-deregistered; calling dereg again must be a no-op.
-    expect(() => { dereg(); }).not.toThrow();
+    expect(() => {
+      dereg();
+    }).not.toThrow();
 
     scope.$digest();
     expect(listener).toHaveBeenCalledTimes(1);
