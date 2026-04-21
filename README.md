@@ -16,10 +16,10 @@ This project is being fully rewritten using [Claude Code](https://claude.ai/code
 
 ## What's Implemented
 
-### Phase 0 -- Complete
-
 - **Scopes & Digest Cycle** -- Full scope hierarchy with `$watch`, `$watchGroup`, `$watchCollection`, `$digest`, `$apply`, `$eval`, `$evalAsync`, `$applyAsync`, events (`$on`, `$emit`, `$broadcast`), and lifecycle (`$new`, `$destroy`)
-- **Expression Parser** -- Lexer, AST builder, and tree-walking interpreter supporting literals, identifiers, member access, function calls, and scope/locals resolution
+- **Expression Parser** -- Lexer, AST builder, and tree-walking interpreter supporting literals, identifiers, member access, function calls, unary/binary operators, and scope/locals resolution
+- **One-Time Bindings & Constant Optimization** -- Parser-attached `literal` / `constant` / `oneTime` flags drive specialized watch delegates (`constantWatchDelegate`, `oneTimeWatchDelegate`, `oneTimeLiteralWatchDelegate`) for `::expr` and constant expressions
+- **Dependency Injection** -- Modules, injector, provider recipes (factory/service/value/constant/provider), `$inject` annotation inference, config/run blocks, lifecycle
 - **Utility Functions** -- Type guards (`isString`, `isNumber`, `isObject`, etc.), deep equality (`isEqual`), deep clone (`copy`), iteration (`forEach`), and helpers (`noop`, `createMap`, `range`)
 
 ### Improvements Over Original AngularJS
@@ -34,10 +34,9 @@ While maintaining behavioral parity, this implementation introduces several enha
 
 ### Upcoming
 
-- **Phase 1** -- Configurable digest TTL, Dependency Injection (modules, injector, providers)
-- **Phase 2** -- Expressions & Filters, Directives & DOM Compilation
-- **Phase 3** -- HTTP, Forms & Validation, Promises
-- **Phase 4** -- Routing, Animations, npm Package
+- **Next** -- Expression filters, `$parse` helpers
+- **Later** -- Directives & DOM compilation, HTTP, Forms & Validation, Promises
+- **Future** -- Routing, Animations, npm package polish
 
 ## Tech Stack
 
@@ -78,25 +77,40 @@ pnpm format
 ```
 src/
   core/
-    scope.ts          # Scopes & Digest Cycle
-    utils.ts          # Utility functions & type guards
-    index.ts          # Core barrel export
+    scope.ts                    # Scope + digest cycle
+    scope-types.ts              # Scope type definitions (Watcher, ListenerFn, ScopeEvent, ...)
+    scope-watch-delegates.ts    # constantWatchDelegate, oneTimeWatchDelegate, oneTimeLiteralWatchDelegate
+    utils.ts                    # Type guards, isEqual, copy, forEach, ...
+    index.ts                    # Core barrel
   parser/
-    lexer.ts          # Expression tokenizer
-    ast.ts            # AST builder (recursive descent)
-    interpreter.ts    # Tree-walking interpreter
-    parse.ts          # Public parse() API
-    index.ts          # Parser barrel export
-  index.ts            # Root barrel export
+    lexer.ts                    # Expression tokenizer
+    ast.ts                      # AST builder (recursive descent)
+    ast-flags.ts                # literal/constant/oneTime flag propagation
+    interpreter.ts              # Tree-walking interpreter
+    parse.ts                    # Public parse() API
+    parse-types.ts              # ParsedExpression + related types
+    index.ts                    # Parser barrel
+  di/
+    module.ts                   # createModule, registration queue
+    injector.ts                 # createInjector, invoke, instantiate, get
+    annotate.ts                 # $inject inference (array / fn.$inject / comment)
+    di-types.ts                 # Module / Injector / Provider types
+    index.ts                    # DI barrel
+  compiler/
+    index.ts                    # Reserved for future DOM compiler
+  index.ts                      # Root barrel
 ```
+
+Each submodule has its own `README.md` with deeper details.
 
 ## Test Coverage
 
-380 tests across all modules, validated against both the original AngularJS test suite and legacy implementations.
+883 tests across 6 test files under `src/**/__tests__/`. Vitest is configured for jsdom and enforces a 90% line-coverage threshold.
 
 ```bash
 pnpm test
-# 3 test files, 380 tests passed
+# Test Files  6 passed
+#      Tests  883 passed
 ```
 
 ## License
