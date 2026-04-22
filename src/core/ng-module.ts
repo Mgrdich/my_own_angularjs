@@ -14,5 +14,15 @@
 
 import { createModule } from '@di/module';
 import { $InterpolateProvider } from '@interpolate/interpolate-provider';
+import type { InterpolateService } from '@interpolate/interpolate-types';
+
+declare module '@di/di-types' {
+  interface ModuleRegistry {
+    ng: {
+      registry: { $interpolate: InterpolateService };
+      config: { $interpolateProvider: $InterpolateProvider };
+    };
+  }
+}
 
 export const ngModule = createModule('ng', []).provider('$interpolate', $InterpolateProvider);

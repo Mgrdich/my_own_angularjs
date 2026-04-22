@@ -1,4 +1,4 @@
-import type { Invokable, InvokableReturn, ResolveDeps } from './di-types';
+import type { Invokable, InvokableReturn, RequiredConfigRegistry, RequiredRunRegistry, ResolveDeps } from './di-types';
 
 /**
  * Recipe types supported by the module system. At Slice 1 only the identifier
@@ -609,28 +609,34 @@ export interface TypedModule<
    * of the method is `TypedModule<Registry, ConfigRegistry, Name, Requires>`
    * unchanged — `config` does not widen either registry.
    *
-   * **Typo / cross-module fallback.** As with the typed `factory` / `service`
-   * / `decorator` overloads, when a dep name is a typo (or lives on a
-   * transitively-required module's `ConfigRegistry`), this overload silently
+   * **Cross-module config deps are inferred.** Dep names from a required
+   * module's config phase (e.g. `'$interpolateProvider'` from `'ng'`) are
+   * resolved via {@link RequiredConfigRegistry} — which reads each augmented
+   * entry in {@link ModuleRegistry} for the names in `Requires` and unions
+   * them with the local `ConfigRegistry`. Required modules must augment
+   * `ModuleRegistry` to participate; un-augmented modules contribute nothing
+   * and their deps fall through to the untyped fallback below.
+   *
+   * **Typo fallback.** When a dep name is neither a local `ConfigRegistry`
+   * key nor a `RequiredConfigRegistry<Requires>` key, this overload silently
    * fails to match and call sites fall through to the untyped fallback below.
    * Typed param inference still works for valid cases.
    *
    * **Variance note.** The callback is routed through a `Fn` type parameter
-   * constrained to `(...args: ResolveDeps<ConfigRegistry, Deps>) => void`
-   * rather than being written inline as a parameter type. Inlining
-   * `ResolveDeps<ConfigRegistry, Deps>` directly would put `ConfigRegistry`
-   * in a contravariant position on the method, which breaks the structural
+   * constrained to `(...args: ResolveDeps<…, Deps>) => void` rather than
+   * being written inline as a parameter type. Inlining the `ResolveDeps<…>`
+   * expression directly would put `ConfigRegistry` (and now `Requires`) in a
+   * contravariant position on the method, which breaks the structural
    * assignability check `ExtractRegistry` performs against
    * `TypedModule<infer R, Record<string, unknown>, string, readonly string[]>`
    * in `injector.ts` — callers of `createInjector` would lose all registry
-   * inference. Routing through `Fn` keeps `ConfigRegistry` in constraint
-   * position only, matching the pattern used by the typed `provider`
-   * overloads above.
+   * inference. Routing through `Fn` keeps both in constraint position only,
+   * matching the pattern used by the typed `provider` overloads above.
    */
   config<
-    const Deps extends readonly (keyof ConfigRegistry & string)[],
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-parameters -- `Fn` is intentionally a single-use type parameter to keep `ConfigRegistry` out of the method parameter's variance position; see the variance note above.
-    Fn extends (...args: ResolveDeps<ConfigRegistry, Deps>) => void,
+    const Deps extends readonly (keyof (ConfigRegistry & RequiredConfigRegistry<Requires>) & string)[],
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-parameters -- `Fn` is intentionally a single-use type parameter to keep `ConfigRegistry` and `Requires` out of the method parameter's variance position; see the variance note above.
+    Fn extends (...args: ResolveDeps<ConfigRegistry & RequiredConfigRegistry<Requires>, Deps>) => void,
   >(
     invokable: readonly [...Deps, Fn],
   ): TypedModule<Registry, ConfigRegistry, Name, Requires>;
@@ -658,28 +664,35 @@ export interface TypedModule<
    * method is `TypedModule<Registry, ConfigRegistry, Name, Requires>`
    * unchanged — `run` does not widen either registry.
    *
-   * **Typo / cross-module fallback.** As with the typed `factory` / `service`
-   * / `decorator` / `config` overloads, when a dep name is a typo (or lives
-   * on a transitively-required module's `Registry`), this overload silently
-   * fails to match and call sites fall through to the untyped fallback below.
+   * **Cross-module run deps are inferred.** Dep names from a required
+   * module's run phase (e.g. `'$interpolate'` from `'ng'`) are resolved via
+   * {@link RequiredRunRegistry} — which reads each augmented entry in
+   * {@link ModuleRegistry} for the names in `Requires` and unions them with
+   * the local `Registry`. Required modules must augment `ModuleRegistry` to
+   * participate; un-augmented modules contribute nothing and their deps fall
+   * through to the untyped fallback below.
+   *
+   * **Typo fallback.** When a dep name is neither a local `Registry` key
+   * nor a `RequiredRunRegistry<Requires>` key, this overload silently fails
+   * to match and call sites fall through to the untyped fallback below.
    * Typed param inference still works for valid cases.
    *
    * **Variance note.** The callback is routed through a `Fn` type parameter
-   * constrained to `(...args: ResolveDeps<Registry, Deps>) => void` rather
-   * than being written inline as a parameter type. Inlining
-   * `ResolveDeps<Registry, Deps>` directly would put `Registry` in a
+   * constrained to `(...args: ResolveDeps<…, Deps>) => void` rather than
+   * being written inline as a parameter type. Inlining the `ResolveDeps<…>`
+   * expression directly would put `Registry` (and now `Requires`) in a
    * contravariant position on the method, which breaks the structural
    * assignability check `ExtractRegistry` performs against
    * `TypedModule<infer R, Record<string, unknown>, string, readonly string[]>`
    * in `injector.ts` — callers of `createInjector` would lose all registry
-   * inference. Routing through `Fn` keeps `Registry` in constraint position
-   * only, matching the pattern used by the typed `config` and `provider`
-   * overloads above.
+   * inference. Routing through `Fn` keeps both in constraint position only,
+   * matching the pattern used by the typed `config` and `provider` overloads
+   * above.
    */
   run<
-    const Deps extends readonly (keyof Registry & string)[],
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-parameters -- `Fn` is intentionally a single-use type parameter to keep `Registry` out of the method parameter's variance position; see the variance note on the `config` overload above.
-    Fn extends (...args: ResolveDeps<Registry, Deps>) => void,
+    const Deps extends readonly (keyof (Registry & RequiredRunRegistry<Requires>) & string)[],
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-parameters -- `Fn` is intentionally a single-use type parameter to keep `Registry` and `Requires` out of the method parameter's variance position; see the variance note on the `config` overload above.
+    Fn extends (...args: ResolveDeps<Registry & RequiredRunRegistry<Requires>, Deps>) => void,
   >(
     invokable: readonly [...Deps, Fn],
   ): TypedModule<Registry, ConfigRegistry, Name, Requires>;

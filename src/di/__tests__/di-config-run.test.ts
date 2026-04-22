@@ -250,7 +250,7 @@ describe('dependency injection', () => {
             },
           ]);
         const injector = createInjector([mod]);
-        const logger = injector.get<{ level: string }>('logger');
+        const logger = injector.get('logger');
         expect(logger.level).toBe('debug');
       });
     });
