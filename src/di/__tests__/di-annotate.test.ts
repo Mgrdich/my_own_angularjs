@@ -28,7 +28,7 @@ describe('dependency injection', () => {
     it('resolves multiple dependencies in order', () => {
       const mod = createModule('app', []).value('first', 'Jane').value('last', 'Doe');
       const injector = createInjector([mod]);
-      const result = injector.invoke(['first', 'last', (f: string, l: string) => `${f} ${l}`]);
+      const result = injector.invoke(['first', 'last', (f, l) => `${f} ${l}`]);
       expect(result).toBe('Jane Doe');
     });
 
