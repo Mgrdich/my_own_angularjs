@@ -15,22 +15,22 @@ const injector = createInjector([app]);
 injector.get('greeter')(); // "hello"
 ```
 
-| Export | Where | Purpose |
-| --- | --- | --- |
-| `createModule(name, requires)` / `Module` / `getModule` / `resetRegistry` | `module.ts` | Register and look up modules; returns a typed module API whose type accumulates registrations. |
-| `createInjector(modules)` | `injector.ts` | Instantiate an injector from a list of modules; runs config blocks, then exposes `get/has/invoke/instantiate/annotate`. |
-| `annotate(fn)` | `annotate.ts` | Resolve a function's dependency names via array-annotation, `fn.$inject`, or inline comment syntax. |
-| Types: `Annotated`, `Injector`, `Invokable`, `ModuleAPI`, `ProviderArray`, `ProviderService`, `ResolveDeps`, … | `di-types.ts` | Generics backing the typed module/injector API. |
+| Export                                                                                                         | Where         | Purpose                                                                                                                 |
+|----------------------------------------------------------------------------------------------------------------|---------------|-------------------------------------------------------------------------------------------------------------------------|
+| `createModule(name, requires)` / `Module` / `getModule` / `resetRegistry`                                      | `module.ts`   | Register and look up modules; returns a typed module API whose type accumulates registrations.                          |
+| `createInjector(modules)`                                                                                      | `injector.ts` | Instantiate an injector from a list of modules; runs config blocks, then exposes `get/has/invoke/instantiate/annotate`. |
+| `annotate(fn)`                                                                                                 | `annotate.ts` | Resolve a function's dependency names via array-annotation, `fn.$inject`, or inline comment syntax.                     |
+| Types: `Annotated`, `Injector`, `Invokable`, `ModuleAPI`, `ProviderArray`, `ProviderService`, `ResolveDeps`, … | `di-types.ts` | Generics backing the typed module/injector API.                                                                         |
 
 ## Provider recipes
 
-| Recipe | Registered as | What you get |
-| --- | --- | --- |
-| `.value(name, v)` | value | `v` directly. |
-| `.constant(name, v)` | constant | Same as value, but available during `config` blocks. |
-| `.factory(name, ['dep', fn])` | factory | `fn(dep)` — invoked once, cached. |
-| `.service(name, ClassCtor)` | service | `new ClassCtor(...deps)` — instantiated once, cached. |
-| `.provider(name, providerFn)` | provider | `providerFn.$get(...deps)` — full provider lifecycle; visible in `config`. |
+| Recipe                        | Registered as | What you get                                                               |
+|-------------------------------|---------------|----------------------------------------------------------------------------|
+| `.value(name, v)`             | value         | `v` directly.                                                              |
+| `.constant(name, v)`          | constant      | Same as value, but available during `config` blocks.                       |
+| `.factory(name, ['dep', fn])` | factory       | `fn(dep)` — invoked once, cached.                                          |
+| `.service(name, ClassCtor)`   | service       | `new ClassCtor(...deps)` — instantiated once, cached.                      |
+| `.provider(name, providerFn)` | provider      | `providerFn.$get(...deps)` — full provider lifecycle; visible in `config`. |
 
 ## Lifecycle
 

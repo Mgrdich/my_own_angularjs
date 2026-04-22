@@ -8,16 +8,16 @@ The runtime heart of the library: scope hierarchy, dirty-checking digest loop, a
 import { Scope, isEqual, copy, forEach } from 'my-own-angularjs/core';
 ```
 
-| Export | Where | Purpose |
-| --- | --- | --- |
-| `Scope.create<T>(options?)` | `scope.ts` | Create a root scope. Optional `ttl` (default 10) bounds digest iterations. |
-| `$watch / $watchGroup / $watchCollection` | `scope.ts` | Register dirty-check watchers. Returns a deregister fn. |
-| `$digest / $apply / $eval / $evalAsync / $applyAsync` | `scope.ts` | Propagate model changes. |
-| `$new / $destroy` | `scope.ts` | Scope hierarchy management. Supports isolate scopes. |
-| `$on / $emit / $broadcast` | `scope.ts` | Event channel with upward (emit) and downward (broadcast) propagation. |
-| `constantWatchDelegate / oneTimeWatchDelegate / oneTimeLiteralWatchDelegate` | `scope-watch-delegates.ts` | Internal watch-strategy selectors driven by AST flags. |
-| `isString / isNumber / isObject / isArray / isFunction / …` | `utils.ts` | Type guards that narrow in conditionals. |
-| `isEqual, copy, forEach, createMap, range, noop` | `utils.ts` | Value helpers. |
+| Export                                                                       | Where                      | Purpose                                                                    |
+|------------------------------------------------------------------------------|----------------------------|----------------------------------------------------------------------------|
+| `Scope.create<T>(options?)`                                                  | `scope.ts`                 | Create a root scope. Optional `ttl` (default 10) bounds digest iterations. |
+| `$watch / $watchGroup / $watchCollection`                                    | `scope.ts`                 | Register dirty-check watchers. Returns a deregister fn.                    |
+| `$digest / $apply / $eval / $evalAsync / $applyAsync`                        | `scope.ts`                 | Propagate model changes.                                                   |
+| `$new / $destroy`                                                            | `scope.ts`                 | Scope hierarchy management. Supports isolate scopes.                       |
+| `$on / $emit / $broadcast`                                                   | `scope.ts`                 | Event channel with upward (emit) and downward (broadcast) propagation.     |
+| `constantWatchDelegate / oneTimeWatchDelegate / oneTimeLiteralWatchDelegate` | `scope-watch-delegates.ts` | Internal watch-strategy selectors driven by AST flags.                     |
+| `isString / isNumber / isObject / isArray / isFunction / …`                  | `utils.ts`                 | Type guards that narrow in conditionals.                                   |
+| `isEqual, copy, forEach, createMap, range, noop`                             | `utils.ts`                 | Value helpers.                                                             |
 
 Types live in `scope-types.ts` (`Watcher`, `WatchFn`, `ListenerFn`, `ScopeEvent`, `ScopeOptions`, `ScopePhase`, …).
 
