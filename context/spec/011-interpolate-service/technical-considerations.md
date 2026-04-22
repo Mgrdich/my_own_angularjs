@@ -6,7 +6,7 @@ It is NOT a copy-paste implementation guide.
 # Technical Specification: `$interpolate` Service — String & Template Interpolation
 
 - **Functional Specification:** [`context/spec/011-interpolate-service/functional-spec.md`](./functional-spec.md)
-- **Status:** Draft
+- **Status:** Completed
 - **Author(s):** Mgrdich
 
 ---

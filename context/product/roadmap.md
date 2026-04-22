@@ -51,7 +51,17 @@ _The layer that connects the runtime to templates and the DOM._
 - [ ] **Expressions & Parser**
   - [x] **Expression Parser:** Implement a full expression parser supporting property access, method calls, operators, literals, and assignments and all the supported features of AngularJS 1.x, integration with scope.
   - [x] **One-Time Bindings:** Support `::` prefix for expressions that unwatch after stabilization.
-  - [ ] **Interpolation:** Implement `$interpolate` service for `{{expression}}` resolution in strings and templates.
+  - [x] **Interpolation:** Implement `$interpolate` service for `{{expression}}` resolution in strings and templates.
+
+- [ ] **Security ($sce)**
+  - [ ] **$sce Service:** Implement Strict Contextual Escaping with `trustAsHtml`, `trustAsUrl`, `trustAsResourceUrl`, `trustAsJs`, `trustAsCss`, `getTrusted`, and the security contexts.
+  - [ ] **$interpolate Integration:** Wire the `trustedContext` parameter on `$interpolate` to `$sce.getTrusted(...)` — resolves the `TODO(spec-$sce)` marker in `src/interpolate/interpolate.ts` left by spec 011.
+  - [ ] **$sceProvider:** Support config-phase `enabled(value?)` to toggle strict mode.
+
+- [ ] **Exception Handling ($exceptionHandler)**
+  - [ ] **$exceptionHandler Service:** Default implementation that delegates to `console.error`; overridable via DI for custom logging / reporting.
+  - [ ] **Digest Integration:** Route watch, listener, `$evalAsync`, and `$applyAsync` exceptions through `$exceptionHandler` instead of the current inline `console.error` in `src/core/scope.ts` — resolves the runtime-error deferral from spec 011 §2.10.
+  - [ ] **$interpolate Integration:** Route render-time expression exceptions through `$exceptionHandler` when an interpolation fn is used inside a digest.
 
 - [ ] **Filters**
   - [ ] **Filter Registration & Pipeline:** Implement the filter system with `$filterProvider` and chained filter expressions.

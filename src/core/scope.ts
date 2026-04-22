@@ -33,6 +33,14 @@ const noop: ListenerFn<unknown> = () => {
  * flags (`oneTime`, `constant`, `literal`) as readonly properties, so
  * `$watch` can route to specialized watch delegates without reparsing.
  *
+ * Function-form inputs MAY also carry `.oneTime` (and optionally `.literal`)
+ * properties — e.g. an `InterpolateFn` produced by `$interpolate` sets
+ * `.oneTime === true` for all-`::` templates but deliberately omits `.literal`
+ * (see `interpolate-types.ts` and spec 011 technical-considerations §2.9).
+ * `$watch` treats a missing `.literal` the same as `false`, so such function
+ * watchers route through `oneTimeWatchDelegate` identically to a parsed
+ * scalar one-time string expression.
+ *
  * Parsing errors surface immediately at the call site, not during digest.
  */
 function compileToWatchFn<T>(
@@ -142,9 +150,14 @@ export class Scope {
     // one-time delegate: the watcher deregisters after the first digest in
     // which the value stabilizes to a non-undefined result. The literal
     // variant (objects/arrays) is handled by a separate delegate.
+    //
+    // An absent `.literal` property is treated as "not a literal": this
+    // matches a function-form watcher (e.g. `InterpolateFn`) that advertises
+    // `.oneTime === true` without exposing `.literal` at all, which is the
+    // canonical non-literal one-time case.
     if (
       (watchFnCompiled as { oneTime?: boolean }).oneTime === true &&
-      (watchFnCompiled as { literal?: boolean }).literal === false
+      (watchFnCompiled as { literal?: boolean }).literal !== true
     ) {
       return oneTimeWatchDelegate(this, watchFnCompiled, listenerFn ?? noop, valueEq ?? false);
     }

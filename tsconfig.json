@@ -14,7 +14,8 @@
     "paths": {
       "@core/*": ["./src/core/*"],
       "@parser/*": ["./src/parser/*"],
-      "@di/*": ["./src/di/*"]
+      "@di/*": ["./src/di/*"],
+      "@interpolate/*": ["./src/interpolate/*"]
     }
   },
   "include": ["src"],
