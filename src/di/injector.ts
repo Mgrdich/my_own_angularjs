@@ -15,21 +15,34 @@
 import { isArray, isFunction } from '@core/utils';
 
 import { annotate as annotateInvokable } from './annotate';
-import type { Injector, Invokable } from './di-types';
+import type { Injector, Invokable, RequiredRunRegistry } from './di-types';
 import { getModule, type AnyModule, type Module, type TypedModule } from './module';
 
 /**
  * Extract the `Registry` type parameter from a concrete {@link Module} or
- * {@link TypedModule} type. The `TypedModule` branch is tried first because
- * `createModule` returns that typed view; `TypedModule<R, ...>` structurally
- * also extends `Module<R, ...>`, but the extra factory overloads on
- * `TypedModule` can confuse single-pattern inference in some cases, so we
- * match it explicitly. Resolves to `never` when the input is neither, which
- * keeps it safe inside a distributive conditional type.
+ * {@link TypedModule} type, unioned with the run-phase registries of every
+ * module named in its `Requires` tuple (resolved via
+ * {@link RequiredRunRegistry} against the `ModuleRegistry` augmentation
+ * table).
+ *
+ * The `TypedModule` branch is tried first because `createModule` returns
+ * that typed view; `TypedModule<R, ...>` structurally also extends
+ * `Module<R, ...>`, but the extra factory overloads on `TypedModule` can
+ * confuse single-pattern inference in some cases, so we match it
+ * explicitly. Resolves to `never` when the input is neither, which keeps
+ * it safe inside a distributive conditional type.
+ *
+ * Including `RequiredRunRegistry<Requires>` here closes the "runtime
+ * auto-walks `requires` but the type system didn't" mismatch documented in
+ * {@link createInjector}'s JSDoc: `createInjector([appModule])` with
+ * `appModule.requires = ['ng']` now also contributes `ng`'s registered
+ * services to the injector's static type — so long as `ng` has augmented
+ * `ModuleRegistry`. Un-augmented required modules contribute nothing and
+ * their lookups still fall through to the dynamic `get<T>` escape hatch.
  */
 type ExtractRegistry<M> =
-  M extends TypedModule<infer R, Record<string, unknown>, string, readonly string[]>
-    ? R
+  M extends TypedModule<infer R, Record<string, unknown>, string, infer Requires>
+    ? R & RequiredRunRegistry<Requires>
     : M extends Module<infer R, Record<string, unknown>>
       ? R
       : never;

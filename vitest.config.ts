@@ -7,6 +7,7 @@ export default defineConfig({
       '@core': path.resolve(__dirname, 'src/core'),
       '@parser': path.resolve(__dirname, 'src/parser'),
       '@di': path.resolve(__dirname, 'src/di'),
+      '@interpolate': path.resolve(__dirname, 'src/interpolate'),
     },
   },
   test: {

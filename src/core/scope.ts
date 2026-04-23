@@ -1,8 +1,11 @@
 import { parse } from '@parser/index';
+import { constantWatchDelegate, oneTimeLiteralWatchDelegate, oneTimeWatchDelegate } from './scope-watch-delegates';
 import {
   initWatchVal,
   type AsyncTask,
+  type DeregisterFn,
   type EventListener,
+  type FlaggedWatchFn,
   type ListenerFn,
   type Parsable,
   type ScopeEvent,
@@ -10,6 +13,7 @@ import {
   type ScopePhase,
   type TypedScope,
   type Watcher,
+  type WatchFn,
 } from './scope-types';
 import { isEqual } from './utils';
 
@@ -25,14 +29,35 @@ const noop: ListenerFn<unknown> = () => {
  * Compile a Parsable expression into a WatchFn. Accepts either a function
  * (returned as-is) or a string (parsed once via the expression parser).
  *
+ * For string inputs, the returned wrapper carries the parser's classification
+ * flags (`oneTime`, `constant`, `literal`) as readonly properties, so
+ * `$watch` can route to specialized watch delegates without reparsing.
+ *
+ * Function-form inputs MAY also carry `.oneTime` (and optionally `.literal`)
+ * properties — e.g. an `InterpolateFn` produced by `$interpolate` sets
+ * `.oneTime === true` for all-`::` templates but deliberately omits `.literal`
+ * (see `interpolate-types.ts` and spec 011 technical-considerations §2.9).
+ * `$watch` treats a missing `.literal` the same as `false`, so such function
+ * watchers route through `oneTimeWatchDelegate` identically to a parsed
+ * scalar one-time string expression.
+ *
  * Parsing errors surface immediately at the call site, not during digest.
  */
-function compileToWatchFn<T>(expr: Parsable<Record<string, unknown>, T>) {
+function compileToWatchFn<T>(
+  expr: Parsable<Record<string, unknown>, T>,
+): WatchFn<Record<string, unknown>, T> | FlaggedWatchFn<Record<string, unknown>, T> {
   if (typeof expr === 'function') {
     return expr;
   }
   const exprFn = parse(expr);
-  return (scope: Scope) => exprFn(scope as unknown as Record<string, unknown>) as T;
+  const wrapper: WatchFn<Record<string, unknown>, T> = (scope: Scope) =>
+    exprFn(scope as unknown as Record<string, unknown>) as T;
+  Object.defineProperties(wrapper, {
+    oneTime: { value: exprFn.oneTime, writable: false, enumerable: true, configurable: false },
+    constant: { value: exprFn.constant, writable: false, enumerable: true, configurable: false },
+    literal: { value: exprFn.literal, writable: false, enumerable: true, configurable: false },
+  });
+  return wrapper as FlaggedWatchFn<Record<string, unknown>, T>;
 }
 
 /** Auto-incrementing counter for unique scope IDs. */
@@ -101,14 +126,12 @@ export class Scope {
    * @param valueEq - Whether to use deep equality (not implemented in Slice 1)
    * @returns A function that deregisters the watcher when called
    */
-  $watch<W>(watchFn: Parsable<Record<string, unknown>, W>, listenerFn?: ListenerFn<W>, valueEq?: boolean) {
+  $watch<W>(
+    watchFn: Parsable<Record<string, unknown>, W>,
+    listenerFn?: ListenerFn<W>,
+    valueEq?: boolean,
+  ): DeregisterFn {
     const watchFnCompiled = compileToWatchFn(watchFn);
-    const watcher: Watcher<W> = {
-      watchFn: watchFnCompiled,
-      listenerFn: listenerFn ?? noop,
-      last: initWatchVal,
-      valueEq: valueEq ?? false,
-    };
 
     if (this.$$watchers === null) {
       // Scope has been destroyed; silently ignore
@@ -116,6 +139,40 @@ export class Scope {
         /* noop for destroyed scope */
       };
     }
+
+    // Route constant expressions through the one-shot delegate: the value
+    // can never change, so the listener only needs to fire once.
+    if ((watchFnCompiled as { constant?: boolean }).constant) {
+      return constantWatchDelegate(this, watchFnCompiled, listenerFn ?? noop, valueEq ?? false);
+    }
+
+    // Route non-literal one-time (`::`-prefixed) expressions through the
+    // one-time delegate: the watcher deregisters after the first digest in
+    // which the value stabilizes to a non-undefined result. The literal
+    // variant (objects/arrays) is handled by a separate delegate.
+    //
+    // An absent `.literal` property is treated as "not a literal": this
+    // matches a function-form watcher (e.g. `InterpolateFn`) that advertises
+    // `.oneTime === true` without exposing `.literal` at all, which is the
+    // canonical non-literal one-time case.
+    if ((watchFnCompiled as { oneTime?: boolean }).oneTime && !(watchFnCompiled as { literal?: boolean }).literal) {
+      return oneTimeWatchDelegate(this, watchFnCompiled, listenerFn ?? noop, valueEq ?? false);
+    }
+
+    // Route literal one-time (`::`-prefixed array/object literal) expressions
+    // through the literal one-time delegate: stability requires every
+    // top-level element/property to be non-undefined, not merely the outer
+    // literal reference (which is always freshly allocated and thus defined).
+    if ((watchFnCompiled as { oneTime?: boolean }).oneTime && (watchFnCompiled as { literal?: boolean }).literal) {
+      return oneTimeLiteralWatchDelegate(this, watchFnCompiled, listenerFn ?? noop, valueEq ?? false);
+    }
+
+    const watcher: Watcher<W> = {
+      watchFn: watchFnCompiled,
+      listenerFn: listenerFn ?? noop,
+      last: initWatchVal,
+      valueEq: valueEq ?? false,
+    };
 
     this.$$watchers.push(watcher as Watcher<unknown>);
 
@@ -466,6 +523,13 @@ export class Scope {
    */
   $watchCollection(watchFn: Parsable<Record<string, unknown>, unknown>, listenerFn: ListenerFn<unknown>) {
     const watchFnCompiled = compileToWatchFn(watchFn);
+    // String-form expressions produce a FlaggedWatchFn carrying oneTime/constant
+    // classification; function-form inputs have no flags and opt out of one-time
+    // semantics. This matches AngularJS behavior where only string-form
+    // `$watchCollection('::items', ...)` engages one-time handling.
+    const flags = watchFnCompiled as { oneTime?: boolean; constant?: boolean };
+    const isOneTime = flags.oneTime === true;
+    const isConstant = flags.constant === true;
     let changeCount = 0;
     let oldValue: unknown;
     let newValue: unknown;
@@ -576,9 +640,24 @@ export class Scope {
           veryOldValue = newValue;
         }
       }
+
+      // One-time / one-shot deregistration for string-form expressions.
+      // - Constant collections fire once with the snapshot, then detach.
+      // - One-time collections detach once newValue stabilizes to a defined value.
+      // Deregistration runs post-digest so the current cycle completes cleanly.
+      if (isConstant) {
+        this.$$postDigest(() => {
+          deregister();
+        });
+      } else if (isOneTime && newValue !== undefined) {
+        this.$$postDigest(() => {
+          deregister();
+        });
+      }
     };
 
-    return this.$watch(internalWatchFn, internalListenerFn);
+    const deregister = this.$watch(internalWatchFn, internalListenerFn);
+    return deregister;
   }
 
   /**

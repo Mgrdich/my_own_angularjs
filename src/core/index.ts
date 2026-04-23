@@ -1,8 +1,10 @@
+export { ngModule } from './ng-module';
 export { Scope } from './scope';
 export type {
   AsyncTask,
   DeregisterFn,
   EventListener,
+  FlaggedWatchFn,
   InitWatchVal,
   ListenerFn,
   ScopeEvent,

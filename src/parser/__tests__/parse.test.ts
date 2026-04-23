@@ -685,3 +685,208 @@ describe('spec 009 — operators & assignment', () => {
     });
   });
 });
+
+describe('spec 010 — parse metadata flags', () => {
+  describe('flags are always present', () => {
+    it('returns a function with all three flag properties', () => {
+      const fn = parse('a');
+      expect(typeof fn).toBe('function');
+      expect(typeof fn.oneTime).toBe('boolean');
+      expect(typeof fn.constant).toBe('boolean');
+      expect(typeof fn.literal).toBe('boolean');
+    });
+
+    it('never leaves a flag undefined for a constant literal expression', () => {
+      const fn = parse('42');
+      expect(fn.oneTime).not.toBeUndefined();
+      expect(fn.constant).not.toBeUndefined();
+      expect(fn.literal).not.toBeUndefined();
+    });
+
+    it('never leaves a flag undefined for an identifier expression', () => {
+      const fn = parse('a');
+      expect(fn.oneTime).not.toBeUndefined();
+      expect(fn.constant).not.toBeUndefined();
+      expect(fn.literal).not.toBeUndefined();
+    });
+
+    it('preserves callability of the returned function with scope input', () => {
+      const fn = parse('a + b');
+      expect(fn({ a: 1, b: 2 })).toBe(3);
+    });
+
+    it('preserves callability of the returned function for a constant expression', () => {
+      const fn = parse('1 + 2');
+      expect(fn()).toBe(3);
+    });
+  });
+
+  describe('oneTime is always false in slice 1 (no :: support yet)', () => {
+    const samples = [
+      'a',
+      '42',
+      '"hello"',
+      'true',
+      'null',
+      'a.b',
+      '[1, 2]',
+      '{x: 1}',
+      'fn()',
+      'a = 1',
+      '1 + 2',
+      'true ? 1 : 2',
+    ];
+
+    samples.forEach((expr) => {
+      it(`parse(${JSON.stringify(expr)}).oneTime === false`, () => {
+        expect(parse(expr).oneTime).toBe(false);
+      });
+    });
+  });
+
+  describe('constant flag is threaded from isConstant on the AST body', () => {
+    const constantCases: ReadonlyArray<readonly [string, boolean]> = [
+      ['42', true],
+      ['"hello"', true],
+      ['true', true],
+      ['null', true],
+      ['[1, 2, 3]', true],
+      ['{x: 1}', true],
+      ['1 + 2', true],
+      ['true ? 1 : 2', true],
+      ['a', false],
+      ['a.b', false],
+      ['[1, a]', false],
+      ['fn()', false],
+      ['a = 1', false],
+    ];
+
+    constantCases.forEach(([expr, expected]) => {
+      it(`parse(${JSON.stringify(expr)}).constant === ${String(expected)}`, () => {
+        expect(parse(expr).constant).toBe(expected);
+      });
+    });
+  });
+
+  describe('literal flag is threaded from isLiteral on the full Program', () => {
+    const literalCases: ReadonlyArray<readonly [string, boolean]> = [
+      ['42', true],
+      ['"x"', true],
+      ['true', true],
+      ['null', true],
+      ['[1, 2]', true],
+      ['[a, b]', true],
+      ['{x: 1}', true],
+      ['{x: a}', true],
+      ['a', false],
+      ['a.b', false],
+      ['1 + 2', false],
+      ['a ? 1 : 2', false],
+      ['fn()', false],
+      ['a = 1', false],
+    ];
+
+    literalCases.forEach(([expr, expected]) => {
+      it(`parse(${JSON.stringify(expr)}).literal === ${String(expected)}`, () => {
+        expect(parse(expr).literal).toBe(expected);
+      });
+    });
+  });
+});
+
+describe('spec 010 — one-time prefix', () => {
+  describe('basic detection', () => {
+    it("parse('::user.name').oneTime === true", () => {
+      expect(parse('::user.name').oneTime).toBe(true);
+    });
+
+    it("parse('::user.name') evaluates identically to parse('user.name')", () => {
+      const scope = { user: { name: 'alice' } };
+      expect(parse('::user.name')(scope)).toBe('alice');
+      expect(parse('user.name')(scope)).toBe('alice');
+    });
+
+    it("parse('::a + b') strips prefix cleanly and evaluates the remainder", () => {
+      expect(parse('::a + b')({ a: 1, b: 2 })).toBe(3);
+    });
+
+    it("parse('::42').oneTime === true and evaluates to 42", () => {
+      const fn = parse('::42');
+      expect(fn.oneTime).toBe(true);
+      expect(fn()).toBe(42);
+    });
+
+    it("parse('::[1, 2]').oneTime === true and .literal === true and evaluates to [1, 2]", () => {
+      const fn = parse('::[1, 2]');
+      expect(fn.oneTime).toBe(true);
+      expect(fn.literal).toBe(true);
+      expect(fn()).toEqual([1, 2]);
+    });
+
+    it("parse('user.name').oneTime === false", () => {
+      expect(parse('user.name').oneTime).toBe(false);
+    });
+
+    it("parse('42').oneTime === false", () => {
+      expect(parse('42').oneTime).toBe(false);
+    });
+  });
+
+  describe('whitespace handling', () => {
+    it("parse('  ::user.name  ').oneTime === true and evaluates identically to parse('::user.name')", () => {
+      const scope = { user: { name: 'bob' } };
+      const fn = parse('  ::user.name  ');
+      expect(fn.oneTime).toBe(true);
+      expect(fn(scope)).toBe('bob');
+      expect(parse('::user.name')(scope)).toBe('bob');
+    });
+
+    it("parse('::   user.name').oneTime === true (space between :: and expression)", () => {
+      const fn = parse('::   user.name');
+      expect(fn.oneTime).toBe(true);
+      expect(fn({ user: { name: 'carol' } })).toBe('carol');
+    });
+
+    it("parse('  ::  user.name  ').oneTime === true (combined leading, internal, and trailing whitespace)", () => {
+      const fn = parse('  ::  user.name  ');
+      expect(fn.oneTime).toBe(true);
+      expect(fn({ user: { name: 'dave' } })).toBe('dave');
+    });
+  });
+
+  describe('empty-expression errors', () => {
+    const emptyCases = ['::', '::  ', '   ::   '];
+
+    emptyCases.forEach((expr) => {
+      it(`parse(${JSON.stringify(expr)}) throws "Empty expression after '::'"`, () => {
+        expect(() => parse(expr)).toThrow(/Empty expression after '::'/);
+      });
+    });
+  });
+
+  describe('sub-expression :: errors', () => {
+    const subExprCases = ['foo(::x)', '[::a]', 'a + ::b', '::a + ::b'];
+
+    subExprCases.forEach((expr) => {
+      it(`parse(${JSON.stringify(expr)}) throws`, () => {
+        expect(() => parse(expr)).toThrow();
+      });
+    });
+  });
+
+  describe('regression: non-prefixed expressions have flags correctly set', () => {
+    it("parse('a') has oneTime=false, constant=false, literal=false", () => {
+      const fn = parse('a');
+      expect(fn.oneTime).toBe(false);
+      expect(fn.constant).toBe(false);
+      expect(fn.literal).toBe(false);
+    });
+
+    it("parse('42') has oneTime=false, constant=true, literal=true", () => {
+      const fn = parse('42');
+      expect(fn.oneTime).toBe(false);
+      expect(fn.constant).toBe(true);
+      expect(fn.literal).toBe(true);
+    });
+  });
+});

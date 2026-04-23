@@ -22,3 +22,6 @@ export type {
   ResolveDeps,
   TypedModule,
 } from './di/index';
+
+export { createInterpolate, interpolate } from './interpolate/index';
+export type { InterpolateFn, InterpolateOptions, InterpolateService } from './interpolate/index';

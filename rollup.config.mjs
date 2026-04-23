@@ -21,7 +21,21 @@ const entries = [
   { name: 'di/index', input: 'src/di/index.ts' },
   { name: 'parser/index', input: 'src/parser/index.ts' },
   { name: 'compiler/index', input: 'src/compiler/index.ts' },
+  { name: 'interpolate/index', input: 'src/interpolate/index.ts' },
 ];
+
+// Path aliases declared in `tsconfig.json` are used across the codebase
+// (e.g. `@core/utils`, `@interpolate/interpolate-provider`). `rollup-plugin-dts`
+// does not read them from `tsconfig.json` automatically — we mirror them here
+// with an explicit `baseUrl` so the declaration bundler can follow cross-module
+// type imports and emit fully self-contained `.d.ts` files. The JS transform
+// via `@rollup/plugin-typescript` already reads these from `tsconfig.json`.
+const tsPathAliases = {
+  '@core/*': ['src/core/*'],
+  '@parser/*': ['src/parser/*'],
+  '@di/*': ['src/di/*'],
+  '@interpolate/*': ['src/interpolate/*'],
+};
 
 const bundleConfigs = entries.map((entry) => ({
   input: entry.input,
@@ -42,7 +56,14 @@ const bundleConfigs = entries.map((entry) => ({
 const dtsConfigs = entries.map((entry) => ({
   input: entry.input,
   output: [{ file: `dist/types/${entry.name}.d.ts`, format: 'es' }],
-  plugins: [dts()],
+  plugins: [
+    dts({
+      compilerOptions: {
+        baseUrl: '.',
+        paths: tsPathAliases,
+      },
+    }),
+  ],
 }));
 
 export default [...bundleConfigs, ...dtsConfigs];

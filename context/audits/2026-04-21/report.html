@@ -1,0 +1,505 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Code Audit Report — 2026-04-21 — my_own_angularjs</title>
+  <style>
+    :root {
+      --ink: #1f2937;
+      --muted: #6b7280;
+      --bg: #ffffff;
+      --panel: #f9fafb;
+      --border: #e5e7eb;
+      --pass: #22c55e;
+      --warn: #eab308;
+      --fail: #ef4444;
+      --skip: #9ca3af;
+      --grade-a: #22c55e;
+      --grade-b: #3b82f6;
+      --grade-c: #f97316;
+      --grade-d: #ef4444;
+      --grade-f: #991b1b;
+      --sev-critical: #ef4444;
+      --sev-high: #f97316;
+      --sev-medium: #eab308;
+      --sev-low: #9ca3af;
+    }
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      color: var(--ink);
+      background: var(--bg);
+      line-height: 1.5;
+    }
+    .wrap {
+      max-width: 960px;
+      margin: 0 auto;
+      padding: 24px 20px 80px;
+    }
+    header.hero {
+      padding: 32px 24px;
+      background: linear-gradient(135deg, #f8fafc 0%, #eef2ff 100%);
+      border-radius: 12px;
+      margin-bottom: 24px;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+    }
+    header.hero h1 {
+      margin: 0 0 4px;
+      font-size: 22px;
+      font-weight: 600;
+    }
+    header.hero .sub {
+      color: var(--muted);
+      font-size: 14px;
+    }
+    .score-badge {
+      display: flex;
+      align-items: baseline;
+      gap: 10px;
+      background: white;
+      padding: 12px 20px;
+      border-radius: 10px;
+      box-shadow: 0 1px 2px rgba(0,0,0,.06), 0 1px 0 rgba(0,0,0,.04);
+    }
+    .score-badge .pct {
+      font-size: 40px;
+      font-weight: 700;
+      color: var(--ink);
+      letter-spacing: -0.03em;
+    }
+    .score-badge .grade {
+      font-size: 28px;
+      font-weight: 700;
+      padding: 4px 14px;
+      border-radius: 8px;
+      color: white;
+    }
+    .grade-A { background: var(--grade-a); }
+    .grade-B { background: var(--grade-b); }
+    .grade-C { background: var(--grade-c); }
+    .grade-D { background: var(--grade-d); }
+    .grade-F { background: var(--grade-f); }
+
+    .toolbar {
+      position: sticky;
+      top: 0;
+      background: var(--bg);
+      border-bottom: 1px solid var(--border);
+      padding: 10px 0;
+      margin-bottom: 24px;
+      z-index: 10;
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+    }
+    .toggle-btn {
+      background: #eef2ff;
+      border: 1px solid #c7d2fe;
+      color: #3730a3;
+      padding: 6px 14px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 500;
+      font-family: inherit;
+    }
+    .toggle-btn:hover { background: #e0e7ff; }
+    body.issues-only .toggle-btn { background: #fee2e2; border-color: #fecaca; color: #991b1b; }
+
+    h2 {
+      font-size: 18px;
+      margin: 32px 0 12px;
+      padding-bottom: 6px;
+      border-bottom: 2px solid var(--border);
+    }
+    h3 {
+      font-size: 15px;
+      margin: 16px 0 8px;
+      color: var(--muted);
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+      background: white;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+    th, td {
+      padding: 8px 10px;
+      text-align: left;
+      vertical-align: top;
+      border-bottom: 1px solid var(--border);
+    }
+    th {
+      background: var(--panel);
+      font-weight: 600;
+      color: var(--muted);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    tbody tr:nth-child(even) td { background: #fafafa; }
+    tbody tr:last-child td { border-bottom: none; }
+    td.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+    tr.grade-row-D td, tr.grade-row-F td { background: #fef2f2 !important; }
+    tr.grade-row-C td { background: #fff7ed !important; }
+
+    .pill {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: white;
+      white-space: nowrap;
+    }
+    .status-PASS { background: var(--pass); }
+    .status-WARN { background: var(--warn); color: #1f2937; }
+    .status-FAIL { background: var(--fail); }
+    .status-SKIP { background: var(--skip); }
+
+    .sev-critical { background: var(--sev-critical); color: white; }
+    .sev-high     { background: var(--sev-high);     color: white; }
+    .sev-medium   { background: var(--sev-medium);   color: #1f2937; }
+    .sev-low      { background: var(--sev-low);      color: white; }
+
+    details {
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      margin: 12px 0;
+      background: white;
+      overflow: hidden;
+    }
+    details[open] { box-shadow: 0 1px 2px rgba(0,0,0,.04); }
+    summary {
+      padding: 12px 16px;
+      cursor: pointer;
+      font-weight: 600;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 12px;
+      background: var(--panel);
+      border-bottom: 1px solid transparent;
+      list-style: none;
+    }
+    details[open] summary { border-bottom-color: var(--border); }
+    summary::-webkit-details-marker { display: none; }
+    summary::before {
+      content: "▸";
+      display: inline-block;
+      width: 12px;
+      color: var(--muted);
+      transition: transform 0.15s;
+    }
+    details[open] summary::before { transform: rotate(90deg); }
+    summary .dim-score {
+      margin-left: auto;
+      font-size: 13px;
+      color: var(--muted);
+      font-weight: 500;
+    }
+    summary .dim-score .grade-badge {
+      display: inline-block;
+      margin-left: 6px;
+      padding: 2px 8px;
+      border-radius: 4px;
+      color: white;
+      font-weight: 600;
+    }
+    details .body { padding: 12px 16px 16px; }
+
+    code {
+      background: #f3f4f6;
+      padding: 1px 5px;
+      border-radius: 4px;
+      font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+      font-size: 0.92em;
+    }
+
+    body.issues-only tr[data-status='PASS'],
+    body.issues-only tr[data-status='SKIP'] {
+      display: none;
+    }
+    body.issues-only details[data-all-clear='true'] {
+      opacity: 0.4;
+    }
+
+    .headline {
+      background: #fffbeb;
+      border-left: 4px solid #f59e0b;
+      padding: 12px 16px;
+      margin: 16px 0 24px;
+      border-radius: 4px;
+      font-size: 14px;
+    }
+    .headline strong { color: #92400e; }
+
+    footer.foot {
+      margin-top: 48px;
+      padding-top: 16px;
+      border-top: 1px solid var(--border);
+      color: var(--muted);
+      font-size: 12px;
+      text-align: center;
+    }
+
+    @media (max-width: 640px) {
+      .score-badge .pct { font-size: 32px; }
+      .score-badge .grade { font-size: 22px; }
+      table { font-size: 12px; }
+      th, td { padding: 6px 8px; }
+    }
+
+    @media print {
+      .toolbar { display: none; }
+      details { break-inside: avoid; }
+      details summary::before { display: none; }
+      details:not([open]) > .body { display: block !important; }
+      details { box-shadow: none; }
+      body { font-size: 11px; }
+    }
+  </style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="hero">
+    <div>
+      <h1>my_own_angularjs — Code Audit Report</h1>
+      <div class="sub">2026-04-21 · all dimensions · no previous audit</div>
+    </div>
+    <div class="score-badge">
+      <div class="pct">93%</div>
+      <div class="grade grade-A">A</div>
+    </div>
+  </header>
+
+  <div class="toolbar">
+    <button class="toggle-btn" id="filterBtn" type="button" onclick="toggleIssuesOnly()">Show issues only</button>
+  </div>
+
+  <div class="headline">
+    <strong>Headline:</strong> Exemplary guardrails (100% security / 100% AI-tooling) and spec-driven-development discipline (100% of recent <code>feat:</code> commits reference a spec number, with <code>tasks.md</code> co-modified with <code>src/</code>). Only dimension below B-grade is <strong>Code Architecture (71% — C)</strong>, dragged down by three source files that exceed the project's own 500-line target — all three already tagged in <code>CLAUDE.md</code> as refactor candidates. No P0 or P1 items.
+  </div>
+
+  <h2>Summary</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>#</th>
+        <th>Dimension</th>
+        <th class="num">Score</th>
+        <th>Grade</th>
+        <th>Delta</th>
+        <th class="num">Critical</th>
+        <th class="num">High</th>
+        <th class="num">Medium</th>
+        <th class="num">Low</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr class="grade-row-A"><td>1</td><td>Project Topology</td><td class="num">100%</td><td><span class="pill grade-A">A</span></td><td>n/a</td><td class="num">0</td><td class="num">0</td><td class="num">0</td><td class="num">0</td></tr>
+      <tr class="grade-row-A"><td>2</td><td>Documentation Quality</td><td class="num">93.75%</td><td><span class="pill grade-A">A</span></td><td>n/a</td><td class="num">0</td><td class="num">0</td><td class="num">1</td><td class="num">0</td></tr>
+      <tr class="grade-row-A"><td>3</td><td>Security Guardrails</td><td class="num">100%</td><td><span class="pill grade-A">A</span></td><td>n/a</td><td class="num">0</td><td class="num">0</td><td class="num">0</td><td class="num">0</td></tr>
+      <tr class="grade-row-A"><td>4</td><td>AI Development Tooling</td><td class="num">100%</td><td><span class="pill grade-A">A</span></td><td>n/a</td><td class="num">0</td><td class="num">0</td><td class="num">0</td><td class="num">0</td></tr>
+      <tr class="grade-row-A"><td>5</td><td>Spec-Driven Development</td><td class="num">92%</td><td><span class="pill grade-A">A</span></td><td>n/a</td><td class="num">0</td><td class="num">1</td><td class="num">0</td><td class="num">0</td></tr>
+      <tr class="grade-row-C"><td>6</td><td>Code Architecture</td><td class="num">71%</td><td><span class="pill grade-C">C</span></td><td>n/a</td><td class="num">0</td><td class="num">1</td><td class="num">1</td><td class="num">0</td></tr>
+      <tr class="grade-row-A"><td>7</td><td>Software Best Practices</td><td class="num">91%</td><td><span class="pill grade-A">A</span></td><td>n/a</td><td class="num">0</td><td class="num">1</td><td class="num">2</td><td class="num">1</td></tr>
+      <tr class="grade-row-A"><td>8</td><td>End-to-End Delivery</td><td class="num">100%</td><td><span class="pill grade-A">A</span></td><td>n/a</td><td class="num">0</td><td class="num">0</td><td class="num">0</td><td class="num">0</td></tr>
+    </tbody>
+  </table>
+
+  <h2>Per-Dimension Details</h2>
+
+  <details open data-all-clear="true">
+    <summary>1. Project Topology <span class="dim-score">100% <span class="grade-badge grade-A">A</span></span></summary>
+    <div class="body">
+      <table>
+        <thead><tr><th>#</th><th>Check</th><th>Severity</th><th>Status</th><th>Evidence</th></tr></thead>
+        <tbody>
+          <tr data-status="PASS"><td>1</td><td>TOPO-01: Repository structure type</td><td><span class="pill sev-medium">medium</span></td><td><span class="pill status-PASS">PASS</span></td><td>Single <code>package.json</code> with subpath exports; no runnable service entry point — classified as library.</td></tr>
+          <tr data-status="PASS"><td>2</td><td>TOPO-02: Application layer inventory</td><td><span class="pill sev-medium">medium</span></td><td><span class="pill status-PASS">PASS</span></td><td>4 library modules under <code>src/</code>: <code>core</code>, <code>parser</code>, <code>di</code>, <code>compiler</code>.</td></tr>
+          <tr data-status="SKIP"><td>3</td><td>TOPO-03: Database and storage detection</td><td><span class="pill sev-medium">medium</span></td><td><span class="pill status-SKIP">SKIP</span></td><td>No ORM, no migrations, no DB client deps — pure in-memory library.</td></tr>
+          <tr data-status="SKIP"><td>4</td><td>TOPO-04: Infrastructure layer detection</td><td><span class="pill sev-medium">medium</span></td><td><span class="pill status-SKIP">SKIP</span></td><td>No Dockerfile, k8s, or Terraform — only <code>.github/workflows/ci.yml</code>.</td></tr>
+          <tr data-status="PASS"><td>5</td><td>TOPO-05: Language inventory</td><td><span class="pill sev-medium">medium</span></td><td><span class="pill status-PASS">PASS</span></td><td>TypeScript only (35 <code>.ts</code> source + 1 config), 2 <code>.mjs</code> build configs, 81 <code>.md</code> docs.</td></tr>
+          <tr data-status="SKIP"><td>6</td><td>TOPO-06: Inter-layer communication patterns</td><td><span class="pill sev-medium">medium</span></td><td><span class="pill status-SKIP">SKIP</span></td><td>Single-layer library — in-process TS imports via path aliases.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </details>
+
+  <details open>
+    <summary>2. Documentation Quality <span class="dim-score">93.75% <span class="grade-badge grade-A">A</span></span></summary>
+    <div class="body">
+      <table>
+        <thead><tr><th>#</th><th>Check</th><th>Severity</th><th>Status</th><th>Evidence</th></tr></thead>
+        <tbody>
+          <tr data-status="PASS"><td>1</td><td>DOC-01: Root README exists and is useful</td><td><span class="pill sev-critical">critical</span></td><td><span class="pill status-PASS">PASS</span></td><td>119-line <code>README.md</code> with install/test/typecheck/build commands, structure, license.</td></tr>
+          <tr data-status="PASS"><td>2</td><td>DOC-02: Module-level READMEs exist</td><td><span class="pill sev-high">high</span></td><td><span class="pill status-PASS">PASS</span></td><td>All four subpaths (<code>core</code>, <code>parser</code>, <code>di</code>, <code>compiler</code>) have a README with entry points and invariants.</td></tr>
+          <tr data-status="PASS"><td>3</td><td>DOC-03: API documentation is available</td><td><span class="pill sev-high">high</span></td><td><span class="pill status-PASS">PASS</span></td><td>211 TSDoc blocks across 14 source files; typed <code>.d.ts</code> ships via <code>package.json</code>. No TypeDoc site (minor, not a gap).</td></tr>
+          <tr data-status="WARN"><td>4</td><td>DOC-04: No stale documentation</td><td><span class="pill sev-medium">medium</span></td><td><span class="pill status-WARN">WARN</span></td><td>One stale claim: <code>README.md:108</code> says "883 tests across 6 test files" — actual is 16 test files / 883 tests.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </details>
+
+  <details open data-all-clear="true">
+    <summary>3. Security Guardrails <span class="dim-score">100% <span class="grade-badge grade-A">A</span></span></summary>
+    <div class="body">
+      <table>
+        <thead><tr><th>#</th><th>Check</th><th>Severity</th><th>Status</th><th>Evidence</th></tr></thead>
+        <tbody>
+          <tr data-status="PASS"><td>1</td><td>SEC-01: <code>.env</code> files are gitignored and not tracked</td><td><span class="pill sev-critical">critical</span></td><td><span class="pill status-PASS">PASS</span></td><td><code>.gitignore:76-77</code> includes <code>.env</code> and <code>.env.test</code>; zero tracked env files.</td></tr>
+          <tr data-status="PASS"><td>2</td><td>SEC-02: AI agent hooks restrict access to sensitive files</td><td><span class="pill sev-critical">critical</span></td><td><span class="pill status-PASS">PASS</span></td><td><code>.claude/settings.json</code> PreToolUse hook <code>block-sensitive.sh</code> actively denies <code>.env*</code>, <code>*.pem</code>, <code>*.key</code>, <code>credentials*</code>, <code>secret*</code>, <code>*.p12</code>, <code>*.pfx</code>, SSH keys, <code>.kubeconfig</code>, <code>service-account*.json</code>. Verified blocking live.</td></tr>
+          <tr data-status="SKIP"><td>3</td><td>SEC-03: <code>.env.example</code> exists when needed</td><td><span class="pill sev-high">high</span></td><td><span class="pill status-SKIP">SKIP</span></td><td>No <code>process.env</code> usage in source — pure library, no runtime env vars.</td></tr>
+          <tr data-status="PASS"><td>4</td><td>SEC-04: No secrets in committed files</td><td><span class="pill sev-critical">critical</span></td><td><span class="pill status-PASS">PASS</span></td><td>Zero matches for API keys, tokens, AKIA, or private-key headers across 132 tracked files.</td></tr>
+          <tr data-status="PASS"><td>5</td><td>SEC-05: Sensitive-file patterns in <code>.gitignore</code></td><td><span class="pill sev-high">high</span></td><td><span class="pill status-PASS">PASS</span></td><td><code>.env*</code>, <code>node_modules/</code>, <code>dist</code>, <code>coverage</code>, <code>*.log</code>, <code>.DS_Store</code> all covered.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </details>
+
+  <details open data-all-clear="true">
+    <summary>4. AI Development Tooling <span class="dim-score">100% <span class="grade-badge grade-A">A</span></span></summary>
+    <div class="body">
+      <table>
+        <thead><tr><th>#</th><th>Check</th><th>Severity</th><th>Status</th><th>Evidence</th></tr></thead>
+        <tbody>
+          <tr data-status="PASS"><td>1</td><td>AI-01: CLAUDE.md ecosystem provides adequate AI context</td><td><span class="pill sev-critical">critical</span></td><td><span class="pill status-PASS">PASS</span></td><td>66-line root <code>CLAUDE.md</code> covers purpose, commands, module map, invariants, conventions, spec workflow, "Where to look when…" index.</td></tr>
+          <tr data-status="PASS"><td>2</td><td>AI-02: Custom slash commands exist</td><td><span class="pill sev-medium">medium</span></td><td><span class="pill status-PASS">PASS</span></td><td>9 AWOS commands in <code>.claude/commands/awos/</code>.</td></tr>
+          <tr data-status="PASS"><td>3</td><td>AI-03: Skills are configured</td><td><span class="pill sev-low">low</span></td><td><span class="pill status-PASS">PASS</span></td><td>3 project skills: <code>docs-that-work</code>, <code>gha-diagnosis</code>, <code>typescript-development</code>.</td></tr>
+          <tr data-status="PASS"><td>4</td><td>AI-04: MCP servers configured</td><td><span class="pill sev-low">low</span></td><td><span class="pill status-PASS">PASS</span></td><td><code>.mcp.json</code> declares <code>awos-recruitment</code>.</td></tr>
+          <tr data-status="PASS"><td>5</td><td>AI-05: Hooks are configured</td><td><span class="pill sev-low">low</span></td><td><span class="pill status-PASS">PASS</span></td><td>PreToolUse <code>block-sensitive.sh</code> + PostToolUse <code>pnpm run format &amp;&amp; pnpm run lint:fix</code>.</td></tr>
+          <tr data-status="PASS"><td>6</td><td>AI-06: CLAUDE.md files are meaningful and well-structured</td><td><span class="pill sev-high">high</span></td><td><span class="pill status-PASS">PASS</span></td><td>66 lines (well under 200); passes "would removing this cause mistakes?" test per line.</td></tr>
+          <tr data-status="PASS"><td>7</td><td>AI-07: Agent can run and observe the application</td><td><span class="pill sev-critical">critical</span></td><td><span class="pill status-PASS">PASS</span></td><td>Library project — <code>pnpm test/typecheck/lint/format/build</code> invokable via Bash.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </details>
+
+  <details open>
+    <summary>5. Spec-Driven Development <span class="dim-score">92% <span class="grade-badge grade-A">A</span></span></summary>
+    <div class="body">
+      <table>
+        <thead><tr><th>#</th><th>Check</th><th>Severity</th><th>Status</th><th>Evidence</th></tr></thead>
+        <tbody>
+          <tr data-status="PASS"><td>1</td><td>SDD-01: AWOS installed and set up</td><td><span class="pill sev-critical">critical</span></td><td><span class="pill status-PASS">PASS</span></td><td><code>.awos/commands/</code> 9 files; <code>.claude/commands/awos/</code> 9 wrappers; <code>context/product/</code> + <code>context/spec/</code> populated.</td></tr>
+          <tr data-status="PASS"><td>2</td><td>SDD-02: Product context documents complete</td><td><span class="pill sev-high">high</span></td><td><span class="pill status-PASS">PASS</span></td><td>product-definition.md, roadmap.md (6 phases), architecture.md (5 sections) all substantive.</td></tr>
+          <tr data-status="WARN"><td>3</td><td>SDD-03: Architecture doc reflects codebase reality</td><td><span class="pill sev-high">high</span></td><td><span class="pill status-WARN">WARN</span></td><td>architecture.md §5 declares <strong>Husky + lint-staged</strong> and <strong>TypeDoc</strong> — neither is in <code>package.json</code> or <code>.husky/</code>.</td></tr>
+          <tr data-status="PASS"><td>4</td><td>SDD-04: Features implemented through specs</td><td><span class="pill sev-critical">critical</span></td><td><span class="pill status-PASS">PASS</span></td><td>14/14 (100%) <code>feat:</code> commits in last 6 months reference a spec number.</td></tr>
+          <tr data-status="PASS"><td>5</td><td>SDD-05: Spec directories structurally complete</td><td><span class="pill sev-high">high</span></td><td><span class="pill status-PASS">PASS</span></td><td>11/11 (100%) spec dirs contain the full AWOS triad.</td></tr>
+          <tr data-status="PASS"><td>6</td><td>SDD-06: No stale or abandoned specs</td><td><span class="pill sev-medium">medium</span></td><td><span class="pill status-PASS">PASS</span></td><td>10 Completed + 1 Draft (spec 011, fresh same-day add).</td></tr>
+          <tr data-status="PASS"><td>7</td><td>SDD-07: Meaningful agent assignments</td><td><span class="pill sev-medium">medium</span></td><td><span class="pill status-PASS">PASS</span></td><td>326/395 (82.5%) sub-tasks annotated; routing matches CLAUDE.md convention.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </details>
+
+  <details open>
+    <summary>6. Code Architecture <span class="dim-score">71% <span class="grade-badge grade-C">C</span></span></summary>
+    <div class="body">
+      <table>
+        <thead><tr><th>#</th><th>Check</th><th>Severity</th><th>Status</th><th>Evidence</th></tr></thead>
+        <tbody>
+          <tr data-status="PASS"><td>1</td><td>ARCH-01: Declared or recognizable architectural pattern</td><td><span class="pill sev-high">high</span></td><td><span class="pill status-PASS">PASS</span></td><td>Modular library: <code>CLAUDE.md</code> + <code>package.json</code> exports map; each module has an <code>index.ts</code> barrel; path aliases.</td></tr>
+          <tr data-status="WARN"><td>2</td><td>ARCH-02: Module boundaries are respected</td><td><span class="pill sev-high">high</span></td><td><span class="pill status-WARN">WARN</span></td><td>Direction correct (no <code>../</code> climbing). <strong>But 5 files bypass <code>@core/index</code></strong> and import from <code>@core/utils</code> directly: <code>parser/lexer.ts:10</code>, <code>parser/ast.ts:10</code>, <code>parser/interpreter.ts:10</code>, <code>di/annotate.ts:11</code>, <code>di/injector.ts:15</code>.</td></tr>
+          <tr data-status="PASS"><td>3</td><td>ARCH-03: Single Responsibility Principle in modules</td><td><span class="pill sev-medium">medium</span></td><td><span class="pill status-PASS">PASS</span></td><td>Four coherent modules; no god modules; no <code>utils/</code>/<code>helpers/</code> catch-all directories.</td></tr>
+          <tr data-status="SKIP"><td>4</td><td>ARCH-04: Separation of concerns across layers</td><td><span class="pill sev-high">high</span></td><td><span class="pill status-SKIP">SKIP</span></td><td>Library project — Skip-When rule applies.</td></tr>
+          <tr data-status="PASS"><td>5</td><td>ARCH-05: Consistent file and directory naming conventions</td><td><span class="pill sev-medium">medium</span></td><td><span class="pill status-PASS">PASS</span></td><td>All source files kebab-case; tests under <code>src/&lt;module&gt;/__tests__/*.test.ts</code>; barrels uniformly <code>index.ts</code>.</td></tr>
+          <tr data-status="FAIL"><td>6</td><td>ARCH-06: Reasonable file sizes</td><td><span class="pill sev-medium">medium</span></td><td><span class="pill status-FAIL">FAIL</span></td><td><strong>3 of 19 (15.8%)</strong> non-test source files exceed 500 lines, just over the 15% WARN ceiling: <code>src/core/scope.ts</code> (827), <code>src/di/module.ts</code> (776), <code>src/di/injector.ts</code> (734). Already listed as refactor candidates in CLAUDE.md.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </details>
+
+  <details open>
+    <summary>7. Software Best Practices <span class="dim-score">91% <span class="grade-badge grade-A">A</span></span></summary>
+    <div class="body">
+      <table>
+        <thead><tr><th>#</th><th>Check</th><th>Severity</th><th>Status</th><th>Evidence</th></tr></thead>
+        <tbody>
+          <tr data-status="PASS"><td>1</td><td>SBP-01: Linting configured and enforced</td><td><span class="pill sev-high">high</span></td><td><span class="pill status-PASS">PASS</span></td><td><code>eslint.config.mjs</code> with <code>strictTypeChecked</code>; CI gates on <code>pnpm lint</code>.</td></tr>
+          <tr data-status="WARN"><td>2</td><td>SBP-02: Formatting is automated</td><td><span class="pill sev-medium">medium</span></td><td><span class="pill status-WARN">WARN</span></td><td>Prettier configured + <code>format:check</code> in CI — but no pre-commit hook (no <code>.husky/</code>, no <code>lint-staged</code>).</td></tr>
+          <tr data-status="PASS"><td>3</td><td>SBP-03: Type safety is enforced</td><td><span class="pill sev-high">high</span></td><td><span class="pill status-PASS">PASS</span></td><td><code>strict: true</code> + <code>noUncheckedIndexedAccess: true</code>. Minor sub-issue: 4 <code>eslint-disable</code> directives lack the required <code>-- reason</code> justification.</td></tr>
+          <tr data-status="PASS"><td>4</td><td>SBP-04: Test infrastructure exists</td><td><span class="pill sev-critical">critical</span></td><td><span class="pill status-PASS">PASS</span></td><td>16 test files, 883 tests, 90% line-coverage gate in <code>vitest.config.ts</code>.</td></tr>
+          <tr data-status="WARN"><td>5</td><td>SBP-05: CI/CD pipeline exists</td><td><span class="pill sev-high">high</span></td><td><span class="pill status-WARN">WARN</span></td><td>CI runs install → lint → format:check → typecheck → test. <strong>No <code>build</code> stage</strong> — documented as known gap in CLAUDE.md.</td></tr>
+          <tr data-status="PASS"><td>6</td><td>SBP-06: Error handling patterns are consistent</td><td><span class="pill sev-high">high</span></td><td><span class="pill status-PASS">PASS</span></td><td>Six sampled catch sites in <code>scope.ts</code> all use <code>console.error('&lt;context&gt;:', e)</code> per the CLAUDE.md digest contract.</td></tr>
+          <tr data-status="WARN"><td>7</td><td>SBP-07: Dependencies are managed</td><td><span class="pill sev-medium">medium</span></td><td><span class="pill status-WARN">WARN</span></td><td><code>pnpm-lock.yaml</code> committed, <code>packageManager</code> pinned. No Renovate/Dependabot.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </details>
+
+  <details open data-all-clear="true">
+    <summary>8. End-to-End Delivery <span class="dim-score">100% <span class="grade-badge grade-A">A</span></span></summary>
+    <div class="body">
+      <table>
+        <thead><tr><th>#</th><th>Check</th><th>Severity</th><th>Status</th><th>Evidence</th></tr></thead>
+        <tbody>
+          <tr data-status="SKIP"><td>1</td><td>E2E-01: Cross-layer feature branches</td><td><span class="pill sev-high">high</span></td><td><span class="pill status-SKIP">SKIP</span></td><td>Single-service library.</td></tr>
+          <tr data-status="SKIP"><td>2</td><td>E2E-02: No layer-split branching</td><td><span class="pill sev-medium">medium</span></td><td><span class="pill status-SKIP">SKIP</span></td><td>Single-service library.</td></tr>
+          <tr data-status="PASS"><td>3</td><td>E2E-03: Spec-to-delivery traceability</td><td><span class="pill sev-high">high</span></td><td><span class="pill status-PASS">PASS</span></td><td>Bidirectional traceability verified on 3 sampled specs (006/009/010). 100/100 sampled tasks ticked. <code>tasks.md</code> co-modified with <code>src/</code> in same atomic commit.</td></tr>
+          <tr data-status="SKIP"><td>4</td><td>E2E-04: No orphaned artifacts</td><td><span class="pill sev-medium">medium</span></td><td><span class="pill status-SKIP">SKIP</span></td><td>Only one layer detected.</td></tr>
+          <tr data-status="SKIP"><td>5</td><td>E2E-05: Shared ownership enablers</td><td><span class="pill sev-medium">medium</span></td><td><span class="pill status-SKIP">SKIP</span></td><td>Single-service library.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </details>
+
+  <h2>Top Recommendations</h2>
+  <p style="color:var(--muted); font-size:13px; margin-top:-8px;">No P0 or P1 items (no Critical FAILs, no High FAILs, no Critical WARNs). All items below are P2 — improvements, not fixes.</p>
+  <table>
+    <thead>
+      <tr>
+        <th>#</th>
+        <th>Priority</th>
+        <th>Effort</th>
+        <th>Dimension</th>
+        <th>Recommendation</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr><td>1</td><td><span class="pill sev-medium">P2</span></td><td>Low</td><td>Documentation</td><td>Fix <code>README.md:108</code> — "6 test files" → "16 test files" (883 tests).</td></tr>
+      <tr><td>2</td><td><span class="pill sev-medium">P2</span></td><td>Low</td><td>Best Practices</td><td>Add <code>-- reason</code> to 4 bare <code>eslint-disable</code> directives (<code>src/core/utils.ts:91, 228, 256</code>; <code>utils.test.ts:1235</code>).</td></tr>
+      <tr><td>3</td><td><span class="pill sev-medium">P2</span></td><td>Low</td><td>Architecture</td><td>Route 5 <code>@core/utils</code> imports through <code>@core/index</code> (<code>parser/lexer.ts:10</code>, <code>parser/ast.ts:10</code>, <code>parser/interpreter.ts:10</code>, <code>di/annotate.ts:11</code>, <code>di/injector.ts:15</code>).</td></tr>
+      <tr><td>4</td><td><span class="pill sev-medium">P2</span></td><td>Low</td><td>SDD</td><td>Resolve phantom tooling in <code>architecture.md §5</code>: remove (or adopt) Husky + lint-staged and TypeDoc.</td></tr>
+      <tr><td>5</td><td><span class="pill sev-medium">P2</span></td><td>Low</td><td>Best Practices</td><td>Add <code>pnpm build</code> stage to <code>.github/workflows/ci.yml</code> (job already named "Lint, Test &amp; Build").</td></tr>
+      <tr><td>6</td><td><span class="pill sev-medium">P2</span></td><td>Low</td><td>Best Practices</td><td>Add <code>.github/dependabot.yml</code> for weekly devDependency updates.</td></tr>
+      <tr><td>7</td><td><span class="pill sev-medium">P2</span></td><td>Medium</td><td>Best Practices</td><td>Add <code>husky</code> + <code>lint-staged</code> (or <code>simple-git-hooks</code>) pre-commit hook.</td></tr>
+      <tr><td>8</td><td><span class="pill sev-medium">P2</span></td><td>High</td><td>Architecture</td><td>Refactor <code>scope.ts</code> (827) / <code>module.ts</code> (776) / <code>injector.ts</code> (734) under 500 lines. CLAUDE.md-tracked debt.</td></tr>
+    </tbody>
+  </table>
+
+  <footer class="foot">
+    Audit artifacts: <code>context/audits/2026-04-21/</code>
+    · 8 dimensions · 8 per-dimension markdown files + <code>report.md</code> + <code>recommendations.md</code> + this <code>report.html</code>
+  </footer>
+</div>
+
+<script>
+  function toggleIssuesOnly() {
+    const body = document.body;
+    const btn = document.getElementById('filterBtn');
+    const active = body.classList.toggle('issues-only');
+    btn.textContent = active ? 'Show all' : 'Show issues only';
+  }
+</script>
+
+</body>
+</html>

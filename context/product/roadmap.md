@@ -50,11 +50,22 @@ _The layer that connects the runtime to templates and the DOM._
 
 - [ ] **Expressions & Parser**
   - [x] **Expression Parser:** Implement a full expression parser supporting property access, method calls, operators, literals, and assignments and all the supported features of AngularJS 1.x, integration with scope.
-  - [ ] **One-Time Bindings:** Support `::` prefix for expressions that unwatch after stabilization.
-  - [ ] **Interpolation:** Implement `$interpolate` service for `{{expression}}` resolution in strings and templates.
+  - [x] **One-Time Bindings:** Support `::` prefix for expressions that unwatch after stabilization.
+  - [x] **Interpolation:** Implement `$interpolate` service for `{{expression}}` resolution in strings and templates.
+
+- [ ] **Security ($sce)**
+  - [ ] **$sce Service:** Implement Strict Contextual Escaping with `trustAsHtml`, `trustAsUrl`, `trustAsResourceUrl`, `trustAsJs`, `trustAsCss`, `getTrusted`, and the security contexts.
+  - [ ] **$interpolate Integration:** Wire the `trustedContext` parameter on `$interpolate` to `$sce.getTrusted(...)` — resolves the `TODO(spec-$sce)` marker in `src/interpolate/interpolate.ts` left by spec 011.
+  - [ ] **$sceProvider:** Support config-phase `enabled(value?)` to toggle strict mode.
+
+- [ ] **Exception Handling ($exceptionHandler)**
+  - [ ] **$exceptionHandler Service:** Default implementation that delegates to `console.error`; overridable via DI for custom logging / reporting.
+  - [ ] **Digest Integration:** Route watch, listener, `$evalAsync`, and `$applyAsync` exceptions through `$exceptionHandler` instead of the current inline `console.error` in `src/core/scope.ts` — resolves the runtime-error deferral from spec 011 §2.10.
+  - [ ] **$interpolate Integration:** Route render-time expression exceptions through `$exceptionHandler` when an interpolation fn is used inside a digest.
 
 - [ ] **Filters**
   - [ ] **Filter Registration & Pipeline:** Implement the filter system with `$filterProvider` and chained filter expressions.
+  - [ ] **Module DSL `.filter(name, factory)`:** Expose `.filter` on `createModule(...)` as a thin wrapper over `$filterProvider.register` — ng-module parity, shared registry, no duplicated state.
   - [ ] **Built-in Filters:** Implement core filters (`filter`, `orderBy`, `limitTo`, `currency`, `number`, `date`, `uppercase`, `lowercase`, `json`).
 
 - [ ] **Directives & DOM Compilation**
@@ -62,6 +73,8 @@ _The layer that connects the runtime to templates and the DOM._
   - [ ] **Linking (Pre & Post):** Implement the compile-link separation with pre-link and post-link functions.
   - [ ] **Transclusion:** Support basic and multi-slot transclusion.
   - [ ] **Template Loading:** Support inline templates and `templateUrl` with async loading.
+  - [ ] **Controllers ($controller):** Implement `$controller` service and `$controllerProvider.register` so named controllers can be instantiated by the compiler and bound to scopes.
+  - [ ] **Module DSL `.directive` / `.component` / `.controller`:** Expose `.directive(name, fn)`, `.component(name, def)` (AngularJS 1.5+ sugar), and `.controller(name, fn)` on `createModule(...)` as thin wrappers over `$compileProvider.directive` / `.component` and `$controllerProvider.register` — ng-module parity, shared registries, no duplicated state.
   - [ ] **Built-in Directives:** Implement `ng-if`, `ng-show`, `ng-hide`, `ng-repeat`, `ng-class`, `ng-style`, `ng-click`, `ng-bind`, `ng-switch`, `ng-include`.
 
 ---
@@ -98,7 +111,8 @@ _Features that complete the full framework experience._
 - [ ] **Animations**
   - [ ] **$animate Service:** Implement animation hooks for `enter`, `leave`, `move`, `addClass`, `removeClass`.
   - [ ] **CSS Animations:** Support CSS transition and keyframe-based animations triggered by directive lifecycle.
-  - [ ] **JavaScript Animations:** Support programmatic animation definitions via `.animation()`.
+  - [ ] **JavaScript Animations:** Support programmatic animation definitions via `$animateProvider.register`.
+  - [ ] **Module DSL `.animation(name, fn)`:** Expose `.animation` on `createModule(...)` as a thin wrapper over `$animateProvider.register` — ng-module parity, shared registry, no duplicated state.
 
 - [ ] **Package & Distribution**
   - [ ] **npm Package:** Bundle and publish as an installable npm package with full TypeScript type declarations.
@@ -115,11 +129,16 @@ _Features that complete the full framework experience._
 
 _A final milestone that wraps the entire ES-module-first framework under a classic `angular` namespace, providing a familiar surface for developers migrating from original AngularJS 1.x._
 
-Throughout Phases 0–4, every feature is built and exposed as ES module named exports (`Scope`, `parse`, `createModule`, `createInjector`, `$http`, etc.) — there is no global `angular` object during development. This final phase adds a compatibility layer that wraps all of those APIs under a single `angular` constant so that code written against the classic AngularJS 1.x API can run with minimal changes._
+Throughout Phases 0–4, every feature is built and exposed as ES module named exports (`Scope`, `parse`, `createModule`, `createInjector`, `$http`, etc.) — there is no global `angular` object during development. This final phase adds a compatibility layer that wraps all of those APIs under a single `angular` constant so that code written against the classic AngularJS 1.x API can run with minimal changes. The `createModule` DSL grows in-place during Phases 1–4 (each new registration method lands alongside its domain); `angular.module` in this phase is a thin alias over `createModule` / `getModule` and inherits the full DSL for free._
 
 - [ ] **`angular` Namespace Constant**
   - [ ] **Core helpers:** Expose `angular.isString`, `angular.isNumber`, `angular.isArray`, `angular.isObject`, `angular.isFunction`, `angular.isDefined`, `angular.equals`, `angular.copy`, `angular.forEach`, `angular.extend`, `angular.noop` — all delegating to the existing typed utility functions.
-  - [ ] **Module system:** `angular.module(name, requires?)` — thin wrapper over `createModule` / `getModule`.
+  - [ ] **Module system (`angular.module`):** `angular.module(name, requires?)` — thin wrapper over `createModule` / `getModule`, sharing the same module registry (no duplicate state). The returned module object exposes the full AngularJS 1.x DSL:
+    - `.provider`, `.factory`, `.service`, `.value`, `.constant`, `.decorator` — already available via `createModule` (spec 007–008).
+    - `.config`, `.run` — already available via `createModule` (spec 008).
+    - `.controller`, `.directive`, `.component`, `.filter` — wired into `createModule` during Phase 2 (alongside `$compileProvider`, `$controllerProvider`, `$filterProvider`); `angular.module` inherits them automatically.
+    - `.animation` — wired into `createModule` during Phase 4 (alongside `$animateProvider`); inherited automatically.
+    - `.info(infoObject?)` — **deferred**. Add if/when AngularJS 1.7+ module-info metadata is needed downstream; not in the initial parity surface.
   - [ ] **Injector:** `angular.injector(modules)` — thin wrapper over `createInjector`.
   - [ ] **Bootstrap:** `angular.bootstrap(element, modules, config?)` — DOM-based application startup using the existing injector and compiler.
   - [ ] **Element wrapper:** `angular.element` — a lightweight jqLite-style wrapper (or re-export jQuery if present).

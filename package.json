@@ -29,6 +29,11 @@
       "import": "./dist/esm/parser/index.mjs",
       "require": "./dist/cjs/parser/index.cjs",
       "types": "./dist/types/parser/index.d.ts"
+    },
+    "./interpolate": {
+      "import": "./dist/esm/interpolate/index.mjs",
+      "require": "./dist/cjs/interpolate/index.cjs",
+      "types": "./dist/types/interpolate/index.d.ts"
     }
   },
   "repository": "https://github.com/Mgrdich/my_own_angularjs.git",

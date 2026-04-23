@@ -21,6 +21,20 @@ export type InitWatchVal = typeof initWatchVal;
 export type WatchFn<R extends Record<string, unknown>, T> = (scope: Scope & R) => T;
 
 /**
+ * A {@link WatchFn} that carries the parser's classification flags as readonly
+ * properties. Produced by compiling a string expression via the parser; used
+ * by `$watch` to route constant/one-time expressions through the appropriate
+ * watch delegate (see `scope-watch-delegates.ts`).
+ *
+ * Function-form watch expressions have no flags and are the plain `WatchFn`.
+ */
+export type FlaggedWatchFn<R extends Record<string, unknown>, T> = WatchFn<R, T> & {
+  readonly oneTime: boolean;
+  readonly constant: boolean;
+  readonly literal: boolean;
+};
+
+/**
  * An expression that can be evaluated against a scope with typed registry `R`.
  *
  * Either a function (typed against `Scope & R`) or a string expression that

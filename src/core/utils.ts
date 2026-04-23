@@ -359,3 +359,18 @@ export function range(startOrEnd: number, end?: number, step?: number) {
 
   return result;
 }
+
+/**
+ * Stringify a value for interpolation output, matching AngularJS `toJson` parity:
+ * `null` / `undefined` render as `''`; strings pass through verbatim; numbers,
+ * booleans, and functions use `String(value)`; objects and arrays are serialized
+ * via `JSON.stringify`.
+ */
+export function toInterpolationString(value: unknown): string {
+  if (value === null || value === undefined) return '';
+  if (typeof value === 'string') return value;
+  if (typeof value === 'number' || typeof value === 'boolean' || typeof value === 'function') {
+    return String(value);
+  }
+  return JSON.stringify(value);
+}

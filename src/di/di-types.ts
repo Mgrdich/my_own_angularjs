@@ -55,6 +55,84 @@ export type ResolveDeps<Registry extends Record<string, unknown>, Deps extends r
 };
 
 /**
+ * Type-level registry mapping a module's literal `Name` to the typed shapes of
+ * its own run-phase `registry` and config-phase `config`.
+ *
+ * Framework and consumer modules augment this interface via declaration
+ * merging so that typed `config` / `run` overloads on a module with a
+ * `requires: ['other']` dependency can resolve `other`'s registries
+ * transitively at the type level — closing the "cross-module dep inference
+ * gap" without introducing a value-level registry lookup.
+ *
+ * Augmentation example (framework-internal `ng` module):
+ *
+ * ```ts
+ * declare module '@di/di-types' {
+ *   interface ModuleRegistry {
+ *     ng: {
+ *       registry: { $interpolate: InterpolateService };
+ *       config: { $interpolateProvider: $InterpolateProvider };
+ *     };
+ *   }
+ * }
+ * ```
+ *
+ * Modules that do not augment the interface contribute no keys — the typed
+ * overloads fall back to their untyped signature. Purely compile-time: no
+ * runtime cost.
+ */
+// eslint-disable-next-line @typescript-eslint/no-empty-object-type -- intentionally empty so consumers augment via declaration merging; a `Record<string, unknown>` index signature would swallow literal keys and defeat the lookup.
+export interface ModuleRegistry {}
+
+/**
+ * Resolve the config-phase registry contributed by a `requires` tuple. Each
+ * name in the tuple is looked up in {@link ModuleRegistry}; if the entry
+ * exists and carries a `config` shape, that shape is included. Results are
+ * intersected, so a module declaring `requires: ['core', 'ng']` sees the
+ * union of config keys from both required modules.
+ *
+ * Returns `{}` for empty or unknown `requires` — contributes no keys,
+ * preserving existing inference when a module has no dependencies.
+ */
+export type RequiredConfigRegistry<Requires extends readonly string[]> = Requires extends readonly [
+  infer Head extends string,
+  ...infer Tail extends readonly string[],
+]
+  ? ConfigOf<Head> & RequiredConfigRegistry<Tail>
+  : // eslint-disable-next-line @typescript-eslint/no-empty-object-type -- empty terminal for type intersection: contributes no keys, same rationale as the `{}` starting state on `Module`.
+    {};
+
+type ConfigOf<Name extends string> = Name extends keyof ModuleRegistry
+  ? ModuleRegistry[Name] extends { config: infer C extends Record<string, unknown> }
+    ? C
+    : // eslint-disable-next-line @typescript-eslint/no-empty-object-type -- module augmented without a `config` key contributes no config entries.
+      {}
+  : // eslint-disable-next-line @typescript-eslint/no-empty-object-type -- unknown / un-augmented module name contributes no config entries.
+    {};
+
+/**
+ * Resolve the run-phase registry contributed by a `requires` tuple. Symmetric
+ * to {@link RequiredConfigRegistry} but reads the `registry` entry of each
+ * augmented module. Used by the typed `run` overload to let run blocks
+ * reference services from required modules with full inference.
+ */
+export type RequiredRunRegistry<Requires extends readonly string[]> = Requires extends readonly [
+  infer Head extends string,
+  ...infer Tail extends readonly string[],
+]
+  ? RegistryOf<Head> & RequiredRunRegistry<Tail>
+  : // eslint-disable-next-line @typescript-eslint/no-empty-object-type -- see RequiredConfigRegistry terminal rationale.
+    {};
+
+type RegistryOf<Name extends string> = Name extends keyof ModuleRegistry
+  ? ModuleRegistry[Name] extends { registry: infer R extends Record<string, unknown> }
+    ? R
+    : // eslint-disable-next-line @typescript-eslint/no-empty-object-type -- module augmented without a `registry` key contributes no run-phase entries.
+      {}
+  : // eslint-disable-next-line @typescript-eslint/no-empty-object-type -- unknown / un-augmented module name contributes no run-phase entries.
+    {};
+
+/**
  * A provider registered as a constructor function. The provider is
  * instantiated via `new P()` at load time (or `new P(...deps)` for the
  * array-style form). The instance must carry a `$get` method that the
