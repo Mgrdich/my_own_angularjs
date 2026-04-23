@@ -5,7 +5,6 @@ import { createInjector } from '@di/injector';
 import { createModule, resetRegistry } from '@di/module';
 import { createInterpolate } from '@interpolate/interpolate';
 import { $InterpolateProvider } from '@interpolate/interpolate-provider';
-import type { InterpolateFn } from '@interpolate/interpolate-types';
 
 describe('$interpolate DI integration — Slice 5', () => {
   // The `ng` module is registered at import time; a `resetRegistry()` in a
