@@ -155,9 +155,7 @@ export class Scope {
     // matches a function-form watcher (e.g. `InterpolateFn`) that advertises
     // `.oneTime === true` without exposing `.literal` at all, which is the
     // canonical non-literal one-time case.
-    if (
-      (watchFnCompiled as { oneTime?: boolean }).oneTime && !(watchFnCompiled as { literal?: boolean }).literal
-    ) {
+    if ((watchFnCompiled as { oneTime?: boolean }).oneTime && !(watchFnCompiled as { literal?: boolean }).literal) {
       return oneTimeWatchDelegate(this, watchFnCompiled, listenerFn ?? noop, valueEq ?? false);
     }
 
@@ -165,9 +163,7 @@ export class Scope {
     // through the literal one-time delegate: stability requires every
     // top-level element/property to be non-undefined, not merely the outer
     // literal reference (which is always freshly allocated and thus defined).
-    if (
-      (watchFnCompiled as { oneTime?: boolean }).oneTime && (watchFnCompiled as { literal?: boolean }).literal
-    ) {
+    if ((watchFnCompiled as { oneTime?: boolean }).oneTime && (watchFnCompiled as { literal?: boolean }).literal) {
       return oneTimeLiteralWatchDelegate(this, watchFnCompiled, listenerFn ?? noop, valueEq ?? false);
     }
 
