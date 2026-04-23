@@ -44,8 +44,7 @@ export function isConstant(node: ASTNode): boolean {
     case 'ConditionalExpression':
       return isConstant(node.test) && isConstant(node.consequent) && isConstant(node.alternate);
     default: {
-      const _exhaustive: never = node;
-      return _exhaustive;
+      return node;
     }
   }
 }
@@ -54,7 +53,7 @@ export function isConstant(node: ASTNode): boolean {
  * Returns `true` when the program's top-level body is a literal value
  * (primitive, array, or object) — non-recursive.
  */
-export function isLiteral(program: Program): boolean {
+export function isLiteral(program: Program) {
   const { type } = program.body;
   return type === 'Literal' || type === 'ArrayExpression' || type === 'ObjectExpression';
 }

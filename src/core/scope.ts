@@ -142,7 +142,7 @@ export class Scope {
 
     // Route constant expressions through the one-shot delegate: the value
     // can never change, so the listener only needs to fire once.
-    if ((watchFnCompiled as { constant?: boolean }).constant === true) {
+    if ((watchFnCompiled as { constant?: boolean }).constant) {
       return constantWatchDelegate(this, watchFnCompiled, listenerFn ?? noop, valueEq ?? false);
     }
 
@@ -156,8 +156,7 @@ export class Scope {
     // `.oneTime === true` without exposing `.literal` at all, which is the
     // canonical non-literal one-time case.
     if (
-      (watchFnCompiled as { oneTime?: boolean }).oneTime === true &&
-      (watchFnCompiled as { literal?: boolean }).literal !== true
+      (watchFnCompiled as { oneTime?: boolean }).oneTime && !(watchFnCompiled as { literal?: boolean }).literal
     ) {
       return oneTimeWatchDelegate(this, watchFnCompiled, listenerFn ?? noop, valueEq ?? false);
     }
@@ -167,8 +166,7 @@ export class Scope {
     // top-level element/property to be non-undefined, not merely the outer
     // literal reference (which is always freshly allocated and thus defined).
     if (
-      (watchFnCompiled as { oneTime?: boolean }).oneTime === true &&
-      (watchFnCompiled as { literal?: boolean }).literal === true
+      (watchFnCompiled as { oneTime?: boolean }).oneTime && (watchFnCompiled as { literal?: boolean }).literal
     ) {
       return oneTimeLiteralWatchDelegate(this, watchFnCompiled, listenerFn ?? noop, valueEq ?? false);
     }

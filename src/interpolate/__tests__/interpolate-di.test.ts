@@ -86,21 +86,21 @@ describe('$interpolate DI integration — Slice 5', () => {
     it('preserves the .oneTime flag on the compiled InterpolateFn', () => {
       const injector = createInjector([ngModule]);
       const service = injector.get('$interpolate');
-      const fn: InterpolateFn = service('Hello {{::name}}');
+      const fn = service('Hello {{::name}}');
       expect(fn.oneTime).toBe(true);
     });
 
     it('.oneTime is false for a non-one-time template resolved via DI', () => {
       const injector = createInjector([ngModule]);
       const service = injector.get('$interpolate');
-      const fn: InterpolateFn = service('Hello {{name}}');
+      const fn = service('Hello {{name}}');
       expect(fn.oneTime).toBe(false);
     });
 
     it('exposes .exp and .expressions on the compiled fn', () => {
       const injector = createInjector([ngModule]);
       const service = injector.get('$interpolate');
-      const fn: InterpolateFn = service('{{a}} and {{b}}');
+      const fn = service('{{a}} and {{b}}');
       expect(fn.exp).toBe('{{a}} and {{b}}');
       expect(fn.expressions).toEqual(['a', 'b']);
     });
