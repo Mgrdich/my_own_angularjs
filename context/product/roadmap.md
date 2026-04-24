@@ -87,7 +87,17 @@ _The layer that connects the runtime to templates and the DOM._
   - [ ] **Template Loading:** Support inline templates and `templateUrl` with async loading.
   - [ ] **Controllers ($controller):** Implement `$controller` service and `$controllerProvider.register` so named controllers can be instantiated by the compiler and bound to scopes.
   - [ ] **Module DSL `.directive` / `.component` / `.controller`:** Expose `.directive(name, fn)`, `.component(name, def)` (AngularJS 1.5+ sugar), and `.controller(name, fn)` on `createModule(...)` as thin wrappers over `$compileProvider.directive` / `.component` and `$controllerProvider.register` — ng-module parity, shared registries, no duplicated state.
-  - [ ] **Built-in Directives:** Implement `ng-if`, `ng-show`, `ng-hide`, `ng-repeat`, `ng-class`, `ng-style`, `ng-click`, `ng-bind`, `ng-switch`, `ng-include`.
+  - [ ] **Built-in Directives:** Implement the full AngularJS 1.x core-directive surface (sourced from `angular/angular.js/src/ng/directive/*`). Form-element directives (`form`, `input`, `select`, `textarea`) and `ng-model` live under Forms & Validation in Phase 3.
+    - [ ] **Structural / flow control:** `ng-if`, `ng-repeat`, `ng-switch` (plus `ng-switch-when`, `ng-switch-default`), `ng-include`, `ng-transclude`, `ng-init`, `ng-controller`.
+    - [ ] **Visibility:** `ng-show`, `ng-hide`, `ng-cloak`.
+    - [ ] **Binding:** `ng-bind`, `ng-bind-template`, `ng-bind-html` (delegates to `$sce.getTrustedHtml`; falls back to `$sanitize` when `ngSanitize` is loaded), `ng-non-bindable`.
+    - [ ] **Class / style:** `ng-class`, `ng-class-even`, `ng-class-odd`, `ng-style`.
+    - [ ] **Attribute helpers (interpolation-safe booleans and URLs):** `ng-href`, `ng-src`, `ng-srcset`, `ng-disabled`, `ng-checked`, `ng-readonly`, `ng-selected`, `ng-open`.
+    - [ ] **Mouse events:** `ng-click`, `ng-dblclick`, `ng-mousedown`, `ng-mouseup`, `ng-mouseover`, `ng-mouseout`, `ng-mousemove`, `ng-mouseenter`, `ng-mouseleave`.
+    - [ ] **Keyboard events:** `ng-keydown`, `ng-keyup`, `ng-keypress`.
+    - [ ] **Clipboard / focus / form-lifecycle events:** `ng-copy`, `ng-cut`, `ng-paste`, `ng-focus`, `ng-blur`, `ng-submit`.
+    - [ ] **Pluralization / i18n:** `ng-pluralize`.
+    - [ ] **CSP / template-cache / element overrides:** `ng-csp` (config-time CSP hint for the compiler), `ng-jq` (opt into a specific jqLite implementation), `ng-ref` (1.7+; publishes a controller reference onto scope), `script` (registers `<script type="text/ng-template">` in `$templateCache`), `a` (empty-`href` guard + target-attribute safety for the anchor element).
 
 - [ ] **Service Text Diagrams (Phase 2 wrap-up)**
   - [ ] **Per-service ASCII / text diagrams:** For each service shipped through Phase 2 (Scope & digest, Injector & module system, Parser, `$interpolate`, `$sce` / `$sceDelegate`, Filters, `$compile`, `$controller`, built-in directives), produce a text diagram that shows the inner working (collaborators and call order), the supported usage patterns (ES-module primary API vs. DI-layer API), and how to call the service from both paths (with minimal example snippets). Diagrams live under `context/diagrams/` (one file per service, kebab-case) and are linked from `CLAUDE.md` "Where to look when…".
@@ -116,8 +126,10 @@ _High-level services that enable real application development._
 
 - [ ] **Forms & Validation**
   - [ ] **ngModel:** Implement two-way data binding for form elements with `$viewValue` / `$modelValue` pipeline.
+  - [ ] **Form-element directives:** Implement `form` and `ng-form` (nested-form support), `input` (with every HTML5 type: `text`, `number`, `email`, `url`, `date`, `datetime-local`, `time`, `week`, `month`, `radio`, `checkbox`, `range`, `hidden`, `button`, `submit`, `reset`), `select`, `textarea`. Each form element registers itself with the enclosing `FormController`.
+  - [ ] **ngModel helpers:** Implement `ng-model-options` (debounce, `updateOn`, `getterSetter`, timezone, etc.), `ng-options` (typed `<option>` generation for `<select>`), `ng-list` (comma-separated-list viewValue ↔ array modelValue transformation), `ng-change` (on-`$viewValue`-change callback).
   - [ ] **Form & NgModelController:** Implement `$dirty`, `$pristine`, `$valid`, `$invalid`, `$touched`, `$untouched` state tracking.
-  - [ ] **Built-in Validators:** Implement `required`, `minlength`, `maxlength`, `pattern`, `email`, `number`, `url`.
+  - [ ] **Built-in Validators:** Implement `required` (also available as the `ng-required` attribute directive), `minlength`, `maxlength`, `pattern`, `email`, `number`, `url`.
   - [ ] **Custom Validators:** Support `$validators` and `$asyncValidators` pipeline.
 
 ---
