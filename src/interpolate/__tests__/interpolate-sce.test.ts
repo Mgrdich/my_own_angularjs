@@ -17,7 +17,6 @@ import { createInjector } from '@di/injector';
 import { createModule, resetRegistry } from '@di/module';
 import { createInterpolate } from '@interpolate/interpolate';
 import { $InterpolateProvider } from '@interpolate/interpolate-provider';
-import type { InterpolateService } from '@interpolate/interpolate-types';
 import { sce } from '@sce/sce';
 import type { SceContext, SceService } from '@sce/sce-types';
 import { $SceDelegateProvider } from '@sce/sce-delegate-provider';
@@ -35,7 +34,7 @@ describe('$interpolate ↔ $sce integration — Slice 6', () => {
 
     it('renders a single {{expr}} template in html context when the scope value is TrustedHtml', () => {
       const injector = createInjector([ngModule]);
-      const $interpolate = injector.get<InterpolateService>('$interpolate');
+      const $interpolate = injector.get('$interpolate');
       const $sce = injector.get<SceService>('$sce');
 
       const fn = $interpolate('{{trustedValue}}', false, 'html');
@@ -45,7 +44,7 @@ describe('$interpolate ↔ $sce integration — Slice 6', () => {
 
     it('throws at compile time when a trusted context has a literal prefix', () => {
       const injector = createInjector([ngModule]);
-      const $interpolate = injector.get<InterpolateService>('$interpolate');
+      const $interpolate = injector.get('$interpolate');
 
       expect(() => $interpolate('Hello {{trustedValue}}', false, 'html')).toThrow(
         /interpolations in trusted contexts must have exactly one \{\{expression\}\}/,
@@ -56,25 +55,25 @@ describe('$interpolate ↔ $sce integration — Slice 6', () => {
 
     it('throws at compile time when a trusted context has a literal suffix', () => {
       const injector = createInjector([ngModule]);
-      const $interpolate = injector.get<InterpolateService>('$interpolate');
+      const $interpolate = injector.get('$interpolate');
 
       expect(() => $interpolate('{{trustedValue}} suffix', false, 'html')).toThrow(
-        /interpolations in trusted contexts must have exactly one \{\{expression\}\}/,
+        /interpolations in trusted contexts must have exactly one \{\{expression}\}/,
       );
     });
 
     it('throws at compile time when a trusted context contains two adjacent expressions', () => {
       const injector = createInjector([ngModule]);
-      const $interpolate = injector.get<InterpolateService>('$interpolate');
+      const $interpolate = injector.get('$interpolate');
 
       expect(() => $interpolate('{{a}}{{b}}', false, 'html')).toThrow(
-        /interpolations in trusted contexts must have exactly one \{\{expression\}\}/,
+        /interpolations in trusted contexts must have exactly one \{\{expression}\}/,
       );
     });
 
     it('throws at compile time when a trusted context has multiple expressions separated by a literal', () => {
       const injector = createInjector([ngModule]);
-      const $interpolate = injector.get<InterpolateService>('$interpolate');
+      const $interpolate = injector.get('$interpolate');
 
       expect(() => $interpolate('{{a}} {{b}}', false, 'html')).toThrow(
         /interpolations in trusted contexts must have exactly one \{\{expression\}\}/,
@@ -83,7 +82,7 @@ describe('$interpolate ↔ $sce integration — Slice 6', () => {
 
     it('throws at render time when a plain (untrusted) string is used in an html context', () => {
       const injector = createInjector([ngModule]);
-      const $interpolate = injector.get<InterpolateService>('$interpolate');
+      const $interpolate = injector.get('$interpolate');
 
       const fn = $interpolate('{{x}}', false, 'html');
       expect(() => fn({ x: 'untrusted' })).toThrow(/html/);
@@ -91,7 +90,7 @@ describe('$interpolate ↔ $sce integration — Slice 6', () => {
 
     it('throws at render time when a mismatched trust wrapper is used in an html context', () => {
       const injector = createInjector([ngModule]);
-      const $interpolate = injector.get<InterpolateService>('$interpolate');
+      const $interpolate = injector.get('$interpolate');
       const $sce = injector.get<SceService>('$sce');
 
       const fn = $interpolate('{{x}}', false, 'html');
@@ -110,14 +109,14 @@ describe('$interpolate ↔ $sce integration — Slice 6', () => {
 
     it('allows a template with no expressions — literal text passes through untouched', () => {
       const injector = createInjector([ngModule]);
-      const $interpolate = injector.get<InterpolateService>('$interpolate');
+      const $interpolate = injector.get('$interpolate');
 
       expect($interpolate('Hello world', false, 'html')({})).toBe('Hello world');
     });
 
     it('allows an empty template (spec-011 behavior — empty string rendered)', () => {
       const injector = createInjector([ngModule]);
-      const $interpolate = injector.get<InterpolateService>('$interpolate');
+      const $interpolate = injector.get('$interpolate');
 
       // No expressions → compile-time single-binding check does not trigger;
       // renders to the literal empty string per spec-011.
@@ -142,7 +141,7 @@ describe('$interpolate ↔ $sce integration — Slice 6', () => {
         },
       ]);
       const injector = createInjector([appModule]);
-      const $interpolate = injector.get<InterpolateService>('$interpolate');
+      const $interpolate = injector.get('$interpolate');
 
       expect($interpolate('Hello {{name}}', false, 'html')({ name: 'Bob' })).toBe('Hello Bob');
     });
@@ -155,7 +154,7 @@ describe('$interpolate ↔ $sce integration — Slice 6', () => {
         },
       ]);
       const injector = createInjector([appModule]);
-      const $interpolate = injector.get<InterpolateService>('$interpolate');
+      const $interpolate = injector.get('$interpolate');
 
       expect($interpolate('{{a}} {{b}}', false, 'html')({ a: 1, b: 2 })).toBe('1 2');
     });
@@ -168,7 +167,7 @@ describe('$interpolate ↔ $sce integration — Slice 6', () => {
         },
       ]);
       const injector = createInjector([appModule]);
-      const $interpolate = injector.get<InterpolateService>('$interpolate');
+      const $interpolate = injector.get('$interpolate');
 
       expect($interpolate('{{x}}', false, 'html')({ x: 'plain' })).toBe('plain');
     });
@@ -185,14 +184,14 @@ describe('$interpolate ↔ $sce integration — Slice 6', () => {
 
     it('throws synchronously for an unrecognized context string', () => {
       const injector = createInjector([ngModule]);
-      const $interpolate = injector.get<InterpolateService>('$interpolate');
+      const $interpolate = injector.get('$interpolate');
 
       expect(() => $interpolate('{{x}}', false, 'bogus' as unknown as SceContext)).toThrow(/bogus/);
     });
 
     it('rejects the internal $$ANY$$ sentinel — not reachable via the façade', () => {
       const injector = createInjector([ngModule]);
-      const $interpolate = injector.get<InterpolateService>('$interpolate');
+      const $interpolate = injector.get('$interpolate');
 
       expect(() => $interpolate('{{x}}', false, '$$ANY$$' as unknown as SceContext)).toThrow(/\$\$ANY\$\$/);
     });
@@ -209,7 +208,7 @@ describe('$interpolate ↔ $sce integration — Slice 6', () => {
 
     it('mustHaveExpression wins on a literal-only trusted-context template (returns undefined, no throw)', () => {
       const injector = createInjector([ngModule]);
-      const $interpolate = injector.get<InterpolateService>('$interpolate');
+      const $interpolate = injector.get('$interpolate');
 
       // No expressions → the single-binding check does NOT fire (nothing to
       // sanitize), and mustHaveExpression=true short-circuits to `undefined`.
@@ -218,7 +217,7 @@ describe('$interpolate ↔ $sce integration — Slice 6', () => {
 
     it('allOrNothing=true with a defined trusted value renders the unwrapped value', () => {
       const injector = createInjector([ngModule]);
-      const $interpolate = injector.get<InterpolateService>('$interpolate');
+      const $interpolate = injector.get('$interpolate');
       const $sce = injector.get<SceService>('$sce');
 
       const fn = $interpolate('{{x}}', false, 'html', true);
@@ -227,7 +226,7 @@ describe('$interpolate ↔ $sce integration — Slice 6', () => {
 
     it('allOrNothing=true with an undefined scope value returns undefined (no render-time trust throw)', () => {
       const injector = createInjector([ngModule]);
-      const $interpolate = injector.get<InterpolateService>('$interpolate');
+      const $interpolate = injector.get('$interpolate');
 
       const fn = $interpolate('{{x}}', false, 'html', true);
       // `$sce.getTrusted` on `undefined` returns `undefined` (pass-through per
@@ -237,7 +236,7 @@ describe('$interpolate ↔ $sce integration — Slice 6', () => {
 
     it('one-time :: binding renders after the scope value is defined', () => {
       const injector = createInjector([ngModule]);
-      const $interpolate = injector.get<InterpolateService>('$interpolate');
+      const $interpolate = injector.get('$interpolate');
       const $sce = injector.get<SceService>('$sce');
 
       const fn = $interpolate('{{::x}}', false, 'html');
@@ -315,7 +314,7 @@ describe('$interpolate ↔ $sce integration — Slice 6', () => {
       ]);
       const injector = createInjector([appModule]);
       const $sce = injector.get<SceService>('$sce');
-      const $interpolate = injector.get<InterpolateService>('$interpolate');
+      const $interpolate = injector.get('$interpolate');
 
       expect($sce.isEnabled()).toBe(false);
       // Since strict is OFF, the single-binding check is bypassed and the
