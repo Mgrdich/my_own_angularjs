@@ -80,6 +80,14 @@ _The layer that connects the runtime to templates and the DOM._
 - [ ] **Service Text Diagrams (Phase 2 wrap-up)**
   - [ ] **Per-service ASCII / text diagrams:** For each service shipped through Phase 2 (Scope & digest, Injector & module system, Parser, `$interpolate`, `$sce` / `$sceDelegate`, Filters, `$compile`, `$controller`, built-in directives), produce a text diagram that shows the inner working (collaborators and call order), the supported usage patterns (ES-module primary API vs. DI-layer API), and how to call the service from both paths (with minimal example snippets). Diagrams live under `context/diagrams/` (one file per service, kebab-case) and are linked from `CLAUDE.md` "Where to look when…".
 
+- [ ] **Application Bootstrap**
+  - [ ] **`bootstrapInjector(modules, config?)`:** Headless DI-only bootstrap — creates the injector from `[ngModule, ...userModules]`, no DOM, no `$compile`. Ships ahead of the DOM compiler so tests, SSR, CLI tools, and learning exercises can drive the runtime without a browser. Default `strictDi: true` (ESM + TypeScript context makes explicit `$inject` annotations idiomatic).
+  - [ ] **`$rootScope` registration on `ngModule`:** Register `Scope.create()` as `$rootScope` via `.factory('$rootScope', () => Scope.create())` so `bootstrap` can resolve it and downstream services (`$watch` etc.) have a canonical root.
+  - [ ] **`bootstrap(element, modules, config?)`:** DOM bootstrap composing `bootstrapInjector` + `$compile(element)($rootScope)` + `$rootScope.$apply()`. Returns `{ injector, rootScope, rootElement }` — typed result object; no hidden global state, no mandatory DOM data attachment. Ships WITH `$compile` (depends on it). Optional `attachToElement: true` flag for AngularJS-parity consumers who want `element.data('$injector', injector)`.
+  - [ ] **`autoBootstrap(root?)` via `ng-app`:** Opt-in scanner that finds the first `ng-app` attribute in the subtree, resolves the named module, and calls `bootstrap`. Browser-only (no-op when `document` is unavailable). Honors the classic `ng-app`, `data-ng-app`, `ng:app`, `x-ng-app` prefix variants for migration parity.
+  - [ ] **Type-safe injector return:** `bootstrap` / `bootstrapInjector` generics over the `modules` tuple so `result.injector.get('$sce')` has the correct return type — reuses the existing `MergeRegistries` machinery from `@di/di-types`.
+  - [ ] **Module layout:** New `src/bootstrap/` subpath + `@bootstrap/*` alias + `./bootstrap` in `package.json` exports and `rollup.config.mjs` entries — mirrors the `./sce` / `./interpolate` pattern.
+
 ---
 
 ### Phase 3 — Services, HTTP & Forms
