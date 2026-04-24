@@ -6,12 +6,51 @@
  *   call. It renders the template against a context at invocation time.
  * - `InterpolateService` — the callable produced by `createInterpolate()` that
  *   compiles templates and exposes delimiter accessors.
+ *
+ * `trustedContext`-based enforcement (the narrowed `SceContext` parameter on
+ * the service overloads) is fully wired to `$sce` when the `sceGetTrusted` +
+ * `sceIsEnabled` callbacks on {@link InterpolateOptions} are supplied. The DI
+ * provider (`$InterpolateProvider.$get`) wires them through the `$sce`
+ * service automatically; pure-ESM consumers who want the same enforcement
+ * must supply them explicitly (see `createInterpolate` JSDoc for the
+ * recommended wiring).
+ *
+ * Graceful-degradation rule: if either callback is missing at the call site,
+ * `createInterpolate` accepts `trustedContext` but performs NO enforcement —
+ * the two callbacks are treated as independent and absence is interpreted as
+ * "no enforcement requested for this invocation" rather than a
+ * misconfiguration error. This matches the spec-011 / spec-010 precedent of
+ * silent graceful degradation and keeps consumers of the pure-ESM factory
+ * with no SCE wiring fully compatible.
  */
 
-/** Options accepted by `createInterpolate`. Omitted fields default to `{{` / `}}`. */
+import type { SceContext } from '@sce/sce-types';
+
+/**
+ * Options accepted by `createInterpolate`. Omitted fields default to `{{` /
+ * `}}` for the delimiters; omitted SCE callbacks default to "no enforcement".
+ *
+ * Supplying `sceIsEnabled` that returns `true` WITHOUT also supplying
+ * `sceGetTrusted` is NOT treated as a misconfiguration error — the factory
+ * silently skips enforcement because neither side of the trust contract can
+ * be upheld without a resolver. Supply both or omit both.
+ */
 export interface InterpolateOptions {
   readonly startSymbol?: string;
   readonly endSymbol?: string;
+  /**
+   * Callback used to unwrap a trusted value at render time. Typically
+   * `(ctx, v) => $sce.getTrusted(ctx, v)`. When omitted, interpolation
+   * accepts the `trustedContext` argument but performs no trust lookup.
+   */
+  readonly sceGetTrusted?: (ctx: SceContext, value: unknown) => unknown;
+  /**
+   * Callback used to query the current strict-mode flag. Typically
+   * `() => $sce.isEnabled()`. Returning `false` disables the compile-time
+   * single-binding check and the render-time `getTrusted` call even if
+   * `trustedContext` is supplied at invocation.
+   */
+  readonly sceIsEnabled?: () => boolean;
 }
 
 /**
@@ -49,10 +88,19 @@ export type InterpolateFn = ((context: Record<string, unknown>) => string | unde
  *   containing no expressions yield `undefined` so callers can skip binding.
  * - When `false` or omitted (the default), the service always returns an
  *   `InterpolateFn` — callers don't have to handle an `undefined` branch.
+ *
+ * `trustedContext` is narrowed to the published `SceContext` union (plus
+ * `undefined`); arbitrary strings are a type error at the call site and
+ * also a runtime error inside the service.
  */
 export type InterpolateService = {
-  (text: string, mustHaveExpression: true, trustedContext?: string, allOrNothing?: boolean): InterpolateFn | undefined;
-  (text: string, mustHaveExpression?: false, trustedContext?: string, allOrNothing?: boolean): InterpolateFn;
+  (
+    text: string,
+    mustHaveExpression: true,
+    trustedContext?: SceContext,
+    allOrNothing?: boolean,
+  ): InterpolateFn | undefined;
+  (text: string, mustHaveExpression?: false, trustedContext?: SceContext, allOrNothing?: boolean): InterpolateFn;
 } & {
   startSymbol(): string;
   endSymbol(): string;

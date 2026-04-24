@@ -6,7 +6,7 @@ It is NOT a copy-paste implementation guide.
 # Technical Specification: `$sce` — Strict Contextual Escaping
 
 - **Functional Specification:** [`context/spec/012-strict-contextual-escaping/functional-spec.md`](./functional-spec.md)
-- **Status:** Draft
+- **Status:** Completed
 - **Author(s):** Mgrdich
 
 ---

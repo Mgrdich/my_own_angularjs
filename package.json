@@ -34,6 +34,11 @@
       "import": "./dist/esm/interpolate/index.mjs",
       "require": "./dist/cjs/interpolate/index.cjs",
       "types": "./dist/types/interpolate/index.d.ts"
+    },
+    "./sce": {
+      "import": "./dist/esm/sce/index.mjs",
+      "require": "./dist/cjs/sce/index.cjs",
+      "types": "./dist/types/sce/index.d.ts"
     }
   },
   "repository": "https://github.com/Mgrdich/my_own_angularjs.git",

@@ -53,10 +53,10 @@ _The layer that connects the runtime to templates and the DOM._
   - [x] **One-Time Bindings:** Support `::` prefix for expressions that unwatch after stabilization.
   - [x] **Interpolation:** Implement `$interpolate` service for `{{expression}}` resolution in strings and templates.
 
-- [ ] **Security ($sce)**
-  - [ ] **$sce Service:** Implement Strict Contextual Escaping with `trustAsHtml`, `trustAsUrl`, `trustAsResourceUrl`, `trustAsJs`, `trustAsCss`, `getTrusted`, and the security contexts.
-  - [ ] **$interpolate Integration:** Wire the `trustedContext` parameter on `$interpolate` to `$sce.getTrusted(...)` — resolves the `TODO(spec-$sce)` marker in `src/interpolate/interpolate.ts` left by spec 011.
-  - [ ] **$sceProvider:** Support config-phase `enabled(value?)` to toggle strict mode.
+- [x] **Security ($sce)**
+  - [x] **$sce Service:** Implement Strict Contextual Escaping with `trustAsHtml`, `trustAsUrl`, `trustAsResourceUrl`, `trustAsJs`, `trustAsCss`, `getTrusted`, and the security contexts.
+  - [x] **$interpolate Integration:** Wire the `trustedContext` parameter on `$interpolate` to `$sce.getTrusted(...)` — resolves the `TODO(spec-$sce)` marker in `src/interpolate/interpolate.ts` left by spec 011.
+  - [x] **$sceProvider:** Support config-phase `enabled(value?)` to toggle strict mode.
 
 - [ ] **Exception Handling ($exceptionHandler)**
   - [ ] **$exceptionHandler Service:** Default implementation that delegates to `console.error`; overridable via DI for custom logging / reporting.

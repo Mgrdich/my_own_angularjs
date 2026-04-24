@@ -45,6 +45,7 @@ To create a complete, fully typed TypeScript reimplementation of AngularJS that 
 - **Scopes & Digest Cycle:** Full scope hierarchy, dirty checking, `$watch`, `$digest`, `$apply`, `$eval`, `$evalAsync`, `$applyAsync`, scope events (`$on`, `$emit`, `$broadcast`), and scope lifecycle.
 - **Dependency Injection:** Module system, providers, factories, services, constants, values, decorators, and the injector.
 - **Expressions & Filters:** Expression parser, interpolation, one-time bindings, and built-in filters.
+- **Security ($sce):** Strict Contextual Escaping for HTML, URL, resource-URL, JS, and CSS contexts. Ships two layered surfaces: the ESM-first `createSce` / `sce` (and `createSceDelegate` / `sceDelegate`) primary API with `trustAs*` / `getTrusted*` / `parseAs*` helpers, plus the DI-layer `$sce` / `$sceProvider` / `$sceDelegate` / `$sceDelegateProvider` thin shims on the `ng` module. Wires `$interpolate`'s `trustedContext` parameter and exposes a configurable resource-URL allow/block list.
 - **Directives & DOM Compilation:** Directive definition, compilation, linking (pre/post), transclusion, template loading, and built-in directives (`ng-if`, `ng-repeat`, `ng-class`, `ng-model`, etc.).
 - **HTTP & Networking:** `$http` service, interceptors, request/response transformations.
 - **Routing:** Route configuration, view management, route parameters, and navigation.

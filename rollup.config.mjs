@@ -22,6 +22,7 @@ const entries = [
   { name: 'parser/index', input: 'src/parser/index.ts' },
   { name: 'compiler/index', input: 'src/compiler/index.ts' },
   { name: 'interpolate/index', input: 'src/interpolate/index.ts' },
+  { name: 'sce/index', input: 'src/sce/index.ts' },
 ];
 
 // Path aliases declared in `tsconfig.json` are used across the codebase
@@ -35,6 +36,7 @@ const tsPathAliases = {
   '@parser/*': ['src/parser/*'],
   '@di/*': ['src/di/*'],
   '@interpolate/*': ['src/interpolate/*'],
+  '@sce/*': ['src/sce/*'],
 };
 
 const bundleConfigs = entries.map((entry) => ({

@@ -7,6 +7,8 @@ import { createModule, resetRegistry } from '@di/module';
 import { $InterpolateProvider } from '@interpolate/interpolate-provider';
 import { createInterpolate } from '@interpolate/interpolate';
 import type { InterpolateService } from '@interpolate/interpolate-types';
+import { $SceDelegateProvider } from '@sce/sce-delegate-provider';
+import { $SceProvider } from '@sce/sce-provider';
 
 /**
  * Slice 6 — `$watch` routing for function-form oneTime watchers.
@@ -177,11 +179,16 @@ describe('$interpolate + $watch integration — Slice 6', () => {
 
   describe('(f) DI-resolved $interpolate routes identically through oneTimeWatchDelegate', () => {
     beforeEach(() => {
-      // Re-register ngModule's $interpolate provider on a fresh registry so
-      // tests in this block are hermetic, matching the pattern in
-      // interpolate-di.test.ts.
+      // Re-register ngModule's provider chain on a fresh registry so tests in
+      // this block are hermetic, matching the pattern in
+      // interpolate-di.test.ts. Spec 012 slice 6 added a `$sce` dep on
+      // `$InterpolateProvider.$get`, so the `$sce` provider chain must also
+      // be registered for the injector to build `$interpolate`.
       resetRegistry();
-      createModule('ng', []).provider('$interpolate', $InterpolateProvider);
+      createModule('ng', [])
+        .provider('$sceDelegate', $SceDelegateProvider)
+        .provider('$sce', $SceProvider)
+        .provider('$interpolate', $InterpolateProvider);
     });
 
     it('(b) via DI — all-:: deregisters after stabilization', () => {
