@@ -25,3 +25,29 @@ export type {
 
 export { createInterpolate, interpolate } from './interpolate/index';
 export type { InterpolateFn, InterpolateOptions, InterpolateService } from './interpolate/index';
+
+export {
+  createSce,
+  sce,
+  createSceDelegate,
+  sceDelegate,
+  SCE_CONTEXTS,
+  TrustedValue,
+  TrustedHtml,
+  TrustedUrl,
+  TrustedResourceUrl,
+  TrustedJs,
+  TrustedCss,
+  isTrustedValue,
+  isTrustedFor,
+  isValidSceContext,
+} from './sce/index';
+export type {
+  SceContext,
+  SceService,
+  SceDelegateService,
+  SceOptions,
+  SceDelegateOptions,
+  ResourceUrlListEntry,
+  SceParsedFn,
+} from './sce/index';

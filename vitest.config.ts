@@ -8,6 +8,7 @@ export default defineConfig({
       '@parser': path.resolve(__dirname, 'src/parser'),
       '@di': path.resolve(__dirname, 'src/di'),
       '@interpolate': path.resolve(__dirname, 'src/interpolate'),
+      '@sce': path.resolve(__dirname, 'src/sce'),
     },
   },
   test: {

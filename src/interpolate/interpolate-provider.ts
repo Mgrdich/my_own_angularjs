@@ -8,11 +8,19 @@
  * Mirrors AngularJS 1.x `$interpolateProvider` — the two APIs are identical
  * from a user's perspective, just typed. The `$` prefix on the class name is
  * the AngularJS convention for built-in service providers.
+ *
+ * Since spec 012 slice 6, `$get` declares `$sce` as a dependency and wires
+ * the `sceGetTrusted` / `sceIsEnabled` callbacks into `createInterpolate` —
+ * the injector-produced service is fully trust-aware (single-binding rule
+ * and render-time `$sce.getTrusted` unwrapping). The pure-ESM factory
+ * (`createInterpolate()` with no options) remains trust-agnostic and
+ * performs no enforcement; that path is for consumers who opt out of SCE.
  */
 
-import { DEFAULT_END_SYMBOL, DEFAULT_START_SYMBOL, validateDelimiters } from './interpolate-delimiters';
 import { createInterpolate } from './interpolate';
+import { DEFAULT_END_SYMBOL, DEFAULT_START_SYMBOL, validateDelimiters } from './interpolate-delimiters';
 import type { InterpolateService } from './interpolate-types';
+import type { SceService } from '@sce/sce-types';
 
 export class $InterpolateProvider {
   // `$$` prefix mirrors the AngularJS "internal / not part of the public API"
@@ -59,12 +67,23 @@ export class $InterpolateProvider {
   }
 
   /**
-   * Injector-facing factory. Array-style invokable with no dependencies —
-   * the closure captures `this` via the bound method call so the symbols
-   * configured on the provider instance at `$get` time are the ones baked
-   * into the produced service.
+   * Injector-facing factory. Array-style invokable declaring `$sce` as its
+   * only dependency — the injector resolves the `$sce` service first (which
+   * in turn forces `$sceDelegate` to be built) and passes it in. The closure
+   * captures `this` via the arrow form so the symbols configured on the
+   * provider instance at `$get` time are the ones baked into the produced
+   * service, and the `$sce` callbacks are wired straight to the injected
+   * instance so strict-mode state configured via `$sceProvider.enabled(...)`
+   * is observed at render time.
    */
   $get = [
-    (): InterpolateService => createInterpolate({ startSymbol: this.$$startSymbol, endSymbol: this.$$endSymbol }),
+    '$sce',
+    ($sce: SceService): InterpolateService =>
+      createInterpolate({
+        startSymbol: this.$$startSymbol,
+        endSymbol: this.$$endSymbol,
+        sceGetTrusted: (ctx, v) => $sce.getTrusted(ctx, v),
+        sceIsEnabled: () => $sce.isEnabled(),
+      }),
   ] as const;
 }

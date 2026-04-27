@@ -1,28 +1,45 @@
 /**
  * `ng` — AngularJS-core DI module.
  *
- * Registers `$interpolate` (run-phase service) and `$interpolateProvider`
- * (config-phase provider) via the spec 008 `.provider()` recipe. This is the
- * first canonical registration point for future core services (`$sce`,
- * `$exceptionHandler`, `$filter`, `$http`, etc.) — each new spec will add
- * its `.provider(...)` call here.
+ * Registers the core run-phase services (`$sceDelegate`, `$sce`,
+ * `$interpolate`) and their config-phase providers (`$sceDelegateProvider`,
+ * `$sceProvider`, `$interpolateProvider`) via the spec 008 `.provider()`
+ * recipe. Registration order is informational — the actual instantiation
+ * order is driven by the DI dependency graph (`$sce` depends on
+ * `$sceDelegate`, `$interpolate` depends on `$sce`). Future specs add their
+ * `.provider(...)` call here.
  *
  * Consumers compose their own injector with `createInjector([ngModule, ...])`
- * and use `config(['$interpolateProvider', p => p.startSymbol('[[')])` to
- * customize delimiters before the run phase begins.
+ * and use `config(['$interpolateProvider', p => p.startSymbol('[[')])` or
+ * `config(['$sceProvider', p => p.enabled(false)])` to customize behavior
+ * before the run phase begins.
  */
 
 import { createModule } from '@di/module';
 import { $InterpolateProvider } from '@interpolate/interpolate-provider';
 import type { InterpolateService } from '@interpolate/interpolate-types';
+import { $SceDelegateProvider } from '@sce/sce-delegate-provider';
+import { $SceProvider } from '@sce/sce-provider';
+import type { SceDelegateService, SceService } from '@sce/sce-types';
 
 declare module '@di/di-types' {
   interface ModuleRegistry {
     ng: {
-      registry: { $interpolate: InterpolateService };
-      config: { $interpolateProvider: $InterpolateProvider };
+      registry: {
+        $interpolate: InterpolateService;
+        $sceDelegate: SceDelegateService;
+        $sce: SceService;
+      };
+      config: {
+        $interpolateProvider: $InterpolateProvider;
+        $sceDelegateProvider: $SceDelegateProvider;
+        $sceProvider: $SceProvider;
+      };
     };
   }
 }
 
-export const ngModule = createModule('ng', []).provider('$interpolate', $InterpolateProvider);
+export const ngModule = createModule('ng', [])
+  .provider('$sceDelegate', $SceDelegateProvider)
+  .provider('$sce', $SceProvider)
+  .provider('$interpolate', $InterpolateProvider);

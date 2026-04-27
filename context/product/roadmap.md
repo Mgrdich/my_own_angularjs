@@ -53,10 +53,22 @@ _The layer that connects the runtime to templates and the DOM._
   - [x] **One-Time Bindings:** Support `::` prefix for expressions that unwatch after stabilization.
   - [x] **Interpolation:** Implement `$interpolate` service for `{{expression}}` resolution in strings and templates.
 
-- [ ] **Security ($sce)**
-  - [ ] **$sce Service:** Implement Strict Contextual Escaping with `trustAsHtml`, `trustAsUrl`, `trustAsResourceUrl`, `trustAsJs`, `trustAsCss`, `getTrusted`, and the security contexts.
-  - [ ] **$interpolate Integration:** Wire the `trustedContext` parameter on `$interpolate` to `$sce.getTrusted(...)` — resolves the `TODO(spec-$sce)` marker in `src/interpolate/interpolate.ts` left by spec 011.
-  - [ ] **$sceProvider:** Support config-phase `enabled(value?)` to toggle strict mode.
+- [x] **Security ($sce)**
+  - [x] **$sce Service:** Implement Strict Contextual Escaping with `trustAsHtml`, `trustAsUrl`, `trustAsResourceUrl`, `trustAsJs`, `trustAsCss`, `getTrusted`, and the security contexts.
+  - [x] **$interpolate Integration:** Wire the `trustedContext` parameter on `$interpolate` to `$sce.getTrusted(...)` — resolves the `TODO(spec-$sce)` marker in `src/interpolate/interpolate.ts` left by spec 011.
+  - [x] **$sceProvider:** Support config-phase `enabled(value?)` to toggle strict mode.
+
+- [ ] **HTML Sanitization ($sanitize / ngSanitize)**
+  - [ ] **Separate `ngSanitize` module:** Ship as a dedicated module, NOT part of core `ng`. Mirrors AngularJS 1.x `angular-sanitize.js` packaging so apps that don't need sanitization don't pay for its parser tables or attack surface. New `src/sanitize/` subpath + `@sanitize/*` alias + `./sanitize` in `package.json` exports and `rollup.config.mjs` entries, following the `./sce` / `./interpolate` layout.
+  - [ ] **ESM-first `createSanitize` / `sanitize` factory:** Pure `(untrustedHtml: string) => string` pipeline with no DI dependency — usable standalone and via `$sanitize` DI registration. Follows the `createSce` / `sce` precedent.
+  - [ ] **`$sanitize` service + `$SanitizeProvider`:** DI-layer thin shim registered on `ngSanitize`; provider owns only the allow-list extensions (see below). `$get` depends on the ESM factory — zero duplicate logic.
+  - [ ] **HTML parser + tag allow-list:** Token-walker with a fixed whitelist of safe block/inline tags (`div`, `span`, `p`, `h1`–`h6`, `ul`, `ol`, `li`, `a`, `b`, `i`, `em`, `strong`, `br`, `img`, `table`/`tr`/`td`, etc.). Disallowed tags (`script`, `iframe`, `object`, `embed`, `style`, `svg` by default, …) and their contents are dropped; text content is preserved and entity-escaped.
+  - [ ] **Attribute allow-list per tag:** Fixed whitelist (`href`, `src`, `alt`, `title`, `class`, `id`, …) with tag-specific constraints (e.g. `target` only on `<a>`). Disallowed attributes (including all `on*` event handlers) are stripped.
+  - [ ] **URL-protocol safe-list for `href` / `src`:** Same allow-list regex used by `$compileProvider.aHrefSanitizationTrustedUrlList` — defaults to `/^\s*(https?|s?ftp|mailto|tel|file):/` plus relative URLs. `javascript:` and dangerous `data:` URIs are stripped. Configurable via `$sanitizeProvider.addValidAttrs` / `.addValidElements` extensions.
+  - [ ] **`$sce.getTrustedHtml` fallback integration:** When a value reaches `$sce.getTrustedHtml(...)` WITHOUT being wrapped AND `$sanitize` is available on the injector, delegate to `$sanitize(value)` instead of throwing. Keeps the spec-012 strict-mode contract intact (plain strings still throw when `$sanitize` isn't loaded) and matches AngularJS 1.x `ng-bind-html` behavior. Small coordination edit in `src/sce/sce.ts` gated behind an optional dependency lookup.
+  - [ ] **`ng-bind-html` directive integration:** Lands with the Directives & DOM Compilation roadmap item below — `ng-bind-html="expr"` evaluates `expr`, runs through `$sce.getTrustedHtml` (which now routes to `$sanitize` when appropriate), and sets `innerHTML`.
+  - [ ] **AngularJS parity tests + documented CVE regressions:** Port test vectors from `angular/angular.js/test/ngSanitize/sanitizeSpec.js`. Include a dedicated mXSS-regression suite covering each historical `ngSanitize` CVE (tag confusion, attribute-context breaks, etc.) so future edits can't regress.
+  - [ ] **DOMPurify-compat escape hatch:** Document how to swap the built-in implementation for DOMPurify via a decorator (`.decorator('$sanitize', () => domPurifyBackedImpl)`). No hard dependency; purely a documented pattern so teams with stricter security posture can opt in.
 
 - [ ] **Exception Handling ($exceptionHandler)**
   - [ ] **$exceptionHandler Service:** Default implementation that delegates to `console.error`; overridable via DI for custom logging / reporting.
@@ -75,7 +87,28 @@ _The layer that connects the runtime to templates and the DOM._
   - [ ] **Template Loading:** Support inline templates and `templateUrl` with async loading.
   - [ ] **Controllers ($controller):** Implement `$controller` service and `$controllerProvider.register` so named controllers can be instantiated by the compiler and bound to scopes.
   - [ ] **Module DSL `.directive` / `.component` / `.controller`:** Expose `.directive(name, fn)`, `.component(name, def)` (AngularJS 1.5+ sugar), and `.controller(name, fn)` on `createModule(...)` as thin wrappers over `$compileProvider.directive` / `.component` and `$controllerProvider.register` — ng-module parity, shared registries, no duplicated state.
-  - [ ] **Built-in Directives:** Implement `ng-if`, `ng-show`, `ng-hide`, `ng-repeat`, `ng-class`, `ng-style`, `ng-click`, `ng-bind`, `ng-switch`, `ng-include`.
+  - [ ] **Built-in Directives:** Implement the full AngularJS 1.x core-directive surface (sourced from `angular/angular.js/src/ng/directive/*`). Form-element directives (`form`, `input`, `select`, `textarea`) and `ng-model` live under Forms & Validation in Phase 3.
+    - [ ] **Structural / flow control:** `ng-if`, `ng-repeat`, `ng-switch` (plus `ng-switch-when`, `ng-switch-default`), `ng-include`, `ng-transclude`, `ng-init`, `ng-controller`.
+    - [ ] **Visibility:** `ng-show`, `ng-hide`, `ng-cloak`.
+    - [ ] **Binding:** `ng-bind`, `ng-bind-template`, `ng-bind-html` (delegates to `$sce.getTrustedHtml`; falls back to `$sanitize` when `ngSanitize` is loaded), `ng-non-bindable`.
+    - [ ] **Class / style:** `ng-class`, `ng-class-even`, `ng-class-odd`, `ng-style`.
+    - [ ] **Attribute helpers (interpolation-safe booleans and URLs):** `ng-href`, `ng-src`, `ng-srcset`, `ng-disabled`, `ng-checked`, `ng-readonly`, `ng-selected`, `ng-open`.
+    - [ ] **Mouse events:** `ng-click`, `ng-dblclick`, `ng-mousedown`, `ng-mouseup`, `ng-mouseover`, `ng-mouseout`, `ng-mousemove`, `ng-mouseenter`, `ng-mouseleave`.
+    - [ ] **Keyboard events:** `ng-keydown`, `ng-keyup`, `ng-keypress`.
+    - [ ] **Clipboard / focus / form-lifecycle events:** `ng-copy`, `ng-cut`, `ng-paste`, `ng-focus`, `ng-blur`, `ng-submit`.
+    - [ ] **Pluralization / i18n:** `ng-pluralize`.
+    - [ ] **CSP / template-cache / element overrides:** `ng-csp` (config-time CSP hint for the compiler), `ng-jq` (opt into a specific jqLite implementation), `ng-ref` (1.7+; publishes a controller reference onto scope), `script` (registers `<script type="text/ng-template">` in `$templateCache`), `a` (empty-`href` guard + target-attribute safety for the anchor element).
+
+- [ ] **Service Text Diagrams (Phase 2 wrap-up)**
+  - [ ] **Per-service ASCII / text diagrams:** For each service shipped through Phase 2 (Scope & digest, Injector & module system, Parser, `$interpolate`, `$sce` / `$sceDelegate`, Filters, `$compile`, `$controller`, built-in directives), produce a text diagram that shows the inner working (collaborators and call order), the supported usage patterns (ES-module primary API vs. DI-layer API), and how to call the service from both paths (with minimal example snippets). Diagrams live under `context/diagrams/` (one file per service, kebab-case) and are linked from `CLAUDE.md` "Where to look when…".
+
+- [ ] **Application Bootstrap**
+  - [ ] **`bootstrapInjector(modules, config?)`:** Headless DI-only bootstrap — creates the injector from `[ngModule, ...userModules]`, no DOM, no `$compile`. Ships ahead of the DOM compiler so tests, SSR, CLI tools, and learning exercises can drive the runtime without a browser. Default `strictDi: true` (ESM + TypeScript context makes explicit `$inject` annotations idiomatic).
+  - [ ] **`$rootScope` registration on `ngModule`:** Register `Scope.create()` as `$rootScope` via `.factory('$rootScope', () => Scope.create())` so `bootstrap` can resolve it and downstream services (`$watch` etc.) have a canonical root.
+  - [ ] **`bootstrap(element, modules, config?)`:** DOM bootstrap composing `bootstrapInjector` + `$compile(element)($rootScope)` + `$rootScope.$apply()`. Returns `{ injector, rootScope, rootElement }` — typed result object; no hidden global state, no mandatory DOM data attachment. Ships WITH `$compile` (depends on it). Optional `attachToElement: true` flag for AngularJS-parity consumers who want `element.data('$injector', injector)`.
+  - [ ] **`autoBootstrap(root?)` via `ng-app`:** Opt-in scanner that finds the first `ng-app` attribute in the subtree, resolves the named module, and calls `bootstrap`. Browser-only (no-op when `document` is unavailable). Honors the classic `ng-app`, `data-ng-app`, `ng:app`, `x-ng-app` prefix variants for migration parity.
+  - [ ] **Type-safe injector return:** `bootstrap` / `bootstrapInjector` generics over the `modules` tuple so `result.injector.get('$sce')` has the correct return type — reuses the existing `MergeRegistries` machinery from `@di/di-types`.
+  - [ ] **Module layout:** New `src/bootstrap/` subpath + `@bootstrap/*` alias + `./bootstrap` in `package.json` exports and `rollup.config.mjs` entries — mirrors the `./sce` / `./interpolate` pattern.
 
 ---
 
@@ -93,8 +126,10 @@ _High-level services that enable real application development._
 
 - [ ] **Forms & Validation**
   - [ ] **ngModel:** Implement two-way data binding for form elements with `$viewValue` / `$modelValue` pipeline.
+  - [ ] **Form-element directives:** Implement `form` and `ng-form` (nested-form support), `input` (with every HTML5 type: `text`, `number`, `email`, `url`, `date`, `datetime-local`, `time`, `week`, `month`, `radio`, `checkbox`, `range`, `hidden`, `button`, `submit`, `reset`), `select`, `textarea`. Each form element registers itself with the enclosing `FormController`.
+  - [ ] **ngModel helpers:** Implement `ng-model-options` (debounce, `updateOn`, `getterSetter`, timezone, etc.), `ng-options` (typed `<option>` generation for `<select>`), `ng-list` (comma-separated-list viewValue ↔ array modelValue transformation), `ng-change` (on-`$viewValue`-change callback).
   - [ ] **Form & NgModelController:** Implement `$dirty`, `$pristine`, `$valid`, `$invalid`, `$touched`, `$untouched` state tracking.
-  - [ ] **Built-in Validators:** Implement `required`, `minlength`, `maxlength`, `pattern`, `email`, `number`, `url`.
+  - [ ] **Built-in Validators:** Implement `required` (also available as the `ng-required` attribute directive), `minlength`, `maxlength`, `pattern`, `email`, `number`, `url`.
   - [ ] **Custom Validators:** Support `$validators` and `$asyncValidators` pipeline.
 
 ---

@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 
 import { $InterpolateProvider } from '@interpolate/interpolate-provider';
 import type { InterpolateService } from '@interpolate/interpolate-types';
+import { sce } from '@sce/sce';
+import type { SceService } from '@sce/sce-types';
 
 describe('$InterpolateProvider — Slice 5 (config-phase configurator)', () => {
   describe('default delimiters', () => {
@@ -84,11 +86,17 @@ describe('$InterpolateProvider — Slice 5 (config-phase configurator)', () => {
   });
 
   describe('$get factory', () => {
+    // Spec 012 slice 6 added a `$sce` dep to `$get`, so the factory is the
+    // SECOND element of the array. Unit tests here simulate the injector by
+    // passing in the ESM `sce` default instance directly.
+    const invokeFactory = (provider: $InterpolateProvider, $sce: SceService = sce): InterpolateService => {
+      const factory = provider.$get[1];
+      return factory($sce);
+    };
+
     it('returns a configured $interpolate service when invoked', () => {
       const provider = new $InterpolateProvider();
-      // Simulate what the injector does: unwrap the array-style invokable and call the trailing fn.
-      const factory = provider.$get[0];
-      const service: InterpolateService = factory();
+      const service = invokeFactory(provider);
       expect(service).toBeTypeOf('function');
       expect(service.startSymbol()).toBe('{{');
       expect(service.endSymbol()).toBe('}}');
@@ -96,22 +104,24 @@ describe('$InterpolateProvider — Slice 5 (config-phase configurator)', () => {
 
     it('produces a service whose delimiters match the configured symbols', () => {
       const provider = new $InterpolateProvider().startSymbol('[[').endSymbol(']]');
-      const service: InterpolateService = provider.$get[0]();
+      const service = invokeFactory(provider);
       expect(service.startSymbol()).toBe('[[');
       expect(service.endSymbol()).toBe(']]');
     });
 
     it('produces a service that renders templates using the configured symbols', () => {
       const provider = new $InterpolateProvider().startSymbol('[[').endSymbol(']]');
-      const service: InterpolateService = provider.$get[0]();
+      const service = invokeFactory(provider);
       expect(service('Hi [[name]]')({ name: 'Bob' })).toBe('Hi Bob');
     });
 
-    it('$get is a readonly array-style invokable with zero deps', () => {
+    it('$get is a readonly array-style invokable declaring $sce as its only dep', () => {
       const provider = new $InterpolateProvider();
-      // Array-style invokable with no deps — trailing element is the factory.
-      expect(provider.$get).toHaveLength(1);
-      expect(provider.$get[0]).toBeTypeOf('function');
+      // Array-style invokable with one dep — leading element is the dep name,
+      // trailing element is the factory.
+      expect(provider.$get).toHaveLength(2);
+      expect(provider.$get[0]).toBe('$sce');
+      expect(provider.$get[1]).toBeTypeOf('function');
     });
   });
 });

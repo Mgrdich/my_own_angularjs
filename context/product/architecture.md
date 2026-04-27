@@ -92,6 +92,36 @@ angular.module('app', [])
 
 **Type-safety lift over legacy AngularJS:** `createModule(...)` returns a typed module object; every registration method accepts typed factories and `$inject`-annotated arrays with matching parameter types. The `angular.module` compat alias preserves these types — classic code gets stricter typing for free without any source changes.
 
+### Application Bootstrap Model
+
+Classic AngularJS bootstraps through a single global entry point (`angular.bootstrap(element, modules)`) that DOM-compiles the root element, attaches `$injector` to it as jqLite data, and kicks off the first digest. We split that surface into three ESM-first named exports so the DOM-less and DOM-driven paths don't pay for each other:
+
+| Entry point | Surface | DOM required? | Returns |
+| --- | --- | --- | --- |
+| `bootstrapInjector(modules, config?)` | `@bootstrap` | No | `Injector` generic over the modules tuple |
+| `bootstrap(element, modules, config?)` | `@bootstrap` | Yes (requires `$compile`) | `{ injector, rootScope, rootElement }` |
+| `autoBootstrap(root?)` | `@bootstrap` | Yes (browser only) | `void` — finds `ng-app`, forwards to `bootstrap` |
+
+**Bootstrap invariants:**
+
+- **No global `angular` object.** `bootstrap(...)` is a named ES export. The Phase 5 compat layer aliases `angular.bootstrap = bootstrap` — thin wrapper only.
+- **Typed injector return.** Generic over the modules tuple — `result.injector.get('$sce')` narrows to `SceService`. Reuses the existing `MergeRegistries` machinery from `@di/di-types`.
+- **No mandatory DOM data attachment.** `element.data('$injector', injector)` is opt-in via `config.attachToElement`, not the default. Pollutes the DOM and implies jqLite; the returned result is the canonical handle.
+- **`strictDi` defaults to `true`.** ESM + TypeScript makes explicit `$inject` annotations idiomatic; defaulting strict catches minifier-breakage in dev.
+- **`autoBootstrap` is opt-in.** Classic AngularJS scans the DOM at script load; we require an explicit call so bundlers, SSR, and tests don't pay the cost.
+- **Startup order.** `createInjector([ngModule, ...userModules])` → run all `config()` blocks → run all `run()` blocks → (DOM form only) `$compile(element)($rootScope)` → `$rootScope.$apply()`. The same `ngModule` that registers core services (`$sceDelegate`, `$sce`, `$interpolate`, …) also registers `$rootScope` as a factory over `Scope.create()` once that wiring lands.
+
+### Opt-in Separate Modules
+
+Some features are orthogonal to the core runtime and are shipped as **separate modules** (subpaths) rather than being registered on the `ng` core module. Consumers opt in by listing the module name in their dependency chain:
+
+| Module | Subpath | Ships | Why separate |
+| --- | --- | --- | --- |
+| `ngSanitize` | `./sanitize` | `$sanitize` / `createSanitize` — HTML scrubber with tag + attribute + URL-protocol allow-lists | Non-trivial parser; security-critical; many apps don't need it; DOMPurify-compat swap via decorator |
+| `ngAnimate` (Phase 4) | `./animate` | `$animate` hooks + CSS/JS drivers | Adds weight only apps that animate need |
+
+The pattern: **one domain → one module subpath**, registered via `createModule('<name>', [])` inside the module's `index.ts` the same way `ngModule` is structured. Decorators (e.g. `$sce.getTrustedHtml` falling back to `$sanitize` when present) coordinate across modules without creating hard dependencies — the core never `import`s an opt-in module's runtime.
+
 ---
 
 ## 2. Testing & Quality Assurance
@@ -101,7 +131,8 @@ angular.module('app', [])
 - **Reference Implementation:** [angular/angular.js](https://github.com/angular/angular.js/) — the original AngularJS repository serves as the reference for feature behavior and test coverage. All unit tests should validate behavior parity with the original AngularJS test suite.
 - **Linter:** ESLint with TypeScript parser and recommended rulesets
 - **Formatter:** Prettier — enforced code formatting for consistency across the codebase
-- **Coverage Target:** 90%+ on core modules (scopes, injector, compiler, parser)
+- **Coverage Target:** 90%+ on each first-party module (`core`, `di`, `parser`, `interpolate`, `sce`, and — once shipped — `compiler`, `bootstrap`, `sanitize`). The threshold is enforced by Vitest's V8 coverage provider in `vitest.config.ts`.
+- **Security-regression suites:** Sanitizer implementations (`sanitize`) carry a dedicated test suite that re-runs historical `ngSanitize` CVE test vectors on every change, so future edits cannot regress fixed bypasses. `$sce` tests port upstream `sceSpecs.js` scenarios for trust-wrapper and resource-URL parity.
 
 ---
 
