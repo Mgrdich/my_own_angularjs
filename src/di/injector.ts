@@ -676,6 +676,8 @@ export function createInjector<const Mods extends readonly AnyModule[]>(
     invoke,
     annotate,
   };
+  // $injector self-registration — AngularJS parity. Lets providers/run blocks declare '$injector' as a dep.
+  providerCache.set('$injector', runInjector);
 
   // Drain modules *after* `providerInjector` is declared. `loadProvider`
   // closes over `providerInjector` to resolve array-style provider deps

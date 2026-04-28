@@ -37,6 +37,7 @@ const tsPathAliases = {
   '@di/*': ['src/di/*'],
   '@interpolate/*': ['src/interpolate/*'],
   '@sce/*': ['src/sce/*'],
+  '@sanitize/*': ['src/sanitize/*'],
 };
 
 const bundleConfigs = entries.map((entry) => ({

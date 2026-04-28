@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
+import type { Injector } from '@di/di-types';
 import { $SceProvider } from '@sce/sce-provider';
 import { TrustedHtml } from '@sce/trusted-values';
 import type { SceDelegateService, SceService } from '@sce/sce-types';
@@ -16,6 +17,26 @@ function makeStubDelegate(): SceDelegateService {
     getTrusted: (_ctx, value) => (value instanceof TrustedHtml ? value.$$unwrapTrustedValue : value),
     valueOf: (value) => (value instanceof TrustedHtml ? value.$$unwrapTrustedValue : value),
   };
+}
+
+/**
+ * Minimal `$injector` stub for exercising `$SceProvider.$get`. The factory
+ * only consults `has('$sanitize')` (and `get('$sanitize')` if `has` returns
+ * true) — these unit tests deliberately wire `has` to return `false` so the
+ * sanitize fallback is not engaged. The real `$sce ↔ $sanitize` integration
+ * is covered in the cross-module DI tests.
+ */
+function makeStubInjector(): Injector {
+  return {
+    get: (name: string) => {
+      throw new Error(`stub injector: get('${name}') not implemented`);
+    },
+    has: () => false,
+    invoke: () => {
+      throw new Error('stub injector: invoke not implemented');
+    },
+    annotate: () => [],
+  } as unknown as Injector;
 }
 
 describe('$SceProvider — Slice 5 (config-phase configurator)', () => {
@@ -107,25 +128,26 @@ describe('$SceProvider — Slice 5 (config-phase configurator)', () => {
   });
 
   describe('$get factory', () => {
-    it('$get is a readonly array-style invokable with exactly one dep ($sceDelegate)', () => {
+    it('$get is a readonly array-style invokable with $sceDelegate and $injector deps', () => {
       const provider = new $SceProvider();
-      expect(provider.$get).toHaveLength(2);
+      expect(provider.$get).toHaveLength(3);
       expect(provider.$get[0]).toBe('$sceDelegate');
-      expect(provider.$get[1]).toBeTypeOf('function');
+      expect(provider.$get[1]).toBe('$injector');
+      expect(provider.$get[2]).toBeTypeOf('function');
     });
 
     it('produces a SceService with isEnabled() reflecting the default flag (true)', () => {
       const provider = new $SceProvider();
-      const factory = provider.$get[1];
-      const service: SceService = factory(makeStubDelegate());
+      const factory = provider.$get[2];
+      const service: SceService = factory(makeStubDelegate(), makeStubInjector());
       expect(service.isEnabled()).toBe(true);
     });
 
     it('produces a pass-through SceService when enabled(false) was called', () => {
       const provider = new $SceProvider();
       provider.enabled(false);
-      const factory = provider.$get[1];
-      const service: SceService = factory(makeStubDelegate());
+      const factory = provider.$get[2];
+      const service: SceService = factory(makeStubDelegate(), makeStubInjector());
       expect(service.isEnabled()).toBe(false);
       // Under pass-through, trustAs returns the input unchanged (no wrapper).
       expect(service.trustAs('html', 'x')).toBe('x');
@@ -136,10 +158,10 @@ describe('$SceProvider — Slice 5 (config-phase configurator)', () => {
       const provider = new $SceProvider();
 
       provider.enabled(true);
-      const on = provider.$get[1](makeStubDelegate());
+      const on = provider.$get[2](makeStubDelegate(), makeStubInjector());
 
       provider.enabled(false);
-      const off = provider.$get[1](makeStubDelegate());
+      const off = provider.$get[2](makeStubDelegate(), makeStubInjector());
 
       expect(on.isEnabled()).toBe(true);
       expect(off.isEnabled()).toBe(false);

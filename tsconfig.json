@@ -16,7 +16,8 @@
       "@parser/*": ["./src/parser/*"],
       "@di/*": ["./src/di/*"],
       "@interpolate/*": ["./src/interpolate/*"],
-      "@sce/*": ["./src/sce/*"]
+      "@sce/*": ["./src/sce/*"],
+      "@sanitize/*": ["./src/sanitize/*"]
     }
   },
   "include": ["src"],

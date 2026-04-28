@@ -9,6 +9,7 @@ export default defineConfig({
       '@di': path.resolve(__dirname, 'src/di'),
       '@interpolate': path.resolve(__dirname, 'src/interpolate'),
       '@sce': path.resolve(__dirname, 'src/sce'),
+      '@sanitize': path.resolve(__dirname, 'src/sanitize'),
     },
   },
   test: {

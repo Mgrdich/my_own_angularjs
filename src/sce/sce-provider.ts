@@ -19,6 +19,7 @@
  * coerced.
  */
 
+import type { Injector } from '@di/di-types';
 import { createSce } from '@sce/sce';
 import type { SceDelegateService, SceService } from '@sce/sce-types';
 
@@ -57,14 +58,31 @@ export class $SceProvider {
 
   /**
    * Injector-facing factory. Array-style invokable declaring `$sceDelegate`
-   * as its only dependency — the injector resolves the delegate first and
-   * passes it in, guaranteeing correct ordering without explicit wiring.
-   * The closure captures `this` so the flag in force at `$get` time (i.e.
-   * after all `config()` blocks have run) is the one baked into the
+   * and `$injector` as its dependencies — the injector resolves the delegate
+   * first and passes it in, guaranteeing correct ordering without explicit
+   * wiring. The closure captures `this` so the flag in force at `$get` time
+   * (i.e. after all `config()` blocks have run) is the one baked into the
    * produced service.
+   *
+   * The `$injector` dep is used to lazily probe for `$sanitize` at $get time:
+   * apps that load `ngSanitize` (or any module that registers `$sanitize`)
+   * get the html-context sanitizer fallback wired automatically; apps that
+   * don't see no behavior change. This zero-coupling seam mirrors AngularJS
+   * 1.x's `$sce ↔ $sanitize` integration without making `$sce` depend on the
+   * sanitize module at the type level.
    */
   $get = [
     '$sceDelegate',
-    (delegate: SceDelegateService): SceService => createSce({ delegate, enabled: this.$$enabled }),
+    '$injector',
+    (delegate: SceDelegateService, $injector: Injector): SceService =>
+      createSce({
+        delegate,
+        enabled: this.$$enabled,
+        // Cast is intentional: `$sanitize` is registered as `(html: unknown) => string`
+        // but `getTrusted` has already narrowed `value` to `string` before invoking
+        // this callback, so the narrower public signature is safe. See spec 013
+        // technical-considerations § 3.
+        sanitize: $injector.has('$sanitize') ? ($injector.get('$sanitize') as (html: string) => string) : undefined,
+      }),
   ] as const;
 }

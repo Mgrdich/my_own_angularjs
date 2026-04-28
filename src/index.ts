@@ -51,3 +51,6 @@ export type {
   ResourceUrlListEntry,
   SceParsedFn,
 } from './sce/index';
+
+export { createSanitize, sanitize, ngSanitize } from './sanitize/index';
+export type { SanitizeService, SanitizeOptions } from './sanitize/index';
