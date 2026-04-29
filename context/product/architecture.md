@@ -120,7 +120,9 @@ Some features are orthogonal to the core runtime and are shipped as **separate m
 | `ngSanitize` | `./sanitize` | `$sanitize` / `createSanitize` — HTML scrubber with tag + attribute + URL-protocol allow-lists | Non-trivial parser; security-critical; many apps don't need it; DOMPurify-compat swap via decorator |
 | `ngAnimate` (Phase 4) | `./animate` | `$animate` hooks + CSS/JS drivers | Adds weight only apps that animate need |
 
-The pattern: **one domain → one module subpath**, registered via `createModule('<name>', [])` inside the module's `index.ts` the same way `ngModule` is structured. Decorators (e.g. `$sce.getTrustedHtml` falling back to `$sanitize` when present) coordinate across modules without creating hard dependencies — the core never `import`s an opt-in module's runtime.
+The pattern: **one domain → one module subpath**, registered via `createModule('<name>', [])` inside the module's `index.ts` the same way `ngModule` is structured. Cross-module coordination uses **lazy `$injector.has(name)` probes** at provider `$get` time — e.g. `$SceProvider.$get` declares `'$injector'` as a dep, then probes `$injector.has('$sanitize')` to decide whether to wire the html-context sanitizer fallback. The core never `import`s an opt-in module's runtime. Decorators are reserved for *replacing* an existing service (e.g. swapping `$sanitize` for DOMPurify), not for the coordination seam itself.
+
+**`$injector` self-registration.** To make `'$injector'` legal as a provider dep name (the linchpin of the lazy-probe pattern above), `createInjector` seeds the run-injector facade into `providerCache` under the name `'$injector'` immediately after the facade is constructed (`src/di/injector.ts:680`). This mirrors AngularJS 1.x parity — `$injector` is a resolvable service in classic AngularJS too — and is the foundation any opt-in cross-module coordination relies on. Removing the seed would silently break every consumer that declares `'$injector'` as a dep, including the `$sce ↔ $sanitize` integration (spec 013 slice 5) and any future provider that wants to introspect the registry at run-phase.
 
 ---
 

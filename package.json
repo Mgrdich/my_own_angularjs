@@ -39,6 +39,11 @@
       "import": "./dist/esm/sce/index.mjs",
       "require": "./dist/cjs/sce/index.cjs",
       "types": "./dist/types/sce/index.d.ts"
+    },
+    "./sanitize": {
+      "import": "./dist/esm/sanitize/index.mjs",
+      "require": "./dist/cjs/sanitize/index.cjs",
+      "types": "./dist/types/sanitize/index.d.ts"
     }
   },
   "repository": "https://github.com/Mgrdich/my_own_angularjs.git",

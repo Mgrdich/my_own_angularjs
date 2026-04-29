@@ -6,7 +6,7 @@ It is NOT a copy-paste implementation guide.
 # Technical Specification: `$sanitize` — HTML Sanitization Service
 
 - **Functional Specification:** [`context/spec/013-sanitize-service/functional-spec.md`](./functional-spec.md)
-- **Status:** Draft
+- **Status:** Completed
 - **Author(s):** Mgrdich
 
 ---

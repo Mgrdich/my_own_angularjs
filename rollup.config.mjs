@@ -23,6 +23,7 @@ const entries = [
   { name: 'compiler/index', input: 'src/compiler/index.ts' },
   { name: 'interpolate/index', input: 'src/interpolate/index.ts' },
   { name: 'sce/index', input: 'src/sce/index.ts' },
+  { name: 'sanitize/index', input: 'src/sanitize/index.ts' },
 ];
 
 // Path aliases declared in `tsconfig.json` are used across the codebase
