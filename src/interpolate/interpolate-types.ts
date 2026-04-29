@@ -24,6 +24,7 @@
  * with no SCE wiring fully compatible.
  */
 
+import type { ExceptionHandler } from '@exception-handler/index';
 import type { SceContext } from '@sce/sce-types';
 
 /**
@@ -51,6 +52,25 @@ export interface InterpolateOptions {
    * `trustedContext` is supplied at invocation.
    */
   readonly sceIsEnabled?: () => boolean;
+  /**
+   * Optional exception handler captured at factory time and applied to every
+   * render-time expression evaluation. When an embedded expression throws
+   * during `fn(context)`, the error is routed through this handler with cause
+   * `'$interpolate'` and the offending slot is treated as `undefined` (so
+   * `allOrNothing` and `oneTime` short-circuits behave the same as if the
+   * expression had returned `undefined`).
+   *
+   * Defaults to `consoleErrorExceptionHandler` when omitted, which logs via
+   * `console.error` and continues — preserving spec-011's "errors don't abort
+   * rendering" baseline while routing them through the centralized handler
+   * surface introduced in spec 014.
+   *
+   * Compile-time errors from `parse()` and the spec-012 strict-trust
+   * single-binding check are NOT routed here — they continue to throw
+   * synchronously at the `$interpolate(text)` call site because they
+   * indicate programming errors, not runtime evaluation failures.
+   */
+  readonly exceptionHandler?: ExceptionHandler;
 }
 
 /**

@@ -10,6 +10,7 @@ export default defineConfig({
       '@interpolate': path.resolve(__dirname, 'src/interpolate'),
       '@sce': path.resolve(__dirname, 'src/sce'),
       '@sanitize': path.resolve(__dirname, 'src/sanitize'),
+      '@exception-handler': path.resolve(__dirname, 'src/exception-handler'),
     },
   },
   test: {

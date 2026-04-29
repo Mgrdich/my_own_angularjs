@@ -1,13 +1,13 @@
 /**
  * `ng` — AngularJS-core DI module.
  *
- * Registers the core run-phase services (`$sceDelegate`, `$sce`,
- * `$interpolate`) and their config-phase providers (`$sceDelegateProvider`,
- * `$sceProvider`, `$interpolateProvider`) via the spec 008 `.provider()`
- * recipe. Registration order is informational — the actual instantiation
- * order is driven by the DI dependency graph (`$sce` depends on
- * `$sceDelegate`, `$interpolate` depends on `$sce`). Future specs add their
- * `.provider(...)` call here.
+ * Registers the core run-phase services (`$exceptionHandler`, `$sceDelegate`,
+ * `$sce`, `$interpolate`) and their config-phase providers
+ * (`$sceDelegateProvider`, `$sceProvider`, `$interpolateProvider`) via the
+ * spec 008 `.provider()` recipe. Registration order is informational — the
+ * actual instantiation order is driven by the DI dependency graph (`$sce`
+ * depends on `$sceDelegate`, `$interpolate` depends on `$sce`). Future specs
+ * add their `.provider(...)` call here.
  *
  * Consumers compose their own injector with `createInjector([ngModule, ...])`
  * and use `config(['$interpolateProvider', p => p.startSymbol('[[')])` or
@@ -16,6 +16,7 @@
  */
 
 import { createModule } from '@di/module';
+import { consoleErrorExceptionHandler, type ExceptionHandler } from '@exception-handler/index';
 import { $InterpolateProvider } from '@interpolate/interpolate-provider';
 import type { InterpolateService } from '@interpolate/interpolate-types';
 import { $SceDelegateProvider } from '@sce/sce-delegate-provider';
@@ -26,6 +27,7 @@ declare module '@di/di-types' {
   interface ModuleRegistry {
     ng: {
       registry: {
+        $exceptionHandler: ExceptionHandler;
         $interpolate: InterpolateService;
         $sceDelegate: SceDelegateService;
         $sce: SceService;
@@ -40,6 +42,7 @@ declare module '@di/di-types' {
 }
 
 export const ngModule = createModule('ng', [])
+  .factory('$exceptionHandler', [() => consoleErrorExceptionHandler])
   .provider('$sceDelegate', $SceDelegateProvider)
   .provider('$sce', $SceProvider)
   .provider('$interpolate', $InterpolateProvider);

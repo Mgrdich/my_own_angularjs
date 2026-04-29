@@ -44,6 +44,11 @@
       "import": "./dist/esm/sanitize/index.mjs",
       "require": "./dist/cjs/sanitize/index.cjs",
       "types": "./dist/types/sanitize/index.d.ts"
+    },
+    "./exception-handler": {
+      "import": "./dist/esm/exception-handler/index.mjs",
+      "require": "./dist/cjs/exception-handler/index.cjs",
+      "types": "./dist/types/exception-handler/index.d.ts"
     }
   },
   "repository": "https://github.com/Mgrdich/my_own_angularjs.git",

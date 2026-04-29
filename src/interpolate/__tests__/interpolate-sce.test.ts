@@ -15,6 +15,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { ngModule } from '@core/ng-module';
 import { createInjector } from '@di/injector';
 import { createModule, resetRegistry } from '@di/module';
+import { consoleErrorExceptionHandler } from '@exception-handler/index';
 import { createInterpolate } from '@interpolate/interpolate';
 import { $InterpolateProvider } from '@interpolate/interpolate-provider';
 import { sce } from '@sce/sce';
@@ -27,6 +28,7 @@ describe('$interpolate ↔ $sce integration — Slice 6', () => {
     beforeEach(() => {
       resetRegistry();
       createModule('ng', [])
+        .factory('$exceptionHandler', [() => consoleErrorExceptionHandler])
         .provider('$sceDelegate', $SceDelegateProvider)
         .provider('$sce', $SceProvider)
         .provider('$interpolate', $InterpolateProvider);
@@ -102,6 +104,7 @@ describe('$interpolate ↔ $sce integration — Slice 6', () => {
     beforeEach(() => {
       resetRegistry();
       createModule('ng', [])
+        .factory('$exceptionHandler', [() => consoleErrorExceptionHandler])
         .provider('$sceDelegate', $SceDelegateProvider)
         .provider('$sce', $SceProvider)
         .provider('$interpolate', $InterpolateProvider);
@@ -128,6 +131,7 @@ describe('$interpolate ↔ $sce integration — Slice 6', () => {
     beforeEach(() => {
       resetRegistry();
       createModule('ng', [])
+        .factory('$exceptionHandler', [() => consoleErrorExceptionHandler])
         .provider('$sceDelegate', $SceDelegateProvider)
         .provider('$sce', $SceProvider)
         .provider('$interpolate', $InterpolateProvider);
@@ -177,6 +181,7 @@ describe('$interpolate ↔ $sce integration — Slice 6', () => {
     beforeEach(() => {
       resetRegistry();
       createModule('ng', [])
+        .factory('$exceptionHandler', [() => consoleErrorExceptionHandler])
         .provider('$sceDelegate', $SceDelegateProvider)
         .provider('$sce', $SceProvider)
         .provider('$interpolate', $InterpolateProvider);
@@ -201,6 +206,7 @@ describe('$interpolate ↔ $sce integration — Slice 6', () => {
     beforeEach(() => {
       resetRegistry();
       createModule('ng', [])
+        .factory('$exceptionHandler', [() => consoleErrorExceptionHandler])
         .provider('$sceDelegate', $SceDelegateProvider)
         .provider('$sce', $SceProvider)
         .provider('$interpolate', $InterpolateProvider);
@@ -300,6 +306,7 @@ describe('$interpolate ↔ $sce integration — Slice 6', () => {
     beforeEach(() => {
       resetRegistry();
       createModule('ng', [])
+        .factory('$exceptionHandler', [() => consoleErrorExceptionHandler])
         .provider('$sceDelegate', $SceDelegateProvider)
         .provider('$sce', $SceProvider)
         .provider('$interpolate', $InterpolateProvider);

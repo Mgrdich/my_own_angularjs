@@ -54,3 +54,12 @@ export type {
 
 export { createSanitize, sanitize, ngSanitize } from './sanitize/index';
 export type { SanitizeService, SanitizeOptions } from './sanitize/index';
+
+export {
+  invokeExceptionHandler,
+  consoleErrorExceptionHandler,
+  noopExceptionHandler,
+  exceptionHandler,
+  EXCEPTION_HANDLER_CAUSES,
+} from './exception-handler/index';
+export type { ExceptionHandler, ExceptionHandlerCause } from './exception-handler/index';
