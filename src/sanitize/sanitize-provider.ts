@@ -26,20 +26,17 @@
  * by `enableSvg(true)` (which switches on the SVG element/attr defaults).
  */
 
+import { isArray, isBoolean, isPlainObject, isRegExp, isString } from '@core/utils';
 import { createSanitize } from '@sanitize/sanitize';
 import { DEFAULT_URI_PATTERN } from '@sanitize/sanitize-allow-lists';
 import type { AddValidElementsArg, SanitizeService } from '@sanitize/sanitize-types';
 
-function isPlainObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
 function assertNonEmptyStringArray(value: unknown, methodName: string, context: string): asserts value is string[] {
-  if (!Array.isArray(value)) {
+  if (!isArray(value)) {
     throw new Error(`$sanitizeProvider.${methodName}: ${context} must be an array, got ${typeof value}`);
   }
   for (const entry of value) {
-    if (typeof entry !== 'string' || entry.length === 0) {
+    if (!isString(entry) || entry.length === 0) {
       throw new Error(`$sanitizeProvider.${methodName}: ${context} entries must be non-empty strings`);
     }
   }
@@ -83,14 +80,14 @@ export class $SanitizeProvider {
    * ```
    */
   addValidElements(arg: AddValidElementsArg): this {
-    if (typeof arg === 'string') {
+    if (isString(arg)) {
       if (arg.length === 0) {
         throw new Error('$sanitizeProvider.addValidElements: element name must be a non-empty string');
       }
       this.$$extraValidElements.add(arg);
       return this;
     }
-    if (Array.isArray(arg)) {
+    if (isArray(arg)) {
       assertNonEmptyStringArray(arg, 'addValidElements', 'array');
       for (const name of arg) {
         this.$$extraValidElements.add(name);
@@ -167,7 +164,7 @@ export class $SanitizeProvider {
     if (value === undefined) {
       return this.$$svgEnabled;
     }
-    if (typeof value !== 'boolean') {
+    if (!isBoolean(value)) {
       throw new Error(`$sanitizeProvider.enableSvg: value must be a boolean, got ${typeof value}`);
     }
     this.$$svgEnabled = value;
@@ -200,7 +197,7 @@ export class $SanitizeProvider {
     if (pattern === undefined) {
       return this.$$uriPattern;
     }
-    if (!(pattern instanceof RegExp)) {
+    if (!isRegExp(pattern)) {
       throw new Error(`$sanitizeProvider.uriPattern: pattern must be a RegExp, got ${typeof pattern}`);
     }
     this.$$uriPattern = pattern;

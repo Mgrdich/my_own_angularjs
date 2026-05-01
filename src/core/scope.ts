@@ -16,7 +16,7 @@ import {
   type Watcher,
   type WatchFn,
 } from './scope-types';
-import { isEqual } from './utils';
+import { isArray, isEqual } from './utils';
 
 /** Maximum number of digest iterations before throwing. */
 const TTL = 10;
@@ -548,8 +548,8 @@ export class Scope {
     const internalWatchFn = (scope: Scope) => {
       newValue = watchFnCompiled(scope);
 
-      if (Array.isArray(newValue)) {
-        if (!Array.isArray(oldValue)) {
+      if (isArray(newValue)) {
+        if (!isArray(oldValue)) {
           changeCount++;
           oldValue = [];
         }
@@ -575,7 +575,7 @@ export class Scope {
           }
         }
       } else if (typeof newValue === 'object' && newValue !== null) {
-        if (typeof oldValue !== 'object' || oldValue === null || Array.isArray(oldValue)) {
+        if (typeof oldValue !== 'object' || oldValue === null || isArray(oldValue)) {
           changeCount++;
           oldValue = {};
           oldLength = 0;
@@ -639,7 +639,7 @@ export class Scope {
       }
 
       if (trackVeryOldValue) {
-        if (Array.isArray(newValue)) {
+        if (isArray(newValue)) {
           veryOldValue = [...(newValue as unknown[])];
         } else if (typeof newValue === 'object' && newValue !== null) {
           veryOldValue = { ...(newValue as Record<string, unknown>) };

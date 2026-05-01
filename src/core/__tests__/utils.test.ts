@@ -12,6 +12,7 @@ import {
   isArray,
   isObject,
   isObjectLike,
+  isPlainObject,
   isDate,
   isRegExp,
   isNaN,
@@ -585,6 +586,55 @@ describe('isArray', () => {
     expect(isArray(ALL_VALUES.date)).toBe(false);
     expect(isArray(ALL_VALUES.regexp)).toBe(false);
   });
+
+  it('narrows `unknown` to `readonly unknown[]` in the truthy branch (compile-time)', () => {
+    const value: unknown = [1, 2, 3];
+    if (isArray(value)) {
+      // If this fails to typecheck, the narrowing regressed — `Extract<unknown, ...>`
+      // resolves to `never`, which is what the prior signature did.
+      const widened: readonly unknown[] = value;
+      expect(widened.length).toBe(3);
+    } else {
+      throw new Error('unreachable for the test fixture');
+    }
+  });
+
+  it('narrows a typed union to its array variant (compile-time)', () => {
+    const value: string | number[] = [10, 20];
+    if (isArray(value)) {
+      // TS picks the array member of the union via predicate intersection.
+      const arr: number[] = value;
+      expect(arr[0]).toBe(10);
+    } else {
+      throw new Error('unreachable for the test fixture');
+    }
+  });
+
+  it('preserves element type when input is a typed array (compile-time)', () => {
+    const numbers: number[] = [1, 2, 3];
+    if (isArray(numbers)) {
+      // Locks element-type inference: must remain number[], not widen to
+      // readonly unknown[]. Verified via LSP hover on `numbers` here.
+      const same: number[] = numbers;
+      expect(same[0]).toBe(1);
+    }
+  });
+
+  it('preserves readonly element type for readonly arrays (compile-time)', () => {
+    const labels: readonly string[] = ['a', 'b'];
+    if (isArray(labels)) {
+      const same: readonly string[] = labels;
+      expect(same.length).toBe(2);
+    }
+  });
+
+  it('preserves tuple element types for tuple inputs (compile-time)', () => {
+    const tuple: readonly [string, number] = ['x', 42];
+    if (isArray(tuple)) {
+      const same: readonly [string, number] = tuple;
+      expect(same[1]).toBe(42);
+    }
+  });
 });
 
 describe('isObject', () => {
@@ -668,6 +718,52 @@ describe('isObjectLike', () => {
     expect(isObjectLike(ALL_VALUES.false)).toBe(false);
     expect(isObjectLike(ALL_VALUES.undefined)).toBe(false);
     expect(isObjectLike(ALL_VALUES.symbol)).toBe(false);
+  });
+});
+
+describe('isPlainObject', () => {
+  it('returns true for a plain object', () => {
+    expect(isPlainObject({})).toBe(true);
+  });
+
+  it('returns true for an object literal with properties', () => {
+    expect(isPlainObject({ a: 1, b: 'x' })).toBe(true);
+  });
+
+  it('returns true for an object created with Object.create(null)', () => {
+    expect(isPlainObject(Object.create(null))).toBe(true);
+  });
+
+  it('returns true for class instances (does NOT check prototype)', () => {
+    class Foo {
+      readonly kind = 'foo';
+    }
+    expect(isPlainObject(new Foo())).toBe(true);
+  });
+
+  it('returns true for Date and RegExp instances (object-typed, not arrays)', () => {
+    expect(isPlainObject(new Date())).toBe(true);
+    expect(isPlainObject(new RegExp('x'))).toBe(true);
+  });
+
+  it('returns false for arrays — the differentiating case from isObject', () => {
+    expect(isPlainObject([])).toBe(false);
+    expect(isPlainObject([1, 2, 3])).toBe(false);
+  });
+
+  it('returns false for null', () => {
+    expect(isPlainObject(null)).toBe(false);
+  });
+
+  it('returns false for primitives and functions', () => {
+    expect(isPlainObject(ALL_VALUES.string)).toBe(false);
+    expect(isPlainObject(ALL_VALUES.number)).toBe(false);
+    expect(isPlainObject(ALL_VALUES.zero)).toBe(false);
+    expect(isPlainObject(ALL_VALUES.true)).toBe(false);
+    expect(isPlainObject(ALL_VALUES.false)).toBe(false);
+    expect(isPlainObject(ALL_VALUES.undefined)).toBe(false);
+    expect(isPlainObject(ALL_VALUES.function)).toBe(false);
+    expect(isPlainObject(ALL_VALUES.symbol)).toBe(false);
   });
 });
 

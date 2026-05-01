@@ -18,6 +18,7 @@
  * @see https://github.com/angular/angular.js/blob/v1.8.3/src/ngSanitize/sanitize.js
  */
 
+import { isString } from '@core/utils';
 import {
   DEFAULT_URI_PATTERN,
   SVG_ATTRS,
@@ -105,7 +106,7 @@ export function createSanitize(options: SanitizeOptions = {}): SanitizeService {
       return '';
     }
     // eslint-disable-next-line @typescript-eslint/no-base-to-string -- spec contract: non-string inputs are coerced via `String()`; an object collapsing to `[object Object]` is the documented behavior, mirroring AngularJS's lack of explicit coercion.
-    const html = typeof input === 'string' ? input : String(input);
+    const html = isString(input) ? input : String(input);
     if (html === '') {
       return '';
     }
