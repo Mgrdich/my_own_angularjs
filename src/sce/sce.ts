@@ -34,7 +34,12 @@ import type { SceOptions, SceParsedFn, SceService } from '@sce/sce-types';
  * Create a strict-contextual-escaping façade.
  *
  * @param options - Optional `delegate` to route through (defaults to a
- *   fresh `createSceDelegate()`) and `enabled` flag (defaults to `true`).
+ *   fresh `createSceDelegate()`), `enabled` flag (defaults to `true`), and
+ *   `sanitize` fallback. When `sanitize` is supplied AND strict mode is on,
+ *   `getTrusted('html', value)` routes plain-string inputs through the
+ *   sanitizer instead of throwing — `TrustedHtml` wrappers continue to
+ *   unwrap directly (the wrapper-unwrap path is preserved by the
+ *   `typeof value === 'string'` guard).
  * @returns A `SceService` with `isEnabled`, generic `trustAs` /
  *   `getTrusted` / `parseAs`, the 15 per-context shortcuts, and `valueOf`.
  *
@@ -49,11 +54,17 @@ import type { SceOptions, SceParsedFn, SceService } from '@sce/sce-types';
  *
  * // A plain string in the same slot is rejected at render time:
  * render({ bio: '<p>unsafe</p>' }); // throws — not trusted for 'html'
+ *
+ * // Wire a sanitizer fallback (e.g. from ngSanitize):
+ * import { sanitize } from 'my-own-angularjs/sanitize';
+ * const sceWithSanitize = createSce({ sanitize });
+ * sceWithSanitize.getTrustedHtml('<script>x</script>y'); // → 'y' (sanitized)
  * ```
  */
 export function createSce(options?: SceOptions): SceService {
   const delegate = options?.delegate ?? createSceDelegate();
   const enabled = options?.enabled ?? true;
+  const sanitize = options?.sanitize;
 
   function isEnabled(): boolean {
     return enabled;
@@ -71,6 +82,15 @@ export function createSce(options?: SceOptions): SceService {
     if (!enabled) return delegate.valueOf(value);
     if (!isValidSceContext(ctx)) {
       throw new Error(`$sce.getTrusted: unknown context '${String(ctx)}'`);
+    }
+    // Sanitize fallback: only for the html context, only for plain strings,
+    // and only when a sanitizer was wired. The `typeof value === 'string'`
+    // guard preserves the wrapper-unwrap path — a `TrustedHtml` is an object
+    // and falls through to `delegate.getTrusted`. Nullish values are passed
+    // through unchanged by the delegate's own leading short-circuit, so no
+    // explicit guard is needed here.
+    if (ctx === SCE_CONTEXTS.HTML && sanitize !== undefined && typeof value === 'string') {
+      return sanitize(value);
     }
     return delegate.getTrusted(ctx, value);
   }

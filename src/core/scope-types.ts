@@ -1,3 +1,4 @@
+import type { ExceptionHandler } from '@exception-handler/index';
 import type { Scope } from './scope';
 
 /**
@@ -82,6 +83,18 @@ export type ScopePhase = '$digest' | '$apply' | null;
 export interface ScopeOptions {
   /** Maximum number of digest iterations before throwing. Must be >= 2. Defaults to 10. */
   ttl?: number;
+  /**
+   * Exception handler invoked for errors thrown inside watch functions, watch
+   * listeners, `$evalAsync` / `$applyAsync` expressions, `$$postDigest`
+   * callbacks, and event listeners. Defaults to `consoleErrorExceptionHandler`,
+   * which preserves the historical `console.error` baseline.
+   *
+   * Captured at construction time and stored on the root scope only — child
+   * scopes resolve the handler via `$root`. Runtime replacement is not
+   * supported; use the DI override path (`module.value('$exceptionHandler', …)`
+   * or `decorator`) to swap handlers in a real application.
+   */
+  exceptionHandler?: ExceptionHandler;
 }
 
 /** Internal: integer predecessor up to 10, used to limit {@link PathOf} recursion. */

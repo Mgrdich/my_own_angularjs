@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { ngModule } from '@core/ng-module';
 import { createInjector } from '@di/injector';
 import { createModule, resetRegistry } from '@di/module';
+import { consoleErrorExceptionHandler } from '@exception-handler/index';
 import { createInterpolate } from '@interpolate/interpolate';
 import { $InterpolateProvider } from '@interpolate/interpolate-provider';
 import { $SceDelegateProvider } from '@sce/sce-delegate-provider';
@@ -12,12 +13,13 @@ describe('$interpolate DI integration — Slice 5', () => {
   // The `ng` module is registered at import time; a `resetRegistry()` in a
   // neighbouring test would evict it. Re-registering here keeps each test in
   // this file self-contained while still exercising `ngModule` by identity.
-  // Spec 012 slice 6 makes `$InterpolateProvider.$get` depend on `$sce`, so
-  // the minimal re-registration must include the full `$sce` provider chain
-  // or the injector can't build `$interpolate`.
+  // Spec 012 slice 6 makes `$InterpolateProvider.$get` depend on `$sce`, and
+  // spec 014 slice 7 adds `$exceptionHandler` as a second dep — both must be
+  // re-registered here or the injector can't build `$interpolate`.
   beforeEach(() => {
     resetRegistry();
     createModule('ng', [])
+      .factory('$exceptionHandler', [() => consoleErrorExceptionHandler])
       .provider('$sceDelegate', $SceDelegateProvider)
       .provider('$sce', $SceProvider)
       .provider('$interpolate', $InterpolateProvider);

@@ -36,11 +36,12 @@ _Complete the essential building blocks that everything else depends on._
   - [x] **Phase tracking:** Implement `$beginPhase`, `$clearPhase`, and `$$postDigest` hooks.
   - [x] **TTL configuration:** Support configurable digest TTL and cycle detection.
 
-- [x] **Dependency Injection**
+- [ ] **Dependency Injection**
   - [x] **Module System:** Implement `createModule()` / `getModule()` (ES module style) with support for dependencies between modules. (spec 007)
   - [x] **Injector:** Implement the injector with `invoke`, `get`, `has`, `annotate`, and support for `$inject` annotations and array-style DI. (spec 007)
   - [x] **Providers & Recipes:** Implement `provider`, `factory`, `service`, `value`, `constant`, and `decorator`. _(spec 007 covers `value`, `constant`, `factory`; `service`/`provider`/`decorator` deferred to spec 008)_
   - [x] **Config & Run Blocks:** Support module-level `config()` and `run()` lifecycle hooks. _(spec 008)_
+  - [ ] **`$provide` Service:** Register `$provide` as an injectable in `config()` blocks exposing `factory` / `service` / `value` / `constant` / `provider` / `decorator` registration recipes — the AngularJS-canonical config-phase override path (`config(['$provide', $p => $p.factory(...)])`). Today's `module.factory` chain works for pre-`createInjector` registration; `$provide` is the run-time-dynamic equivalent. Required to activate the skipped `$provide.factory` test in spec 014 (`src/exception-handler/__tests__/di.test.ts`).
 
 ---
 
@@ -59,21 +60,21 @@ _The layer that connects the runtime to templates and the DOM._
   - [x] **$sceProvider:** Support config-phase `enabled(value?)` to toggle strict mode.
 
 - [ ] **HTML Sanitization ($sanitize / ngSanitize)**
-  - [ ] **Separate `ngSanitize` module:** Ship as a dedicated module, NOT part of core `ng`. Mirrors AngularJS 1.x `angular-sanitize.js` packaging so apps that don't need sanitization don't pay for its parser tables or attack surface. New `src/sanitize/` subpath + `@sanitize/*` alias + `./sanitize` in `package.json` exports and `rollup.config.mjs` entries, following the `./sce` / `./interpolate` layout.
-  - [ ] **ESM-first `createSanitize` / `sanitize` factory:** Pure `(untrustedHtml: string) => string` pipeline with no DI dependency — usable standalone and via `$sanitize` DI registration. Follows the `createSce` / `sce` precedent.
-  - [ ] **`$sanitize` service + `$SanitizeProvider`:** DI-layer thin shim registered on `ngSanitize`; provider owns only the allow-list extensions (see below). `$get` depends on the ESM factory — zero duplicate logic.
-  - [ ] **HTML parser + tag allow-list:** Token-walker with a fixed whitelist of safe block/inline tags (`div`, `span`, `p`, `h1`–`h6`, `ul`, `ol`, `li`, `a`, `b`, `i`, `em`, `strong`, `br`, `img`, `table`/`tr`/`td`, etc.). Disallowed tags (`script`, `iframe`, `object`, `embed`, `style`, `svg` by default, …) and their contents are dropped; text content is preserved and entity-escaped.
-  - [ ] **Attribute allow-list per tag:** Fixed whitelist (`href`, `src`, `alt`, `title`, `class`, `id`, …) with tag-specific constraints (e.g. `target` only on `<a>`). Disallowed attributes (including all `on*` event handlers) are stripped.
-  - [ ] **URL-protocol safe-list for `href` / `src`:** Same allow-list regex used by `$compileProvider.aHrefSanitizationTrustedUrlList` — defaults to `/^\s*(https?|s?ftp|mailto|tel|file):/` plus relative URLs. `javascript:` and dangerous `data:` URIs are stripped. Configurable via `$sanitizeProvider.addValidAttrs` / `.addValidElements` extensions.
-  - [ ] **`$sce.getTrustedHtml` fallback integration:** When a value reaches `$sce.getTrustedHtml(...)` WITHOUT being wrapped AND `$sanitize` is available on the injector, delegate to `$sanitize(value)` instead of throwing. Keeps the spec-012 strict-mode contract intact (plain strings still throw when `$sanitize` isn't loaded) and matches AngularJS 1.x `ng-bind-html` behavior. Small coordination edit in `src/sce/sce.ts` gated behind an optional dependency lookup.
-  - [ ] **`ng-bind-html` directive integration:** Lands with the Directives & DOM Compilation roadmap item below — `ng-bind-html="expr"` evaluates `expr`, runs through `$sce.getTrustedHtml` (which now routes to `$sanitize` when appropriate), and sets `innerHTML`.
-  - [ ] **AngularJS parity tests + documented CVE regressions:** Port test vectors from `angular/angular.js/test/ngSanitize/sanitizeSpec.js`. Include a dedicated mXSS-regression suite covering each historical `ngSanitize` CVE (tag confusion, attribute-context breaks, etc.) so future edits can't regress.
-  - [ ] **DOMPurify-compat escape hatch:** Document how to swap the built-in implementation for DOMPurify via a decorator (`.decorator('$sanitize', () => domPurifyBackedImpl)`). No hard dependency; purely a documented pattern so teams with stricter security posture can opt in.
+  - [x] **Separate `ngSanitize` module:** Ship as a dedicated module, NOT part of core `ng`. Mirrors AngularJS 1.x `angular-sanitize.js` packaging so apps that don't need sanitization don't pay for its parser tables or attack surface. New `src/sanitize/` subpath + `@sanitize/*` alias + `./sanitize` in `package.json` exports and `rollup.config.mjs` entries, following the `./sce` / `./interpolate` layout.
+  - [x] **ESM-first `createSanitize` / `sanitize` factory:** Pure `(untrustedHtml: string) => string` pipeline with no DI dependency — usable standalone and via `$sanitize` DI registration. Follows the `createSce` / `sce` precedent.
+  - [x] **`$sanitize` service + `$SanitizeProvider`:** DI-layer thin shim registered on `ngSanitize`; provider owns only the allow-list extensions (see below). `$get` depends on the ESM factory — zero duplicate logic.
+  - [x] **HTML parser + tag allow-list:** Token-walker with a fixed whitelist of safe block/inline tags (`div`, `span`, `p`, `h1`–`h6`, `ul`, `ol`, `li`, `a`, `b`, `i`, `em`, `strong`, `br`, `img`, `table`/`tr`/`td`, etc.). Disallowed tags (`script`, `iframe`, `object`, `embed`, `style`, `svg` by default, …) and their contents are dropped; text content is preserved and entity-escaped.
+  - [x] **Attribute allow-list per tag:** Fixed whitelist (`href`, `src`, `alt`, `title`, `class`, `id`, …) with tag-specific constraints (e.g. `target` only on `<a>`). Disallowed attributes (including all `on*` event handlers) are stripped. *(Implementation note: ships as a single global allow-list (`VALID_ATTRS`) rather than per-tag — AngularJS 1.x parity. Per-tag scoping is deferred.)*
+  - [x] **URL-protocol safe-list for `href` / `src`:** Same allow-list regex used by `$compileProvider.aHrefSanitizationTrustedUrlList` — defaults to `/^\s*(https?|s?ftp|mailto|tel|file):/` plus relative URLs. `javascript:` and dangerous `data:` URIs are stripped. Configurable via `$sanitizeProvider.uriPattern(RegExp)`.
+  - [x] **`$sce.getTrustedHtml` fallback integration:** When a value reaches `$sce.getTrustedHtml(...)` WITHOUT being wrapped AND `$sanitize` is available on the injector, delegate to `$sanitize(value)` instead of throwing. Keeps the spec-012 strict-mode contract intact (plain strings still throw when `$sanitize` isn't loaded) and matches AngularJS 1.x `ng-bind-html` behavior. Small coordination edit in `src/sce/sce.ts` gated behind an optional dependency lookup.
+  - [ ] **`ng-bind-html` directive integration:** Lands with the Directives & DOM Compilation roadmap item below — `ng-bind-html="expr"` evaluates `expr`, runs through `$sce.getTrustedHtml` (which now routes to `$sanitize` when appropriate), and sets `innerHTML`. *(Deferred — depends on `$compile`.)*
+  - [x] **AngularJS parity tests + documented CVE regressions:** Port test vectors from `angular/angular.js/test/ngSanitize/sanitizeSpec.js`. Include a dedicated mXSS-regression suite covering each historical `ngSanitize` CVE (tag confusion, attribute-context breaks, etc.) so future edits can't regress.
+  - [x] **DOMPurify-compat escape hatch:** Document how to swap the built-in implementation for DOMPurify via a decorator (`.decorator('$sanitize', () => domPurifyBackedImpl)`). No hard dependency; purely a documented pattern so teams with stricter security posture can opt in. *(Documented in `src/sanitize/README.md`.)*
 
-- [ ] **Exception Handling ($exceptionHandler)**
-  - [ ] **$exceptionHandler Service:** Default implementation that delegates to `console.error`; overridable via DI for custom logging / reporting.
-  - [ ] **Digest Integration:** Route watch, listener, `$evalAsync`, and `$applyAsync` exceptions through `$exceptionHandler` instead of the current inline `console.error` in `src/core/scope.ts` — resolves the runtime-error deferral from spec 011 §2.10.
-  - [ ] **$interpolate Integration:** Route render-time expression exceptions through `$exceptionHandler` when an interpolation fn is used inside a digest.
+- [x] **Exception Handling ($exceptionHandler)** _(spec 014)_
+  - [x] **$exceptionHandler Service:** Default implementation that delegates to `console.error`; overridable via DI for custom logging / reporting.
+  - [x] **Digest Integration:** Route watch, listener, `$evalAsync`, and `$applyAsync` exceptions through `$exceptionHandler` instead of the current inline `console.error` in `src/core/scope.ts` — resolves the runtime-error deferral from spec 011 §2.10.
+  - [x] **$interpolate Integration:** Route render-time expression exceptions through `$exceptionHandler` when an interpolation fn is used inside a digest.
 
 - [ ] **Filters**
   - [ ] **Filter Registration & Pipeline:** Implement the filter system with `$filterProvider` and chained filter expressions.

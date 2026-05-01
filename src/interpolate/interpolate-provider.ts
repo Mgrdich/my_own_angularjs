@@ -17,6 +17,7 @@
  * performs no enforcement; that path is for consumers who opt out of SCE.
  */
 
+import type { ExceptionHandler } from '@exception-handler/index';
 import { createInterpolate } from './interpolate';
 import { DEFAULT_END_SYMBOL, DEFAULT_START_SYMBOL, validateDelimiters } from './interpolate-delimiters';
 import type { InterpolateService } from './interpolate-types';
@@ -67,23 +68,23 @@ export class $InterpolateProvider {
   }
 
   /**
-   * Injector-facing factory. Array-style invokable declaring `$sce` as its
-   * only dependency — the injector resolves the `$sce` service first (which
-   * in turn forces `$sceDelegate` to be built) and passes it in. The closure
-   * captures `this` via the arrow form so the symbols configured on the
-   * provider instance at `$get` time are the ones baked into the produced
-   * service, and the `$sce` callbacks are wired straight to the injected
-   * instance so strict-mode state configured via `$sceProvider.enabled(...)`
-   * is observed at render time.
+   * Injector-facing factory. Array-style invokable declaring `$sce` and
+   * `$exceptionHandler` as its dependencies. The injector resolves both first
+   * (`$exceptionHandler` has zero deps; `$sce` depends on `$sceDelegate`),
+   * then this factory builds an `InterpolateService` that routes both trust
+   * enforcement (via `$sce`) and runtime expression-error reporting (via
+   * `$exceptionHandler`).
    */
   $get = [
     '$sce',
-    ($sce: SceService): InterpolateService =>
+    '$exceptionHandler',
+    ($sce: SceService, $exceptionHandler: ExceptionHandler): InterpolateService =>
       createInterpolate({
         startSymbol: this.$$startSymbol,
         endSymbol: this.$$endSymbol,
         sceGetTrusted: (ctx, v) => $sce.getTrusted(ctx, v),
         sceIsEnabled: () => $sce.isEnabled(),
+        exceptionHandler: $exceptionHandler,
       }),
   ] as const;
 }

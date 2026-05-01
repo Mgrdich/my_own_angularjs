@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
+import { consoleErrorExceptionHandler, type ExceptionHandler } from '@exception-handler/index';
 import { $InterpolateProvider } from '@interpolate/interpolate-provider';
 import type { InterpolateService } from '@interpolate/interpolate-types';
 import { sce } from '@sce/sce';
@@ -86,12 +87,17 @@ describe('$InterpolateProvider — Slice 5 (config-phase configurator)', () => {
   });
 
   describe('$get factory', () => {
-    // Spec 012 slice 6 added a `$sce` dep to `$get`, so the factory is the
-    // SECOND element of the array. Unit tests here simulate the injector by
-    // passing in the ESM `sce` default instance directly.
-    const invokeFactory = (provider: $InterpolateProvider, $sce: SceService = sce): InterpolateService => {
-      const factory = provider.$get[1];
-      return factory($sce);
+    // Spec 012 slice 6 added `$sce` and spec 014 slice 7 added `$exceptionHandler`
+    // as deps on `$get`, so the factory is the THIRD element of the array. Unit
+    // tests here simulate the injector by passing in the ESM `sce` default
+    // instance and the default console-error exception handler directly.
+    const invokeFactory = (
+      provider: $InterpolateProvider,
+      $sce: SceService = sce,
+      $exceptionHandler: ExceptionHandler = consoleErrorExceptionHandler,
+    ): InterpolateService => {
+      const factory = provider.$get[2];
+      return factory($sce, $exceptionHandler);
     };
 
     it('returns a configured $interpolate service when invoked', () => {
@@ -115,13 +121,14 @@ describe('$InterpolateProvider — Slice 5 (config-phase configurator)', () => {
       expect(service('Hi [[name]]')({ name: 'Bob' })).toBe('Hi Bob');
     });
 
-    it('$get is a readonly array-style invokable declaring $sce as its only dep', () => {
+    it('$get is a readonly array-style invokable declaring $sce and $exceptionHandler as deps', () => {
       const provider = new $InterpolateProvider();
-      // Array-style invokable with one dep — leading element is the dep name,
+      // Array-style invokable with two deps — leading elements are dep names,
       // trailing element is the factory.
-      expect(provider.$get).toHaveLength(2);
+      expect(provider.$get).toHaveLength(3);
       expect(provider.$get[0]).toBe('$sce');
-      expect(provider.$get[1]).toBeTypeOf('function');
+      expect(provider.$get[1]).toBe('$exceptionHandler');
+      expect(provider.$get[2]).toBeTypeOf('function');
     });
   });
 });

@@ -1,3 +1,4 @@
+import { consoleErrorExceptionHandler, invokeExceptionHandler, type ExceptionHandler } from '@exception-handler/index';
 import { parse } from '@parser/index';
 import { constantWatchDelegate, oneTimeLiteralWatchDelegate, oneTimeWatchDelegate } from './scope-watch-delegates';
 import {
@@ -15,7 +16,7 @@ import {
   type Watcher,
   type WatchFn,
 } from './scope-types';
-import { isEqual } from './utils';
+import { isArray, isEqual } from './utils';
 
 /** Maximum number of digest iterations before throwing. */
 const TTL = 10;
@@ -89,6 +90,8 @@ export class Scope {
   $$applyAsyncId: ReturnType<typeof setTimeout> | null;
   $$phase: ScopePhase;
   $$ttl: number;
+  /** Exception handler for digest-internal errors. Only the value on `$root` is consulted. */
+  $$exceptionHandler: ExceptionHandler;
 
   constructor() {
     this.$id = nextId++;
@@ -104,6 +107,7 @@ export class Scope {
     this.$$applyAsyncId = null;
     this.$$phase = null;
     this.$$ttl = TTL;
+    this.$$exceptionHandler = consoleErrorExceptionHandler;
   }
 
   /** Create a typed Scope instance with compile-time property access. */
@@ -115,6 +119,7 @@ export class Scope {
     }
     const scope = new Scope();
     scope.$$ttl = options?.ttl ?? TTL;
+    scope.$$exceptionHandler = options?.exceptionHandler ?? consoleErrorExceptionHandler;
     return scope as unknown as TypedScope<T> & T;
   }
 
@@ -271,8 +276,8 @@ export class Scope {
             try {
               watcher.listenerFn(newValue, listenerOldValue, scope);
             } catch (e) {
-              // Log listener errors but do not abort the digest
-              console.error('Error in watch listener:', e);
+              // Route listener errors through $exceptionHandler but do not abort the digest
+              invokeExceptionHandler(this.$root.$$exceptionHandler, e, 'watchListener');
             }
 
             dirty = true;
@@ -281,8 +286,8 @@ export class Scope {
             return false;
           }
         } catch (e) {
-          // Log watch function errors but do not abort the digest
-          console.error('Error in watch function:', e);
+          // Route watch function errors through $exceptionHandler but do not abort the digest
+          invokeExceptionHandler(this.$root.$$exceptionHandler, e, 'watchFn');
         }
       }
 
@@ -314,7 +319,7 @@ export class Scope {
             try {
               asyncTask.scope.$eval(asyncTask.expression);
             } catch (e) {
-              console.error('Error in $evalAsync expression:', e);
+              invokeExceptionHandler(this.$root.$$exceptionHandler, e, '$evalAsync');
             }
           }
         }
@@ -327,7 +332,9 @@ export class Scope {
           const lastDirtyInfo =
             lastDirtyWatch !== null ? `\nLast dirty watcher: ${lastDirtyWatch.watchFn.toString()}` : '';
           const ttlValue = String(this.$root.$$ttl);
-          throw new Error(`${ttlValue} digest iterations reached. Aborting!${lastDirtyInfo}`);
+          const ttlError = new Error(`${ttlValue} digest iterations reached. Aborting!${lastDirtyInfo}`);
+          invokeExceptionHandler(this.$root.$$exceptionHandler, ttlError, '$digest');
+          throw ttlError;
         }
       } while (dirty || this.$$asyncQueue.length > 0);
       // Flush any pending $applyAsync during the active digest
@@ -346,7 +353,7 @@ export class Scope {
         try {
           fn();
         } catch (e) {
-          console.error('Error in $$postDigest function:', e);
+          invokeExceptionHandler(this.$root.$$exceptionHandler, e, '$$postDigest');
         }
       }
     }
@@ -541,8 +548,8 @@ export class Scope {
     const internalWatchFn = (scope: Scope) => {
       newValue = watchFnCompiled(scope);
 
-      if (Array.isArray(newValue)) {
-        if (!Array.isArray(oldValue)) {
+      if (isArray(newValue)) {
+        if (!isArray(oldValue)) {
           changeCount++;
           oldValue = [];
         }
@@ -568,7 +575,7 @@ export class Scope {
           }
         }
       } else if (typeof newValue === 'object' && newValue !== null) {
-        if (typeof oldValue !== 'object' || oldValue === null || Array.isArray(oldValue)) {
+        if (typeof oldValue !== 'object' || oldValue === null || isArray(oldValue)) {
           changeCount++;
           oldValue = {};
           oldLength = 0;
@@ -632,7 +639,7 @@ export class Scope {
       }
 
       if (trackVeryOldValue) {
-        if (Array.isArray(newValue)) {
+        if (isArray(newValue)) {
           veryOldValue = [...(newValue as unknown[])];
         } else if (typeof newValue === 'object' && newValue !== null) {
           veryOldValue = { ...(newValue as Record<string, unknown>) };
@@ -772,7 +779,7 @@ export class Scope {
         try {
           listener(event, ...additionalArgs);
         } catch (e) {
-          console.error('Error in event listener:', e);
+          invokeExceptionHandler(this.$root.$$exceptionHandler, e, 'eventListener');
         }
       }
       // Compact: remove null sentinels to prevent unbounded growth
@@ -790,7 +797,7 @@ export class Scope {
         try {
           asyncTask.scope.$eval(asyncTask.expression);
         } catch (e) {
-          console.error('Error in $applyAsync expression:', e);
+          invokeExceptionHandler(this.$root.$$exceptionHandler, e, '$applyAsync');
         }
       }
     }

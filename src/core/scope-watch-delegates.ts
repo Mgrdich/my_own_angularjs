@@ -12,6 +12,7 @@
 
 import type { Scope } from './scope';
 import type { DeregisterFn, ListenerFn, WatchFn } from './scope-types';
+import { isArray } from './utils';
 
 /**
  * Shallow "all defined" check used by the literal one-time watch delegate to
@@ -35,7 +36,7 @@ function isAllDefined(value: unknown): boolean {
   if (value === undefined) {
     return false;
   }
-  if (Array.isArray(value)) {
+  if (isArray(value)) {
     return value.every((v) => v !== undefined);
   }
   if (typeof value === 'object' && value !== null) {

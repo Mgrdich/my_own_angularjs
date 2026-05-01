@@ -74,9 +74,10 @@ export interface SceDelegateService {
 /**
  * Options bag for `createSce`.
  *
- * Both fields are optional — `delegate` defaults to a fresh
+ * All three fields are optional — `delegate` defaults to a fresh
  * `createSceDelegate()` instance, `enabled` defaults to `true` (strict mode
- * ON, AngularJS 1.x parity). Pass `enabled: false` for a total pass-through
+ * ON, AngularJS 1.x parity), and `sanitize` defaults to undefined (no
+ * sanitizer fallback wired). Pass `enabled: false` for a total pass-through
  * façade (trust wrappers are never created and `getTrusted` becomes an
  * unwrapping identity).
  */
@@ -85,6 +86,29 @@ export interface SceOptions {
   readonly delegate?: SceDelegateService;
   /** Strict-mode flag. Defaults to `true`. When `false`, the façade is a pass-through. */
   readonly enabled?: boolean;
+  /**
+   * Optional fallback invoked from `getTrusted('html', value)` when the
+   * value is a plain string and strict mode is on. Mirrors the AngularJS
+   * 1.x behaviour where `$sce.getTrustedHtml(plainString)` routes through
+   * `$sanitize` instead of throwing — but expressed as a pure-ESM seam so
+   * the integration is zero-coupling at the type level (`$sce` knows
+   * nothing about `$sanitize`).
+   *
+   * The callback is consulted ONLY for the html context, ONLY for plain
+   * strings (a `TrustedHtml` wrapper still unwraps directly), and ONLY
+   * with strict mode enabled (`enabled: true`). Nullish values pass
+   * through unchanged before the callback is reached.
+   *
+   * @example
+   * ```ts
+   * import { createSce } from 'my-own-angularjs/sce';
+   * import { sanitize } from 'my-own-angularjs/sanitize';
+   *
+   * const sce = createSce({ sanitize });
+   * sce.getTrustedHtml('<script>x</script>y'); // → 'y' (sanitized)
+   * ```
+   */
+  readonly sanitize?: (html: string) => string;
 }
 
 /**

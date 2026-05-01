@@ -22,6 +22,7 @@
  */
 
 import { toInterpolationString } from '@core/utils';
+import { consoleErrorExceptionHandler, invokeExceptionHandler } from '@exception-handler/index';
 import { parse, type ExpressionFn } from '@parser/index';
 import { isValidSceContext, type SceContext } from '@sce/sce-contexts';
 
@@ -34,6 +35,7 @@ export function createInterpolate(options: InterpolateOptions = {}): Interpolate
   const endSymbol = options.endSymbol ?? DEFAULT_END_SYMBOL;
   const sceGetTrusted = options.sceGetTrusted;
   const sceIsEnabled = options.sceIsEnabled;
+  const handler = options.exceptionHandler ?? consoleErrorExceptionHandler;
 
   validateDelimiters(startSymbol, endSymbol);
 
@@ -89,7 +91,16 @@ export function createInterpolate(options: InterpolateOptions = {}): Interpolate
       for (let i = 0; i < parsedFns.length; i++) {
         const fn = parsedFns[i];
         const segment = textSegments[i + 1] ?? '';
-        const value = fn === undefined ? undefined : fn(context);
+        // Throws from per-expression evaluation are routed through the
+        // captured handler and treated as `undefined` so `allOrNothing` /
+        // `oneTime` short-circuits behave the same as a returned `undefined`.
+        let value: unknown;
+        try {
+          value = fn === undefined ? undefined : fn(context);
+        } catch (err) {
+          invokeExceptionHandler(handler, err, '$interpolate');
+          value = undefined;
+        }
         // When strict trust is active the compile-time check guarantees
         // exactly one expression; `strictTrustActive === true` implies
         // `trustedContext` and `sceGetTrusted` are both defined (see the

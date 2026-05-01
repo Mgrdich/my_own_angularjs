@@ -40,7 +40,7 @@ export function isEqual(a: unknown, b: unknown) {
   }
 
   // Arrays — length check then element-by-element
-  if (Array.isArray(a) && Array.isArray(b)) {
+  if (isArray(a) && isArray(b)) {
     if (a.length !== b.length) return false;
     for (let i = 0; i < a.length; i++) {
       if (!isEqual(a[i], b[i])) return false;
@@ -49,7 +49,7 @@ export function isEqual(a: unknown, b: unknown) {
   }
 
   // Reject mismatched structural types (e.g. array vs plain object)
-  if (Array.isArray(a) !== Array.isArray(b)) {
+  if (isArray(a) !== isArray(b)) {
     return false;
   }
 
@@ -105,7 +105,39 @@ export function isDefined<T>(value: T | undefined): value is T {
   return typeof value !== 'undefined';
 }
 
-export function isArray<T>(value: T | readonly unknown[]): value is Extract<T, readonly unknown[]> {
+/**
+ * Type guard that narrows a value to a readonly array.
+ *
+ * Three signatures considered, with this one chosen:
+ *
+ * 1. `<T>(value: T | readonly unknown[]): value is Extract<T, readonly
+ *    unknown[]>` — the original. Looks "principled" but `Extract<unknown,
+ *    readonly unknown[]>` resolves to `never`, so callers passing `unknown`
+ *    (numerous in `src/di/injector.ts`, `src/sanitize/sanitize-provider.ts`)
+ *    silently get a `never`-narrowed truthy branch. TypeScript happily
+ *    type-checks `never.length` and `never[i]`, hiding the broken narrowing.
+ *
+ * 2. `<T>(value: T): value is T & readonly unknown[]` — keeps the generic
+ *    via intersection. Works for `unknown` and most unions. BUT for unions
+ *    with non-array structural object members like `unknown[] |
+ *    Record<string, unknown>` (the `forEach` collection parameter in this
+ *    file), TS distributes the intersection and KEEPS the weird
+ *    `Record<string, unknown> & readonly unknown[]` member because
+ *    structurally it's not `never`. This breaks downstream code that expects
+ *    a clean `unknown[]` after the guard.
+ *
+ * 3. `(value: unknown): value is readonly unknown[]` — chosen. Relies on
+ *    TypeScript's narrowing engine to filter union members against the
+ *    predicate type rather than computing an intersection. The narrowing is
+ *    cleaner in every case: `unknown[] | Record<string, unknown>` correctly
+ *    narrows to `unknown[]`; `string | number[]` narrows to `number[]`;
+ *    `unknown` narrows to `readonly unknown[]`; `string` narrows to `never`.
+ *
+ * The predicate uses `readonly unknown[]` (not `unknown[]`) so the guard
+ * accepts both readonly and mutable arrays; mutability is preserved through
+ * narrowing because TS keeps the original input type's mutability.
+ */
+export function isArray(value: unknown): value is readonly unknown[] {
   return Array.isArray(value);
 }
 
@@ -120,6 +152,22 @@ export function isObject(value: unknown): value is Record<string, unknown> {
  */
 export function isObjectLike(value: unknown): value is Record<string, unknown> {
   return isObject(value) || isFunction(value);
+}
+
+/**
+ * Type guard that narrows a value to a non-array object — i.e. an object
+ * literal or class instance, but not an array. Differs from {@link isObject}
+ * by rejecting arrays. Use this when a callsite needs to disambiguate
+ * "object-shaped configuration argument" from "array of values" (e.g. the
+ * sanitize provider's `addValidElements` accepts both shapes and switches
+ * behavior on the type).
+ *
+ * Note: this does NOT check the prototype, so `new Date()`, `new Map()`, etc.
+ * pass the guard. If you need stricter "object literal only" semantics, also
+ * check `Object.getPrototypeOf(value) === Object.prototype || === null`.
+ */
+export function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return isObject(value) && !isArray(value);
 }
 
 export function isDate(value: unknown): value is Date {

@@ -229,7 +229,7 @@ export function createInjector<const Mods extends readonly AnyModule[]>(
       // array-shaped subtype via `Extract`, which collapses to `never`
       // when the input is plain `unknown`, so we hold on to a separately
       // typed alias of the source before indexing into it.
-      const providerArray = providerSource as readonly unknown[];
+      const providerArray = providerSource;
       const deps = annotateInvokable(providerArray as unknown as Invokable);
       const resolvedDeps = deps.map((depName) => providerInjector.get(depName));
       const Ctor = providerArray[providerArray.length - 1] as new (...args: unknown[]) => unknown;
@@ -676,6 +676,8 @@ export function createInjector<const Mods extends readonly AnyModule[]>(
     invoke,
     annotate,
   };
+  // $injector self-registration — AngularJS parity. Lets providers/run blocks declare '$injector' as a dep.
+  providerCache.set('$injector', runInjector);
 
   // Drain modules *after* `providerInjector` is declared. `loadProvider`
   // closes over `providerInjector` to resolve array-style provider deps

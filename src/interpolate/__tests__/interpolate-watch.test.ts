@@ -4,6 +4,7 @@ import { Scope } from '@core/scope';
 import { ngModule } from '@core/ng-module';
 import { createInjector } from '@di/injector';
 import { createModule, resetRegistry } from '@di/module';
+import { consoleErrorExceptionHandler } from '@exception-handler/index';
 import { $InterpolateProvider } from '@interpolate/interpolate-provider';
 import { createInterpolate } from '@interpolate/interpolate';
 import type { InterpolateService } from '@interpolate/interpolate-types';
@@ -181,11 +182,12 @@ describe('$interpolate + $watch integration — Slice 6', () => {
     beforeEach(() => {
       // Re-register ngModule's provider chain on a fresh registry so tests in
       // this block are hermetic, matching the pattern in
-      // interpolate-di.test.ts. Spec 012 slice 6 added a `$sce` dep on
-      // `$InterpolateProvider.$get`, so the `$sce` provider chain must also
-      // be registered for the injector to build `$interpolate`.
+      // interpolate-di.test.ts. Spec 012 slice 6 added a `$sce` dep and spec
+      // 014 slice 7 added `$exceptionHandler` on `$InterpolateProvider.$get`,
+      // so both must be registered for the injector to build `$interpolate`.
       resetRegistry();
       createModule('ng', [])
+        .factory('$exceptionHandler', [() => consoleErrorExceptionHandler])
         .provider('$sceDelegate', $SceDelegateProvider)
         .provider('$sce', $SceProvider)
         .provider('$interpolate', $InterpolateProvider);
