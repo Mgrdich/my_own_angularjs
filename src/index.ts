@@ -18,6 +18,7 @@ export type {
   ProviderInstance,
   ProviderObject,
   ProviderService,
+  ProvideService,
   RecipeType,
   ResolveDeps,
   TypedModule,

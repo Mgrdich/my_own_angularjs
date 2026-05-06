@@ -43,7 +43,8 @@ After this lands, the runtime-error deferrals from spec 011 and spec 013 are res
     - [x] Calling `injector.get('$exceptionHandler')` repeatedly returns the same singleton reference (factory recipe semantics)
     - [x] No `$exceptionHandlerProvider` is exposed — overriding is via `$provide.factory('$exceptionHandler', factory)` inside a `config()` block, mirroring AngularJS 1.x
     - [x] An override registered in a `config()` block fully replaces the default (the default factory is not chained or wrapped)
-    - [ ] `injector.get('$exceptionHandler')` is available in `run()` blocks and at runtime resolution; `config()` blocks see the provider-side override seam (`$provide`) but cannot directly resolve `$exceptionHandler` itself <!-- NOT MET — `$provide` service is not registered in this codebase. Run-block / runtime resolution IS available; the `$provide` seam is unimplemented. Tracked via the skipped test in `src/exception-handler/__tests__/di.test.ts`. -->
+    - [x] `injector.get('$exceptionHandler')` is available in `run()` blocks and at runtime resolution; `config()` blocks see the provider-side override seam (`$provide`) but cannot directly resolve `$exceptionHandler` itself <!-- spec 015 delivered the `$provide` config-phase injectable; this criterion is now fully met. -->
+
 
 ### 2.2. ES-Module Primary Surface
 
@@ -79,7 +80,7 @@ After this lands, the runtime-error deferrals from spec 011 and spec 013 are res
 
 - Apps replace the default via `$provide.factory('$exceptionHandler', factory)` inside a `config()` block. This is the canonical AngularJS pattern and reuses the spec 008 decorator/factory recipe — no new DI machinery.
   - **Acceptance Criteria:**
-    - [ ] Registering `$provide.factory('$exceptionHandler', () => mySpy)` in a `config()` block makes `mySpy` the resolved handler for the rest of the injector lifetime <!-- NOT MET — `$provide` service is not registered in this codebase. Tracked via the skipped test in `src/exception-handler/__tests__/di.test.ts`. The functionally equivalent `module.factory` path (next bullet) IS met. -->
+    - [x] Registering `$provide.factory('$exceptionHandler', () => mySpy)` in a `config()` block makes `mySpy` the resolved handler for the rest of the injector lifetime <!-- Verified by the previously-skipped test in `src/exception-handler/__tests__/di.test.ts` (now active as of spec 015 Slice 8). -->
     - [x] `module.factory('$exceptionHandler', () => mySpy)` (registered before `createInjector` runs) achieves the same override
     - [x] `module.decorator('$exceptionHandler', ($delegate) => (e, c) => { mySpy(e, c); $delegate(e, c); })` wraps the default — the spec 008 decorator recipe works on `$exceptionHandler` like any other service
     - [x] An overridden handler is invoked from every integration site listed below (§2.7–§2.12) — verified end-to-end by integration tests that swap in a spy

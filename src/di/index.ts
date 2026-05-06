@@ -16,3 +16,4 @@ export type {
   ProviderService,
   ResolveDeps,
 } from './di-types';
+export type { PhaseState, ProvideService } from './provide-types';

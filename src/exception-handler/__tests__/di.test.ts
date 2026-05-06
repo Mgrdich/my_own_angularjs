@@ -14,6 +14,7 @@ import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } fr
 
 import { ngModule } from '@core/ng-module';
 import { createInjector } from '@di/injector';
+import type { ProvideService } from '@di/index';
 import { createModule, resetRegistry } from '@di/module';
 import { consoleErrorExceptionHandler, type ExceptionHandler } from '@exception-handler/index';
 import { $InterpolateProvider } from '@interpolate/interpolate-provider';
@@ -81,21 +82,13 @@ describe('$exceptionHandler — DI integration', () => {
       expect(mySpy).toHaveBeenCalledWith(err, 'watchFn');
     });
 
-    // The canonical AngularJS override path is `config(['$provide', $p =>
-    // $p.factory('$exceptionHandler', ...)])`. This codebase does not yet
-    // expose `$provide` as a config-phase injectable — `module.factory` and
-    // `module.decorator` cover the override surface in the meantime. When
-    // `$provide` lands (future spec) flip this to `it(...)` and remove the
-    // skip; the `module.factory` and `module.decorator` tests below already
-    // lock in last-registration-wins semantics.
-    it.skip("config(['$provide', $p => $p.factory(...)]) replaces the default", () => {
+    it("config(['$provide', $p => $p.factory(...)]) replaces the default", () => {
       const mySpy: ExceptionHandler = vi.fn();
-      type ProvideService = { factory: (name: string, fn: () => unknown) => void };
 
       const appModule = createModule('app', ['ng']).config([
         '$provide',
         ($provide: ProvideService) => {
-          $provide.factory('$exceptionHandler', () => mySpy);
+          $provide.factory('$exceptionHandler', [() => mySpy]);
         },
       ]);
 
