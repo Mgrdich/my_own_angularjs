@@ -6,7 +6,7 @@ It is NOT a copy-paste implementation guide.
 # Technical Specification: `$provide` — Config-Phase Service Registration
 
 - **Functional Specification:** [`context/spec/015-provide-service/functional-spec.md`](./functional-spec.md)
-- **Status:** Draft
+- **Status:** Completed
 - **Author(s):** Mgrdich
 
 ---

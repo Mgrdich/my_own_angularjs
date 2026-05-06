@@ -36,12 +36,12 @@ _Complete the essential building blocks that everything else depends on._
   - [x] **Phase tracking:** Implement `$beginPhase`, `$clearPhase`, and `$$postDigest` hooks.
   - [x] **TTL configuration:** Support configurable digest TTL and cycle detection.
 
-- [ ] **Dependency Injection**
+- [x] **Dependency Injection**
   - [x] **Module System:** Implement `createModule()` / `getModule()` (ES module style) with support for dependencies between modules. (spec 007)
   - [x] **Injector:** Implement the injector with `invoke`, `get`, `has`, `annotate`, and support for `$inject` annotations and array-style DI. (spec 007)
   - [x] **Providers & Recipes:** Implement `provider`, `factory`, `service`, `value`, `constant`, and `decorator`. _(spec 007 covers `value`, `constant`, `factory`; `service`/`provider`/`decorator` deferred to spec 008)_
   - [x] **Config & Run Blocks:** Support module-level `config()` and `run()` lifecycle hooks. _(spec 008)_
-  - [ ] **`$provide` Service:** Register `$provide` as an injectable in `config()` blocks exposing `factory` / `service` / `value` / `constant` / `provider` / `decorator` registration recipes — the AngularJS-canonical config-phase override path (`config(['$provide', $p => $p.factory(...)])`). Today's `module.factory` chain works for pre-`createInjector` registration; `$provide` is the run-time-dynamic equivalent. Required to activate the skipped `$provide.factory` test in spec 014 (`src/exception-handler/__tests__/di.test.ts`).
+  - [x] **`$provide` Service:** Register `$provide` as an injectable in `config()` blocks exposing `factory` / `service` / `value` / `constant` / `provider` / `decorator` registration recipes — the AngularJS-canonical config-phase override path (`config(['$provide', $p => $p.factory(...)])`). _(spec 015)_
 
 ---
 

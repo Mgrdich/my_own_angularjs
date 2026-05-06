@@ -62,6 +62,40 @@ describe('dependency injection', () => {
     });
   });
 
+  describe('createInjector (constant-override guard via module DSL)', () => {
+    beforeEach(() => {
+      resetRegistry();
+    });
+
+    it('throws when `.value(name)` follows `.constant(name)` on the same module', () => {
+      // Same-module chain: the queue is drained in registration order, so the
+      // guard must fire when the second entry (value) lands on the same name.
+      // The em dash in the message is U+2014 — exact-string assert protects
+      // the public-contract wording.
+      const appModule = createModule('app', []).constant('X', 'a').value('X', 'b');
+      expect(() => createInjector([appModule])).toThrow(
+        'Cannot override constant "X" — already registered via .constant(...)',
+      );
+    });
+
+    it('throws when `.factory(name)` follows `.constant(name)` on the same module', () => {
+      const appModule = createModule('app', [])
+        .constant('X', 'a')
+        .factory('X', [() => 'b']);
+      expect(() => createInjector([appModule])).toThrow(/Cannot override constant "X"/);
+    });
+
+    it('throws when a downstream module overrides a constant from a required module', () => {
+      // Cross-module override: module `b` requires `a`; `a` registers the
+      // constant first (post-order drain), then `b`'s value runs against the
+      // already-tracked constant name. Proves the guard fires across module
+      // boundaries in a dependency graph, not just within a single module.
+      createModule('a', []).constant('X', 'a');
+      const b = createModule('b', ['a']).value('X', 'b');
+      expect(() => createInjector([b])).toThrow('Cannot override constant "X" — already registered via .constant(...)');
+    });
+  });
+
   describe('createInjector (multiple modules)', () => {
     beforeEach(() => {
       resetRegistry();
