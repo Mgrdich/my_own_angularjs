@@ -33,10 +33,10 @@ import { createModule, getModule, createInjector } from 'my-own-angularjs/di';
 
 `createModule(name, requires?)` returns a module object whose registration DSL grows **in-place** as new domains come online. Each domain provider owns exactly one registry, and the corresponding module-DSL method is a thin alias onto that provider:
 
-| Module DSL method                                                             | Underlying provider / service               | Lands in                                 |
-|-------------------------------------------------------------------------------|---------------------------------------------|------------------------------------------|
-| `.provider` / `.factory` / `.service` / `.value` / `.constant` / `.decorator` | `$provide`                                  | Phase 1 (already shipped — spec 007–008) |
-| `.config` / `.run`                                                            | module lifecycle                            | Phase 1 (already shipped — spec 008)     |
+| Module DSL method                                                             | Underlying provider / service               | Lands in                                                                                                |
+|-------------------------------------------------------------------------------|---------------------------------------------|---------------------------------------------------------------------------------------------------------|
+| `.provider` / `.factory` / `.service` / `.value` / `.constant` / `.decorator` | `$provide`                                  | Phase 1 — module-DSL chain shipped in spec 007–008; config-phase `$provide` injectable shipped in spec 015. Both paths share `applyRegistrationRecord` from `src/di/registration.ts`. |
+| `.config` / `.run`                                                            | module lifecycle                            | Phase 1 (already shipped — spec 008)                                                                    |
 | `.controller`                                                                 | `$controllerProvider.register`              | Phase 2 (with `$compile`)                |
 | `.directive` / `.component`                                                   | `$compileProvider.directive` / `.component` | Phase 2 (with `$compile`)                |
 | `.filter`                                                                     | `$filterProvider.register`                  | Phase 2 (with filter pipeline)           |
