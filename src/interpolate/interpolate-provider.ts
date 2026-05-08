@@ -18,6 +18,7 @@
  */
 
 import type { ExceptionHandler } from '@exception-handler/index';
+import type { FilterService } from '@filter/filter-types';
 import { createInterpolate } from './interpolate';
 import { DEFAULT_END_SYMBOL, DEFAULT_START_SYMBOL, validateDelimiters } from './interpolate-delimiters';
 import type { InterpolateService } from './interpolate-types';
@@ -68,23 +69,25 @@ export class $InterpolateProvider {
   }
 
   /**
-   * Injector-facing factory. Array-style invokable declaring `$sce` and
-   * `$exceptionHandler` as its dependencies. The injector resolves both first
-   * (`$exceptionHandler` has zero deps; `$sce` depends on `$sceDelegate`),
-   * then this factory builds an `InterpolateService` that routes both trust
-   * enforcement (via `$sce`) and runtime expression-error reporting (via
-   * `$exceptionHandler`).
+   * Injector-facing factory. Array-style invokable declaring `$sce`,
+   * `$exceptionHandler`, and `$filter` as its dependencies. `$filter` is
+   * core (always present once `ng` loads), so it is declared directly
+   * rather than probed lazily. The produced service routes trust
+   * enforcement (via `$sce`), runtime expression-error reporting (via
+   * `$exceptionHandler`), and filter-name resolution (via `$filter`).
    */
   $get = [
     '$sce',
     '$exceptionHandler',
-    ($sce: SceService, $exceptionHandler: ExceptionHandler): InterpolateService =>
+    '$filter',
+    ($sce: SceService, $exceptionHandler: ExceptionHandler, $filter: FilterService): InterpolateService =>
       createInterpolate({
         startSymbol: this.$$startSymbol,
         endSymbol: this.$$endSymbol,
         sceGetTrusted: (ctx, v) => $sce.getTrusted(ctx, v),
         sceIsEnabled: () => $sce.isEnabled(),
         exceptionHandler: $exceptionHandler,
+        filterLookup: $filter,
       }),
   ] as const;
 }

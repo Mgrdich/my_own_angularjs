@@ -6,7 +6,7 @@ It is NOT a copy-paste implementation guide.
 # Technical Specification: Filters — `$filterProvider`, `$filter`, and the Nine Built-ins
 
 - **Functional Specification:** [`context/spec/016-filters/functional-spec.md`](./functional-spec.md)
-- **Status:** Draft
+- **Status:** Completed
 - **Author(s):** Mgrdich
 
 ---

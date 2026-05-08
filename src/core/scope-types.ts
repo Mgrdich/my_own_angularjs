@@ -1,4 +1,5 @@
 import type { ExceptionHandler } from '@exception-handler/index';
+import type { FilterService } from '@filter/filter-types';
 import type { Scope } from './scope';
 
 /**
@@ -95,6 +96,23 @@ export interface ScopeOptions {
    * or `decorator`) to swap handlers in a real application.
    */
   exceptionHandler?: ExceptionHandler;
+  /**
+   * Filter-lookup service consulted by parsed expressions during watch
+   * evaluation. When provided, the scope merges `{ $$filter: filterLookup }`
+   * into the locals object passed to compiled watch functions, so
+   * `FilterExpression` AST nodes can resolve filter names against the
+   * active registry. Omitting the option leaves filter expressions
+   * unresolvable — the interpreter throws `FilterLookupError` synchronously
+   * inside the digest, which scope's catch site routes through
+   * `$exceptionHandler` with cause `'$filter'`.
+   *
+   * Mirrors the `exceptionHandler` option's lifecycle: captured at
+   * construction time, stored on the root, resolved by child scopes via
+   * `$root`. The bootstrap roadmap will eventually wire this on the
+   * injector-built `$rootScope` factory; until then, tests construct
+   * scopes directly with the option.
+   */
+  filterLookup?: FilterService;
 }
 
 /** Internal: integer predecessor up to 10, used to limit {@link PathOf} recursion. */

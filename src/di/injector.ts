@@ -657,12 +657,30 @@ export function createInjector<const Mods extends readonly AnyModule[]>(
     loadModule(module);
   }
 
+  // Phase 2 — Config blocks. Execute every collected config block through
+  // the config-phase injector. This runs after the full module graph has
+  // been loaded (so every provider is registered and every `<name>Provider`
+  // key is resolvable). Config blocks run strictly before any service is
+  // instantiated: `providerInjector.get` only exposes constants and
+  // provider instances, so a block that tries to inject a service/value/
+  // factory hits the config-phase enforcement error rather than silently
+  // pulling from the cache.
+  //
+  // Blocks are executed in `collectedConfigBlocks` order, which `loadModule`
+  // populates post-order (deps first, registration order within each
+  // module) — matching AngularJS semantics.
+  for (const block of collectedConfigBlocks) {
+    providerInjector.invoke(block);
+  }
+
   // Validate decorators against registered producers. A decorator for a
   // service that doesn't exist anywhere in the loaded module graph is a
   // hard error — we refuse to build an injector that would later silently
-  // ignore the decorator. Validation runs *after* the full graph loads so
-  // cross-module decoration (a module decorating a service registered in a
-  // module it `requires`) works regardless of load order.
+  // ignore the decorator. Validation runs *after* config blocks so producers
+  // registered through `$provide.factory(...)` from a config block (e.g.
+  // `module.filter(...)` -> `$filterProvider.register(...)` ->
+  // `$provide.factory('<name>Filter', factory)`) are visible. Cross-module
+  // decoration likewise works regardless of load order.
   for (const decoratedName of decorators.keys()) {
     const hasProducer =
       providerCache.has(decoratedName) ||
@@ -672,24 +690,6 @@ export function createInjector<const Mods extends readonly AnyModule[]>(
     if (!hasProducer) {
       throw new Error(`Cannot decorate unknown service: "${decoratedName}"`);
     }
-  }
-
-  // Phase 2 — Config blocks. Execute every collected config block through
-  // the config-phase injector. This runs after the full module graph has
-  // been loaded (so every provider is registered and every `<name>Provider`
-  // key is resolvable) and after decorator validation (so a config block
-  // that references a provider whose decorator would later throw still
-  // surfaces the clearer "unknown service" error first). Config blocks
-  // run strictly before any service is instantiated: `providerInjector.get`
-  // only exposes constants and provider instances, so a block that tries
-  // to inject a service/value/factory hits the config-phase enforcement
-  // error rather than silently pulling from the cache.
-  //
-  // Blocks are executed in `collectedConfigBlocks` order, which `loadModule`
-  // populates post-order (deps first, registration order within each
-  // module) — matching AngularJS semantics.
-  for (const block of collectedConfigBlocks) {
-    providerInjector.invoke(block);
   }
 
   // End of config phase. Flip the phase flag (so any `$provide` reference

@@ -76,15 +76,40 @@ export function buildAST(tokens: Token[]): Program {
    * The left-hand side must be an Identifier or MemberExpression (l-value).
    * Right-associative so that `a = b = 5` parses as `a = (b = 5)`.
    * Has lower precedence than ternary.
+   *
+   * The left operand is a `filterChain`, not a `ternary`, so a filtered
+   * value can appear on the right of `=` (e.g. `a = b | f`). The l-value
+   * check below automatically rejects `a | f = b` because a
+   * `FilterExpression` is neither an `Identifier` nor a `MemberExpression`.
    */
   function assignment(): ASTNode {
-    const left = ternary();
+    const left = filterChain();
     if (expect('=') !== undefined) {
       if (left.type !== 'Identifier' && left.type !== 'MemberExpression') {
         throw new Error('Trying to assign a value to a non l-value');
       }
       const right = assignment();
       return { type: 'AssignmentExpression', left, right };
+    }
+    return left;
+  }
+
+  /**
+   * Parse a filter chain: `ternary ('|' identifier (':' assignment)*)*`.
+   *
+   * Sits between `assignment` and `ternary` in the precedence chain — so
+   * filters bind looser than `?:` and `=` but tighter than nothing else.
+   * Chains left-to-right: `a | f | g` evaluates as `g(f(a))`.
+   */
+  function filterChain(): ASTNode {
+    let left = ternary();
+    while (expect('|') !== undefined) {
+      const nameToken = identifier();
+      const args: ASTNode[] = [];
+      while (expect(':') !== undefined) {
+        args.push(assignment());
+      }
+      left = { type: 'FilterExpression', input: left, name: nameToken.name, arguments: args };
     }
     return left;
   }

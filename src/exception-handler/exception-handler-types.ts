@@ -2,9 +2,11 @@
  * Public type surface for the `$exceptionHandler` service.
  *
  * `EXCEPTION_HANDLER_CAUSES` locks the framework-internal cause-descriptor
- * vocabulary at the eight tokens defined in FS § 2.13. The list is frozen
- * at both the type level (`as const` tuple) and runtime (`Object.freeze`)
- * so callers cannot widen it accidentally — and so the derived
+ * vocabulary at the nine tokens defined in FS § 2.13 (spec 014) plus the
+ * `'$filter'` extension introduced by spec 016 (filter-lookup failures
+ * routed through the digest's catch sites). The list is frozen at both
+ * the type level (`as const` tuple) and runtime (`Object.freeze`) so
+ * callers cannot widen it accidentally — and so the derived
  * `ExceptionHandlerCause` union and the runtime constant cannot drift.
  *
  * Future specs that introduce new internal call sites must extend this
@@ -31,7 +33,7 @@
  *   `Error` instances. Narrow with `instanceof Error` before reading
  *   `.stack` / `.message`.
  * @param cause Optional cause-descriptor identifying the call site —
- *   one of the eight tokens in {@link EXCEPTION_HANDLER_CAUSES}. The
+ *   one of the nine tokens in {@link EXCEPTION_HANDLER_CAUSES}. The
  *   framework always supplies a cause; third-party callers using
  *   {@link invokeExceptionHandler} may omit it.
  *
@@ -74,6 +76,7 @@ export type ExceptionHandler = (exception: unknown, cause?: string) => void;
  *     case 'eventListener': return '$on listener threw';
  *     case '$digest':       return 'digest TTL exhausted';
  *     case '$interpolate':  return 'interpolation render threw';
+ *     case '$filter':       return 'unknown filter referenced in expression';
  *   }
  * }
  */
@@ -86,10 +89,11 @@ export const EXCEPTION_HANDLER_CAUSES = Object.freeze([
   'eventListener',
   '$digest',
   '$interpolate',
+  '$filter',
 ] as const);
 
 /**
- * Type-level union of the eight cause-descriptor strings.
+ * Type-level union of the nine cause-descriptor strings.
  *
  * Derived from {@link EXCEPTION_HANDLER_CAUSES} so the runtime tuple and
  * compile-time union stay in lockstep. Use this in custom handlers when

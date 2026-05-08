@@ -29,7 +29,27 @@ const KEYWORDS = {
 } as const satisfies Record<string, boolean | null>;
 
 /** Characters that are single-character symbol tokens. */
-const SYMBOLS = new Set(['[', ']', '{', '}', '(', ')', ',', ':', '!', '+', '-', '*', '/', '%', '<', '>', '?', '=']);
+const SYMBOLS = new Set([
+  '[',
+  ']',
+  '{',
+  '}',
+  '(',
+  ')',
+  ',',
+  ':',
+  '!',
+  '+',
+  '-',
+  '*',
+  '/',
+  '%',
+  '<',
+  '>',
+  '?',
+  '=',
+  '|',
+]);
 
 /** Three-character operator tokens (matched before two-character operators). */
 const THREE_CHAR_OPS = ['===', '!=='];

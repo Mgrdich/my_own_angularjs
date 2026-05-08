@@ -521,21 +521,24 @@ describe('$provide injectable (smoke E2E)', () => {
       expect(injector.get('foo')).toBe('foo-base+B');
     });
 
-    it('decorating an unknown service does NOT register a placeholder; injector.get throws Unknown provider', () => {
-      // FS §2.7: a decorator on a non-existent service must not silently create
-      // a stub. Decorator validation in `loadModule` runs BEFORE config blocks,
-      // so a `$provide.decorator` registered inside a config block escapes the
-      // build-time guard — but `injector.get('nonexistent')` then surfaces the
-      // canonical "Unknown provider" error at resolution time. Either failure
-      // mode satisfies the spec; we assert the actual behavior here.
+    it('decorating an unknown service does NOT register a placeholder; createInjector throws Cannot decorate unknown service', () => {
+      // FS §2.7: a decorator on a non-existent service must not silently
+      // create a stub. As of spec 016 Slice 3, decorator validation runs
+      // AFTER config blocks (so producers registered through
+      // `$provide.factory` from a config block — e.g. via
+      // `module.filter` -> `$filterProvider.register` -> `$provide.factory`
+      // — are visible to the validation pass). A `$provide.decorator` on a
+      // truly nonexistent name therefore surfaces the build-time
+      // "Cannot decorate unknown service" error rather than a deferred
+      // run-time "Unknown provider". Either failure mode satisfies the
+      // spec; we assert the actual behavior here.
       const appModule = createModule('app', []).config([
         '$provide',
         ($p: ProvideService) => {
           $p.decorator('nonexistent', ['$delegate', ($d: unknown) => $d]);
         },
       ]);
-      const injector = createInjector([appModule]);
-      expect(() => injector.get('nonexistent')).toThrow(/Unknown provider: nonexistent/);
+      expect(() => createInjector([appModule])).toThrow(/Cannot decorate unknown service: "nonexistent"/);
     });
   });
 

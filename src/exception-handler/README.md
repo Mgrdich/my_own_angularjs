@@ -20,7 +20,7 @@ digest.
 | Export | Kind | Purpose |
 | --- | --- | --- |
 | `ExceptionHandler` | type | `(exception: unknown, cause?: string) => void` — the public callable contract |
-| `ExceptionHandlerCause` | type | Union of the eight cause-descriptor strings (derived from `EXCEPTION_HANDLER_CAUSES`) |
+| `ExceptionHandlerCause` | type | Union of the nine cause-descriptor strings (derived from `EXCEPTION_HANDLER_CAUSES`) |
 | `EXCEPTION_HANDLER_CAUSES` | value | Frozen tuple of all cause tokens — runtime mirror of the union |
 | `consoleErrorExceptionHandler` | value | Default handler — `console.error('[$exceptionHandler]', exception, cause)` |
 | `noopExceptionHandler` | value | `() => {}` — for tests only; do NOT use in production |
@@ -30,7 +30,7 @@ digest.
 ## Cause descriptors
 
 Every framework-internal call site passes a cause token so handlers can
-route, filter, or annotate based on origin. The list is frozen at eight
+route, filter, or annotate based on origin. The list is frozen at nine
 tokens — future specs that add new internal call sites must extend
 `EXCEPTION_HANDLER_CAUSES` as a public-API change.
 
@@ -44,6 +44,7 @@ tokens — future specs that add new internal call sites must extend
 | `'eventListener'` | An `$on` listener throws during `$emit` / `$broadcast` propagation |
 | `'$digest'` | TTL exhaustion — the constructed `Error` is reported via the handler before being re-thrown to the `$apply` caller |
 | `'$interpolate'` | An interpolated `{{expr}}` evaluation throws inside the render fn |
+| `'$filter'` | A filter-lookup failure (`Unknown filter: <name>`) thrown from inside a watch / listener / async-task / interpolation expression — narrowed via `instanceof FilterLookupError` (spec 016) |
 
 ## Override paths
 

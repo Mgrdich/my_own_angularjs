@@ -8,6 +8,8 @@
 
 import type { ASTNode, Identifier, MemberExpression } from './parse-types';
 import { isFunction, isObjectLike } from '@core/utils';
+import { FilterLookupError } from '@filter/filter-error';
+import type { FilterFn } from '@filter/filter-types';
 
 /** Exhaustiveness helper — throws if a discriminated union case is missed. */
 function assertNever(value: never): never {
@@ -172,6 +174,22 @@ export function evaluate(node: ASTNode, scope?: Record<string, unknown>, locals?
     case 'AssignmentExpression': {
       const value = evaluate(node.right, scope, locals);
       return assign(node.left, value, scope, locals);
+    }
+
+    case 'FilterExpression': {
+      // Reserved key on locals: scope's watch-evaluation site (Slice 4)
+      // injects `$$filter` so filter expressions can resolve names against
+      // the active filter registry. Direct `parse(expr)(scope)` calls with
+      // no locals.$$filter manufacture a FilterLookupError so the failure
+      // surfaces at the call site instead of producing `undefined`.
+      const $$filter = locals?.$$filter as ((name: string) => FilterFn) | undefined;
+      if (typeof $$filter !== 'function') {
+        throw new FilterLookupError(node.name);
+      }
+      const filterFn = $$filter(node.name);
+      const inputValue = evaluate(node.input, scope, locals);
+      const argValues = node.arguments.map((arg) => evaluate(arg, scope, locals));
+      return filterFn(inputValue, ...argValues);
     }
   }
 }

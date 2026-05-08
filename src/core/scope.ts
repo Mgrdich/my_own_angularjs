@@ -1,5 +1,14 @@
-import { consoleErrorExceptionHandler, invokeExceptionHandler, type ExceptionHandler } from '@exception-handler/index';
+import {
+  consoleErrorExceptionHandler,
+  invokeExceptionHandler,
+  type ExceptionHandler,
+  type ExceptionHandlerCause,
+} from '@exception-handler/index';
+import { FilterLookupError } from '@filter/filter-error';
+import type { FilterService } from '@filter/filter-types';
 import { parse } from '@parser/index';
+import { containsFilterExpression, containsStatefulFilter, isConstant } from '@parser/ast-flags';
+import type { ASTNode } from '@parser/parse-types';
 import { constantWatchDelegate, oneTimeLiteralWatchDelegate, oneTimeWatchDelegate } from './scope-watch-delegates';
 import {
   initWatchVal,
@@ -17,6 +26,20 @@ import {
   type WatchFn,
 } from './scope-types';
 import { isArray, isEqual } from './utils';
+
+/**
+ * Resolve the cause descriptor for an error caught inside a digest call site.
+ *
+ * Filter-lookup failures (`FilterLookupError`) are registration errors: the
+ * developer asked for a filter name that is not registered. They are routed
+ * with the dedicated `'$filter'` cause so a centralized handler can
+ * distinguish "missing filter" from "watch expression itself threw" — the
+ * defaultCause encodes the call-site origin (e.g. `'watchFn'`,
+ * `'$evalAsync'`) for every other thrown value.
+ */
+function causeFor(err: unknown, defaultCause: ExceptionHandlerCause): ExceptionHandlerCause {
+  return err instanceof FilterLookupError ? '$filter' : defaultCause;
+}
 
 /** Maximum number of digest iterations before throwing. */
 const TTL = 10;
@@ -51,12 +74,26 @@ function compileToWatchFn<T>(
     return expr;
   }
   const exprFn = parse(expr);
-  const wrapper: WatchFn<Record<string, unknown>, T> = (scope: Scope) =>
-    exprFn(scope as unknown as Record<string, unknown>) as T;
+  // Read the filter lookup off the root at every evaluation. The injector
+  // mutates `$$filterLookup` lazily after construction (and tests sometimes
+  // swap it), so caching the lookup at compile time would lose later writes.
+  // Allocating the locals object only when `$$filterLookup` is defined keeps
+  // the no-filter path zero-cost — every existing scope test still calls
+  // through with no locals at all.
+  const wrapper: WatchFn<Record<string, unknown>, T> = (scope: Scope) => {
+    const filterLookup = scope.$root.$$filterLookup;
+    if (filterLookup === undefined) {
+      return exprFn(scope as unknown as Record<string, unknown>) as T;
+    }
+    return exprFn(scope as unknown as Record<string, unknown>, { $$filter: filterLookup }) as T;
+  };
   Object.defineProperties(wrapper, {
     oneTime: { value: exprFn.oneTime, writable: false, enumerable: true, configurable: false },
     constant: { value: exprFn.constant, writable: false, enumerable: true, configurable: false },
     literal: { value: exprFn.literal, writable: false, enumerable: true, configurable: false },
+    // Forward the AST handle so $watch's runtime delegate re-check (Slice 11)
+    // can walk the tree once at install time without re-parsing.
+    $$ast: { value: exprFn.$$ast, writable: false, enumerable: false, configurable: false },
   });
   return wrapper as FlaggedWatchFn<Record<string, unknown>, T>;
 }
@@ -92,6 +129,15 @@ export class Scope {
   $$ttl: number;
   /** Exception handler for digest-internal errors. Only the value on `$root` is consulted. */
   $$exceptionHandler: ExceptionHandler;
+  /**
+   * Filter-lookup service. When set on `$root`, every parsed-expression watch
+   * evaluation receives `{ $$filter: this.$$filterLookup }` as locals so
+   * `FilterExpression` AST nodes can resolve names. `undefined` on a scope
+   * constructed without a `filterLookup` option — filter expressions
+   * still parse but throw `FilterLookupError` at evaluation time, which the
+   * digest's catch sites route through `$exceptionHandler` (cause `'$filter'`).
+   */
+  $$filterLookup: FilterService | undefined;
 
   constructor() {
     this.$id = nextId++;
@@ -108,6 +154,7 @@ export class Scope {
     this.$$phase = null;
     this.$$ttl = TTL;
     this.$$exceptionHandler = consoleErrorExceptionHandler;
+    this.$$filterLookup = undefined;
   }
 
   /** Create a typed Scope instance with compile-time property access. */
@@ -120,6 +167,7 @@ export class Scope {
     const scope = new Scope();
     scope.$$ttl = options?.ttl ?? TTL;
     scope.$$exceptionHandler = options?.exceptionHandler ?? consoleErrorExceptionHandler;
+    scope.$$filterLookup = options?.filterLookup;
     return scope as unknown as TypedScope<T> & T;
   }
 
@@ -145,9 +193,56 @@ export class Scope {
       };
     }
 
+    // Slice 11: runtime re-check for filter-bearing string expressions.
+    //
+    // `parse(expr)` conservatively marks `constant: false` whenever an
+    // expression contains a `FilterExpression` (the `$stateful` flag of a
+    // filter is a runtime fact). At watch install time the `$filter` lookup
+    // is reachable, so we walk the AST once here:
+    //
+    //   - if any filter in the chain is `$stateful: true`, downgrade
+    //     `oneTime` watches to a regular watcher (FS §2.7 / §2.9);
+    //   - otherwise, if every input/argument is structurally constant,
+    //     upgrade to `constantWatchDelegate` / `oneTimeLiteralWatchDelegate`
+    //     so the watcher deregisters after the first stable digest.
+    //
+    // Filter-resolution failures (`FilterLookupError`) are intentionally
+    // swallowed here — falling through preserves the parse-time delegate
+    // selection; the unresolvable name then surfaces at digest time via
+    // the dedicated `'$filter'` cause routing.
+    const flagged = watchFnCompiled as {
+      oneTime?: boolean;
+      constant?: boolean;
+      literal?: boolean;
+      $$ast?: ASTNode;
+    };
+    let oneTime = flagged.oneTime === true;
+    let constant = flagged.constant === true;
+    const literal = flagged.literal === true;
+    if (flagged.$$ast !== undefined && containsFilterExpression(flagged.$$ast)) {
+      const $filter = this.$root.$$filterLookup;
+      if ($filter !== undefined) {
+        try {
+          if (containsStatefulFilter(flagged.$$ast, $filter)) {
+            // Stateful filter anywhere in the chain disables fast paths.
+            oneTime = false;
+            constant = false;
+          } else if (isConstant(flagged.$$ast)) {
+            // Stateless + structurally constant input/args: promote to a
+            // constant watch so the listener fires once and detaches.
+            constant = true;
+          }
+        } catch (err) {
+          if (!(err instanceof FilterLookupError)) {
+            throw err;
+          }
+        }
+      }
+    }
+
     // Route constant expressions through the one-shot delegate: the value
     // can never change, so the listener only needs to fire once.
-    if ((watchFnCompiled as { constant?: boolean }).constant) {
+    if (constant) {
       return constantWatchDelegate(this, watchFnCompiled, listenerFn ?? noop, valueEq ?? false);
     }
 
@@ -160,7 +255,7 @@ export class Scope {
     // matches a function-form watcher (e.g. `InterpolateFn`) that advertises
     // `.oneTime === true` without exposing `.literal` at all, which is the
     // canonical non-literal one-time case.
-    if ((watchFnCompiled as { oneTime?: boolean }).oneTime && !(watchFnCompiled as { literal?: boolean }).literal) {
+    if (oneTime && !literal) {
       return oneTimeWatchDelegate(this, watchFnCompiled, listenerFn ?? noop, valueEq ?? false);
     }
 
@@ -168,7 +263,7 @@ export class Scope {
     // through the literal one-time delegate: stability requires every
     // top-level element/property to be non-undefined, not merely the outer
     // literal reference (which is always freshly allocated and thus defined).
-    if ((watchFnCompiled as { oneTime?: boolean }).oneTime && (watchFnCompiled as { literal?: boolean }).literal) {
+    if (oneTime && literal) {
       return oneTimeLiteralWatchDelegate(this, watchFnCompiled, listenerFn ?? noop, valueEq ?? false);
     }
 
@@ -277,7 +372,7 @@ export class Scope {
               watcher.listenerFn(newValue, listenerOldValue, scope);
             } catch (e) {
               // Route listener errors through $exceptionHandler but do not abort the digest
-              invokeExceptionHandler(this.$root.$$exceptionHandler, e, 'watchListener');
+              invokeExceptionHandler(this.$root.$$exceptionHandler, e, causeFor(e, 'watchListener'));
             }
 
             dirty = true;
@@ -286,8 +381,10 @@ export class Scope {
             return false;
           }
         } catch (e) {
-          // Route watch function errors through $exceptionHandler but do not abort the digest
-          invokeExceptionHandler(this.$root.$$exceptionHandler, e, 'watchFn');
+          // Route watch function errors through $exceptionHandler but do not abort the digest.
+          // FilterLookupError gets a dedicated cause ('$filter') because it
+          // signals a registration miss, not a watch-eval failure.
+          invokeExceptionHandler(this.$root.$$exceptionHandler, e, causeFor(e, 'watchFn'));
         }
       }
 
@@ -319,7 +416,7 @@ export class Scope {
             try {
               asyncTask.scope.$eval(asyncTask.expression);
             } catch (e) {
-              invokeExceptionHandler(this.$root.$$exceptionHandler, e, '$evalAsync');
+              invokeExceptionHandler(this.$root.$$exceptionHandler, e, causeFor(e, '$evalAsync'));
             }
           }
         }
@@ -353,7 +450,7 @@ export class Scope {
         try {
           fn();
         } catch (e) {
-          invokeExceptionHandler(this.$root.$$exceptionHandler, e, '$$postDigest');
+          invokeExceptionHandler(this.$root.$$exceptionHandler, e, causeFor(e, '$$postDigest'));
         }
       }
     }
@@ -779,7 +876,7 @@ export class Scope {
         try {
           listener(event, ...additionalArgs);
         } catch (e) {
-          invokeExceptionHandler(this.$root.$$exceptionHandler, e, 'eventListener');
+          invokeExceptionHandler(this.$root.$$exceptionHandler, e, causeFor(e, 'eventListener'));
         }
       }
       // Compact: remove null sentinels to prevent unbounded growth
@@ -797,7 +894,7 @@ export class Scope {
         try {
           asyncTask.scope.$eval(asyncTask.expression);
         } catch (e) {
-          invokeExceptionHandler(this.$root.$$exceptionHandler, e, '$applyAsync');
+          invokeExceptionHandler(this.$root.$$exceptionHandler, e, causeFor(e, '$applyAsync'));
         }
       }
     }
