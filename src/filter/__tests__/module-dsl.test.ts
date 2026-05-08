@@ -13,7 +13,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { createInjector } from '@di/injector';
 import { createModule, resetRegistry } from '@di/module';
 import { $FilterProvider } from '@filter/filter-provider';
-import type { FilterFn, FilterService } from '@filter/filter-types';
+import type { FilterService } from '@filter/filter-types';
 import { $InterpolateProvider } from '@interpolate/interpolate-provider';
 import { $SceDelegateProvider } from '@sce/sce-delegate-provider';
 import { $SceProvider } from '@sce/sce-provider';
@@ -50,7 +50,7 @@ describe('module.filter — DSL shorthand (FS §2.4)', () => {
       const $filter = injector.get('$filter');
 
       const viaService = $filter('shout');
-      const viaProvider = injector.get<FilterFn>('shoutFilter');
+      const viaProvider = injector.get('shoutFilter');
 
       expect(viaService).toBe(viaProvider);
       expect(viaService('hi')).toBe('hi!');
@@ -79,7 +79,7 @@ describe('module.filter — DSL shorthand (FS §2.4)', () => {
         .filter('whisper', [() => (s: unknown) => `*${String(s)}*`]);
 
       const injector = createInjector([appModule]);
-      const greeter = injector.get<() => string>('greeter');
+      const greeter = injector.get('greeter');
       const $filter = injector.get('$filter');
 
       expect(greeter()).toBe('hello!');

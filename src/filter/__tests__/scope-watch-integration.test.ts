@@ -17,7 +17,6 @@ import { ngModule } from '@core/ng-module';
 import { createInjector } from '@di/injector';
 import { createModule, resetRegistry } from '@di/module';
 import { $FilterProvider } from '@filter/filter-provider';
-import type { FilterService } from '@filter/filter-types';
 import { $InterpolateProvider } from '@interpolate/interpolate-provider';
 import { $SceDelegateProvider } from '@sce/sce-delegate-provider';
 import { $SceProvider } from '@sce/sce-provider';
@@ -37,7 +36,7 @@ describe('Filter ↔ Scope $watch integration', () => {
     it('$watch("msg | shout") fires the listener with the filtered value', () => {
       const appModule = createModule('app', ['ng']).filter('shout', [() => (s: unknown) => `${String(s)}!`]);
       const injector = createInjector([ngModule, appModule]);
-      const $filter = injector.get<FilterService>('$filter');
+      const $filter = injector.get('$filter');
       const scope = Scope.create<{ msg: string }>({ filterLookup: $filter });
 
       const listener = vi.fn();
@@ -58,7 +57,7 @@ describe('Filter ↔ Scope $watch integration', () => {
         .filter('shout', [() => (s: unknown) => `${String(s)}!`])
         .filter('reverse', [() => (s: unknown) => String(s).split('').reverse().join('')]);
       const injector = createInjector([ngModule, appModule]);
-      const $filter = injector.get<FilterService>('$filter');
+      const $filter = injector.get('$filter');
       const scope = Scope.create<{ msg: string }>({ filterLookup: $filter });
 
       const listener = vi.fn();
@@ -80,7 +79,7 @@ describe('Filter ↔ Scope $watch integration', () => {
         () => (s: unknown, suffix: unknown) => `${String(s)}${String(suffix)}`,
       ]);
       const injector = createInjector([ngModule, appModule]);
-      const $filter = injector.get<FilterService>('$filter');
+      const $filter = injector.get('$filter');
       const scope = Scope.create<{ msg: string; suffix: string }>({ filterLookup: $filter });
 
       const listener = vi.fn();
@@ -102,7 +101,7 @@ describe('Filter ↔ Scope $watch integration', () => {
         () => (s: unknown, n: unknown) => (s as number) + (n as number),
       ]);
       const injector = createInjector([ngModule, appModule]);
-      const $filter = injector.get<FilterService>('$filter');
+      const $filter = injector.get('$filter');
       const scope = Scope.create<{ base: number; offset: number }>({ filterLookup: $filter });
 
       const listener = vi.fn();
@@ -121,7 +120,7 @@ describe('Filter ↔ Scope $watch integration', () => {
     it('re-evaluates the filter when the input changes across digests', () => {
       const appModule = createModule('app', ['ng']).filter('shout', [() => (s: unknown) => `${String(s)}!`]);
       const injector = createInjector([ngModule, appModule]);
-      const $filter = injector.get<FilterService>('$filter');
+      const $filter = injector.get('$filter');
       const scope = Scope.create<{ msg: string }>({ filterLookup: $filter });
 
       const observed: unknown[] = [];

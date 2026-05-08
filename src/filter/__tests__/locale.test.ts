@@ -14,7 +14,6 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { ngModule } from '@core/ng-module';
 import { createInjector } from '@di/injector';
 import { createModule, resetRegistry } from '@di/module';
-import type { FilterService } from '@filter/filter-types';
 import type { LocaleService } from '@filter/locale-types';
 
 describe('$locale provider (FS §2.20)', () => {
@@ -26,14 +25,14 @@ describe('$locale provider (FS §2.20)', () => {
   describe('en-US defaults', () => {
     it('has id "en-us"', () => {
       const injector = createInjector([ngModule]);
-      const $locale = injector.get<LocaleService>('$locale');
+      const $locale = injector.get('$locale');
 
       expect($locale.id).toBe('en-us');
     });
 
     it('has the en-US NUMBER_FORMATS separator and currency-symbol fields', () => {
       const injector = createInjector([ngModule]);
-      const $locale = injector.get<LocaleService>('$locale');
+      const $locale = injector.get('$locale');
 
       expect($locale.NUMBER_FORMATS.DECIMAL_SEP).toBe('.');
       expect($locale.NUMBER_FORMATS.GROUP_SEP).toBe(',');
@@ -42,7 +41,7 @@ describe('$locale provider (FS §2.20)', () => {
 
     it('exposes exactly two patterns with the documented shapes', () => {
       const injector = createInjector([ngModule]);
-      const $locale = injector.get<LocaleService>('$locale');
+      const $locale = injector.get('$locale');
       const patterns = $locale.NUMBER_FORMATS.PATTERNS;
 
       expect(patterns.length).toBe(2);
@@ -65,7 +64,7 @@ describe('$locale provider (FS §2.20)', () => {
 
     it('has the en-US DAY / SHORTDAY arrays', () => {
       const injector = createInjector([ngModule]);
-      const $locale = injector.get<LocaleService>('$locale');
+      const $locale = injector.get('$locale');
 
       expect($locale.DATETIME_FORMATS.DAY).toEqual([
         'Sunday',
@@ -81,7 +80,7 @@ describe('$locale provider (FS §2.20)', () => {
 
     it('has the en-US MONTH / SHORTMONTH arrays', () => {
       const injector = createInjector([ngModule]);
-      const $locale = injector.get<LocaleService>('$locale');
+      const $locale = injector.get('$locale');
 
       expect($locale.DATETIME_FORMATS.MONTH).toEqual([
         'January',
@@ -115,14 +114,14 @@ describe('$locale provider (FS §2.20)', () => {
 
     it('has AMPMS = ["AM", "PM"]', () => {
       const injector = createInjector([ngModule]);
-      const $locale = injector.get<LocaleService>('$locale');
+      const $locale = injector.get('$locale');
 
       expect($locale.DATETIME_FORMATS.AMPMS).toEqual(['AM', 'PM']);
     });
 
     it('has the eight named date formats with en-US default values', () => {
       const injector = createInjector([ngModule]);
-      const $locale = injector.get<LocaleService>('$locale');
+      const $locale = injector.get('$locale');
       const dt = $locale.DATETIME_FORMATS;
 
       expect(dt.medium).toBe('MMM d, y h:mm:ss a');
@@ -137,7 +136,7 @@ describe('$locale provider (FS §2.20)', () => {
 
     it('exposes ERAS / ERANAMES / FIRSTDAYOFWEEK / WEEKENDRANGE for parity', () => {
       const injector = createInjector([ngModule]);
-      const $locale = injector.get<LocaleService>('$locale');
+      const $locale = injector.get('$locale');
       const dt = $locale.DATETIME_FORMATS;
 
       expect(dt.ERAS).toEqual(['BC', 'AD']);
@@ -222,12 +221,12 @@ describe('$locale provider (FS §2.20)', () => {
       const appModule = createModule('app', ['ng']).factory('$locale', [() => customLocale]);
 
       const injector = createInjector([ngModule, appModule]);
-      const $locale = injector.get<LocaleService>('$locale');
+      const $locale = injector.get('$locale');
       expect($locale.id).toBe('de-de');
 
       // Currency renders with the de-DE symbol AND the de-DE
       // separators (`.` for groups, `,` for decimals).
-      const $filter = injector.get<FilterService>('$filter');
+      const $filter = injector.get('$filter');
       expect($filter('currency')(1234.5)).toBe('€1.234,50');
     });
   });
@@ -291,7 +290,7 @@ describe('$locale provider (FS §2.20)', () => {
       const appModule = createModule('app', ['ng']).factory('$locale', [() => customLocale]);
 
       const injector = createInjector([ngModule, appModule]);
-      const $filter = injector.get<FilterService>('$filter');
+      const $filter = injector.get('$filter');
 
       // The factory produced the filter by injecting `$locale` ONCE,
       // but the filter reads `$locale.NUMBER_FORMATS.CURRENCY_SYM`

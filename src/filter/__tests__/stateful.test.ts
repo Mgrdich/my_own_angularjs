@@ -18,7 +18,7 @@ import { ngModule } from '@core/ng-module';
 import { createInjector } from '@di/injector';
 import { createModule, resetRegistry } from '@di/module';
 import { $FilterProvider } from '@filter/filter-provider';
-import type { FilterFn, FilterService } from '@filter/filter-types';
+import type { FilterFn } from '@filter/filter-types';
 import { $InterpolateProvider } from '@interpolate/interpolate-provider';
 import { $SceDelegateProvider } from '@sce/sce-delegate-provider';
 import { $SceProvider } from '@sce/sce-provider';
@@ -38,7 +38,7 @@ describe('$stateful filters (FS §2.7)', () => {
     it('does not refire the listener when the input is identity-stable across digests', () => {
       const appModule = createModule('app', ['ng']).filter('exclaim', [() => (s: unknown) => `${String(s)}!`]);
       const injector = createInjector([ngModule, appModule]);
-      const $filter = injector.get<FilterService>('$filter');
+      const $filter = injector.get('$filter');
       const scope = Scope.create<{ msg: string; other: number }>({ filterLookup: $filter });
       scope.msg = 'hello';
       scope.other = 0;
@@ -76,7 +76,7 @@ describe('$stateful filters (FS §2.7)', () => {
 
       const appModule = createModule('app', ['ng']).filter('tick', [() => tickFilter]);
       const injector = createInjector([ngModule, appModule]);
-      const $filter = injector.get<FilterService>('$filter');
+      const $filter = injector.get('$filter');
       const scope = Scope.create<{ fixed: string }>({ filterLookup: $filter });
       scope.fixed = 'unchanging';
 
@@ -119,7 +119,7 @@ describe('$stateful filters (FS §2.7)', () => {
 
       const appModule = createModule('app', ['ng']).filter('seq', [() => seqFilter]);
       const injector = createInjector([ngModule, appModule]);
-      const $filter = injector.get<FilterService>('$filter');
+      const $filter = injector.get('$filter');
       const scope = Scope.create<{ fixed: string }>({ filterLookup: $filter });
       scope.fixed = 'unchanging';
 
@@ -141,7 +141,7 @@ describe('$stateful filters (FS §2.7)', () => {
   describe('all nine built-in filters are stateless', () => {
     it('none of them declare $stateful', () => {
       const injector = createInjector([ngModule]);
-      const $filter = injector.get<FilterService>('$filter');
+      const $filter = injector.get('$filter');
 
       const builtinNames = [
         'filter',
@@ -171,7 +171,7 @@ describe('$stateful filters (FS §2.7)', () => {
 
       const appModule = createModule('app', ['ng']).filter('myStateful', [factory]);
       const injector = createInjector([ngModule, appModule]);
-      const $filter = injector.get<FilterService>('$filter');
+      const $filter = injector.get('$filter');
       const resolved = $filter('myStateful');
 
       const descriptor = Object.getOwnPropertyDescriptor(resolved, '$stateful');
@@ -198,7 +198,7 @@ describe('$stateful filters (FS §2.7)', () => {
 
       const appModule = createModule('app', ['ng']).filter('statefulFilter', [() => statefulFilter]);
       const injector = createInjector([ngModule, appModule]);
-      const $filter = injector.get<FilterService>('$filter');
+      const $filter = injector.get('$filter');
       const scope = Scope.create<{ value: number }>({ filterLookup: $filter });
       scope.value = 42;
 
@@ -232,7 +232,7 @@ describe('$stateful filters (FS §2.7)', () => {
 
       const appModule = createModule('app', ['ng']).filter('statefulFilter', [() => statefulFilter]);
       const injector = createInjector([ngModule, appModule]);
-      const $filter = injector.get<FilterService>('$filter');
+      const $filter = injector.get('$filter');
       const scope = Scope.create<{ tick: number }>({ filterLookup: $filter });
       scope.tick = 0;
 
@@ -268,7 +268,7 @@ describe('$stateful filters (FS §2.7)', () => {
         .filter('tail', [() => (s: unknown) => `${String(s)}!`]);
 
       const injector = createInjector([ngModule, appModule]);
-      const $filter = injector.get<FilterService>('$filter');
+      const $filter = injector.get('$filter');
       const scope = Scope.create<{ msg: string }>({ filterLookup: $filter });
       scope.msg = 'hi';
 
@@ -292,7 +292,7 @@ describe('$stateful filters (FS §2.7)', () => {
     it("'::msg | statelessFilter' still deregisters once the value stabilizes", () => {
       const appModule = createModule('app', ['ng']).filter('exclaim', [() => (s: unknown) => `${String(s)}!`]);
       const injector = createInjector([ngModule, appModule]);
-      const $filter = injector.get<FilterService>('$filter');
+      const $filter = injector.get('$filter');
       const scope = Scope.create<{ msg?: string; flip: number }>({ filterLookup: $filter });
       scope.flip = 0;
 

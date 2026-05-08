@@ -24,7 +24,6 @@ import { createModule, resetRegistry } from '@di/module';
 import { EXCEPTION_HANDLER_CAUSES, type ExceptionHandler, type ExceptionHandlerCause } from '@exception-handler/index';
 import { FilterLookupError } from '@filter/filter-error';
 import { $FilterProvider } from '@filter/filter-provider';
-import type { FilterService } from '@filter/filter-types';
 import { parse } from '@parser/index';
 import { $InterpolateProvider } from '@interpolate/interpolate-provider';
 import { $SceDelegateProvider } from '@sce/sce-delegate-provider';
@@ -58,7 +57,7 @@ describe('Filter ↔ $exceptionHandler integration (FS §2.8)', () => {
       const spy = vi.fn<ExceptionHandler>();
       const appModule = createModule('app', ['ng']).factory('$exceptionHandler', [() => spy]);
       const injector = createInjector([ngModule, appModule]);
-      const $filter = injector.get<FilterService>('$filter');
+      const $filter = injector.get('$filter');
       const scope = Scope.create<{ x: string }>({ filterLookup: $filter, exceptionHandler: spy });
 
       scope.x = 'hello';
@@ -80,7 +79,7 @@ describe('Filter ↔ $exceptionHandler integration (FS §2.8)', () => {
       const spy = vi.fn<ExceptionHandler>();
       const appModule = createModule('app', ['ng']).factory('$exceptionHandler', [() => spy]);
       const injector = createInjector([ngModule, appModule]);
-      const $filter = injector.get<FilterService>('$filter');
+      const $filter = injector.get('$filter');
       const scope = Scope.create<{ a: number; b: number }>({
         filterLookup: $filter,
         exceptionHandler: spy,
@@ -118,7 +117,7 @@ describe('Filter ↔ $exceptionHandler integration (FS §2.8)', () => {
       const spy = vi.fn<ExceptionHandler>();
       const appModule = createModule('app', ['ng']).factory('$exceptionHandler', [() => spy]);
       const injector = createInjector([ngModule, appModule]);
-      const $filter = injector.get<FilterService>('$filter');
+      const $filter = injector.get('$filter');
 
       expect(() => $filter('nonexistent')).toThrow(FilterLookupError);
       expect(() => $filter('nonexistent')).toThrow(/Unknown filter: nonexistent/);
@@ -129,7 +128,7 @@ describe('Filter ↔ $exceptionHandler integration (FS §2.8)', () => {
       const spy = vi.fn<ExceptionHandler>();
       const appModule = createModule('app', ['ng']).factory('$exceptionHandler', [() => spy]);
       const injector = createInjector([ngModule, appModule]);
-      const $filter = injector.get<FilterService>('$filter');
+      const $filter = injector.get('$filter');
 
       const fn = parse('x | nonexistent');
       // No digest context — calls bubble synchronously regardless of whether
@@ -167,7 +166,7 @@ describe('Filter ↔ $exceptionHandler integration (FS §2.8)', () => {
       const spy = vi.fn<ExceptionHandler>();
       const appModule = createModule('app', ['ng']).factory('$exceptionHandler', [() => spy]);
       const injector = createInjector([ngModule, appModule]);
-      const $filter = injector.get<FilterService>('$filter');
+      const $filter = injector.get('$filter');
       const scope = Scope.create<{ msg: string }>({
         filterLookup: $filter,
         exceptionHandler: spy,

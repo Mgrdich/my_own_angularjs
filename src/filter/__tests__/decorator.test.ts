@@ -60,7 +60,7 @@ describe('filter decorators (FS §2.6)', () => {
 
       const injector = createInjector([appModule]);
 
-      const viaProvider = injector.get<FilterFn>('shoutFilter');
+      const viaProvider = injector.get('shoutFilter');
       const viaService = injector.get('$filter')('shout');
 
       expect(viaProvider('hi')).toBe('[hi!]');
@@ -159,6 +159,10 @@ describe('filter decorators (FS §2.6)', () => {
       expect($filter('shout')('hi')).toBe('hi!');
 
       // The provider-name path also works — same singleton.
+      // Explicit generic: `appModule` registered via `$filterProvider.register`
+      // (config block), which is a runtime-only path — it does NOT widen the
+      // typed registry the way `.filter(...)` does. The bare lookup falls
+      // through to `unknown`; we re-narrow here.
       const viaProvider = injector.get<FilterFn>('shoutFilter');
       expect(viaProvider).toBe($filter('shout'));
       expect(viaProvider('hi')).toBe('hi!');

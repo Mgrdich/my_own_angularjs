@@ -12,7 +12,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { ngModule } from '@core/ng-module';
 import { createInjector } from '@di/injector';
 import { createModule, resetRegistry } from '@di/module';
-import type { FilterFn, FilterService } from '@filter/filter-types';
+import type { FilterFn } from '@filter/filter-types';
 
 describe('json built-in filter (FS §2.19)', () => {
   beforeEach(() => {
@@ -23,7 +23,7 @@ describe('json built-in filter (FS §2.19)', () => {
   describe('default spacing', () => {
     it('serializes an object with a 2-space indent (AngularJS default)', () => {
       const injector = createInjector([ngModule]);
-      const $filter = injector.get<FilterService>('$filter');
+      const $filter = injector.get('$filter');
 
       expect($filter('json')({ a: 1, b: 2 })).toBe('{\n  "a": 1,\n  "b": 2\n}');
     });
@@ -32,14 +32,14 @@ describe('json built-in filter (FS §2.19)', () => {
   describe('explicit spacing', () => {
     it('honors a 4-space indent', () => {
       const injector = createInjector([ngModule]);
-      const $filter = injector.get<FilterService>('$filter');
+      const $filter = injector.get('$filter');
 
       expect($filter('json')({ a: 1 }, 4)).toBe('{\n    "a": 1\n}');
     });
 
     it('produces compact output with spacing 0', () => {
       const injector = createInjector([ngModule]);
-      const $filter = injector.get<FilterService>('$filter');
+      const $filter = injector.get('$filter');
 
       expect($filter('json')({ a: 1 }, 0)).toBe('{"a":1}');
     });
@@ -48,21 +48,21 @@ describe('json built-in filter (FS §2.19)', () => {
   describe('input shapes', () => {
     it('serializes an array with explicit spacing 0', () => {
       const injector = createInjector([ngModule]);
-      const $filter = injector.get<FilterService>('$filter');
+      const $filter = injector.get('$filter');
 
       expect($filter('json')([1, 2, 3], 0)).toBe('[1,2,3]');
     });
 
     it('serializes a string as a JSON-escaped value', () => {
       const injector = createInjector([ngModule]);
-      const $filter = injector.get<FilterService>('$filter');
+      const $filter = injector.get('$filter');
 
       expect($filter('json')('hello')).toBe('"hello"');
     });
 
     it('serializes a number as its JSON form', () => {
       const injector = createInjector([ngModule]);
-      const $filter = injector.get<FilterService>('$filter');
+      const $filter = injector.get('$filter');
 
       expect($filter('json')(42)).toBe('42');
     });
@@ -71,14 +71,14 @@ describe('json built-in filter (FS §2.19)', () => {
   describe('special values', () => {
     it("serializes null as the literal string 'null'", () => {
       const injector = createInjector([ngModule]);
-      const $filter = injector.get<FilterService>('$filter');
+      const $filter = injector.get('$filter');
 
       expect($filter('json')(null)).toBe('null');
     });
 
     it('returns undefined (not the string "undefined") for undefined input', () => {
       const injector = createInjector([ngModule]);
-      const $filter = injector.get<FilterService>('$filter');
+      const $filter = injector.get('$filter');
 
       // `JSON.stringify(undefined)` returns `undefined`; the filter forwards.
       const out = $filter('json')(undefined);
@@ -89,7 +89,7 @@ describe('json built-in filter (FS §2.19)', () => {
   describe('JSON.stringify-delegated semantics', () => {
     it('throws on circular references', () => {
       const injector = createInjector([ngModule]);
-      const $filter = injector.get<FilterService>('$filter');
+      const $filter = injector.get('$filter');
       const circular: { self?: unknown } = {};
       circular.self = circular;
 
@@ -98,7 +98,7 @@ describe('json built-in filter (FS §2.19)', () => {
 
     it('omits functions and symbols inside objects', () => {
       const injector = createInjector([ngModule]);
-      const $filter = injector.get<FilterService>('$filter');
+      const $filter = injector.get('$filter');
 
       const sym = Symbol('hidden');
       const value = { a: 1, fn: () => 1, [sym]: 'sym', s: Symbol('also-hidden') };
@@ -111,7 +111,7 @@ describe('json built-in filter (FS §2.19)', () => {
   describe('stateless contract', () => {
     it('the resolved filter has no $stateful flag', () => {
       const injector = createInjector([ngModule]);
-      const $filter = injector.get<FilterService>('$filter');
+      const $filter = injector.get('$filter');
       const json: FilterFn = $filter('json');
 
       expect(json.$stateful).toBeUndefined();

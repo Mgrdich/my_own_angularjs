@@ -12,7 +12,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { ngModule } from '@core/ng-module';
 import { createInjector } from '@di/injector';
 import { createModule, resetRegistry } from '@di/module';
-import type { FilterFn, FilterService } from '@filter/filter-types';
+import type { FilterFn } from '@filter/filter-types';
 
 describe('orderBy built-in filter (FS §2.12)', () => {
   beforeEach(() => {
@@ -24,7 +24,7 @@ describe('orderBy built-in filter (FS §2.12)', () => {
     it('sorts items ascending by the named property', () => {
       // AngularJS orderBySpec.js: 'should sort by predicate'
       const injector = createInjector([ngModule]);
-      const $filter = injector.get<FilterService>('$filter');
+      const $filter = injector.get('$filter');
 
       const users = [{ name: 'Beth' }, { name: 'Adam' }, { name: 'Carl' }];
       expect($filter('orderBy')(users, 'name')).toEqual([{ name: 'Adam' }, { name: 'Beth' }, { name: 'Carl' }]);
@@ -32,7 +32,7 @@ describe('orderBy built-in filter (FS §2.12)', () => {
 
     it('sorts numerically when the property is a number', () => {
       const injector = createInjector([ngModule]);
-      const $filter = injector.get<FilterService>('$filter');
+      const $filter = injector.get('$filter');
 
       const items = [{ age: 30 }, { age: 25 }, { age: 35 }];
       expect($filter('orderBy')(items, 'age')).toEqual([{ age: 25 }, { age: 30 }, { age: 35 }]);
@@ -43,7 +43,7 @@ describe('orderBy built-in filter (FS §2.12)', () => {
     it("'-name' sorts descending", () => {
       // AngularJS orderBySpec.js: 'should sort by reverse predicate'
       const injector = createInjector([ngModule]);
-      const $filter = injector.get<FilterService>('$filter');
+      const $filter = injector.get('$filter');
 
       const users = [{ name: 'Adam' }, { name: 'Beth' }, { name: 'Carl' }];
       expect($filter('orderBy')(users, '-name')).toEqual([{ name: 'Carl' }, { name: 'Beth' }, { name: 'Adam' }]);
@@ -51,7 +51,7 @@ describe('orderBy built-in filter (FS §2.12)', () => {
 
     it("'+name' is explicit ascending — equivalent to bare 'name'", () => {
       const injector = createInjector([ngModule]);
-      const $filter = injector.get<FilterService>('$filter');
+      const $filter = injector.get('$filter');
 
       const users = [{ name: 'Beth' }, { name: 'Adam' }, { name: 'Carl' }];
       expect($filter('orderBy')(users, '+name')).toEqual($filter('orderBy')(users, 'name'));
@@ -62,7 +62,7 @@ describe('orderBy built-in filter (FS §2.12)', () => {
     it('sorts by the function result', () => {
       // AngularJS orderBySpec.js: 'should sort by predicate function'
       const injector = createInjector([ngModule]);
-      const $filter = injector.get<FilterService>('$filter');
+      const $filter = injector.get('$filter');
 
       const users = [{ lastName: 'Smith' }, { lastName: 'adams' }, { lastName: 'Brown' }];
       const sorted = $filter('orderBy')(users, (u: { lastName: string }) => u.lastName.toLowerCase()) as ReadonlyArray<{
@@ -74,7 +74,7 @@ describe('orderBy built-in filter (FS §2.12)', () => {
 
     it('invokes the function once per item', () => {
       const injector = createInjector([ngModule]);
-      const $filter = injector.get<FilterService>('$filter');
+      const $filter = injector.get('$filter');
       const seen: unknown[] = [];
 
       $filter('orderBy')([3, 1, 2], (item: unknown) => {
@@ -90,7 +90,7 @@ describe('orderBy built-in filter (FS §2.12)', () => {
     it('sorts by the first predicate, breaking ties with the second', () => {
       // AngularJS orderBySpec.js: 'should use multiple predicates as tie-breakers'
       const injector = createInjector([ngModule]);
-      const $filter = injector.get<FilterService>('$filter');
+      const $filter = injector.get('$filter');
 
       const users = [
         { lastName: 'Adams', firstName: 'Charlie' },
@@ -109,7 +109,7 @@ describe('orderBy built-in filter (FS §2.12)', () => {
   describe('mixed array — direction per element', () => {
     it("['-age', 'name'] — descending age, ascending name on ties", () => {
       const injector = createInjector([ngModule]);
-      const $filter = injector.get<FilterService>('$filter');
+      const $filter = injector.get('$filter');
 
       const users = [
         { age: 25, name: 'Adam' },
@@ -131,7 +131,7 @@ describe('orderBy built-in filter (FS §2.12)', () => {
     it('reverses the entire sort order', () => {
       // AngularJS orderBySpec.js: 'should reverse the sort if `reverseOrder` is true'
       const injector = createInjector([ngModule]);
-      const $filter = injector.get<FilterService>('$filter');
+      const $filter = injector.get('$filter');
 
       const users = [{ name: 'Beth' }, { name: 'Adam' }, { name: 'Carl' }];
       expect($filter('orderBy')(users, 'name', true)).toEqual([{ name: 'Carl' }, { name: 'Beth' }, { name: 'Adam' }]);
@@ -139,7 +139,7 @@ describe('orderBy built-in filter (FS §2.12)', () => {
 
     it('reverse=false leaves direction unchanged', () => {
       const injector = createInjector([ngModule]);
-      const $filter = injector.get<FilterService>('$filter');
+      const $filter = injector.get('$filter');
 
       const users = [{ name: 'Beth' }, { name: 'Adam' }, { name: 'Carl' }];
       expect($filter('orderBy')(users, 'name', false)).toEqual($filter('orderBy')(users, 'name'));
@@ -150,7 +150,7 @@ describe('orderBy built-in filter (FS §2.12)', () => {
     it('uses the user-supplied comparator', () => {
       // AngularJS orderBySpec.js: 'should support a custom comparator'
       const injector = createInjector([ngModule]);
-      const $filter = injector.get<FilterService>('$filter');
+      const $filter = injector.get('$filter');
 
       const users = [{ name: 'Beth' }, { name: 'Adam' }];
       const reverseLocaleComparator = (a: { value: unknown }, b: { value: unknown }) =>
@@ -164,7 +164,7 @@ describe('orderBy built-in filter (FS §2.12)', () => {
 
     it('receives ComparisonValue-shaped (value/type/index) keys', () => {
       const injector = createInjector([ngModule]);
-      const $filter = injector.get<FilterService>('$filter');
+      const $filter = injector.get('$filter');
       const seen: Array<{ value: unknown; type: unknown; index: unknown }> = [];
 
       const recordingComparator = (a: { value: unknown; type: unknown; index: unknown }, b: typeof a) => {
@@ -185,7 +185,7 @@ describe('orderBy built-in filter (FS §2.12)', () => {
   describe('default ordering rules — type precedence', () => {
     it('compares numbers numerically', () => {
       const injector = createInjector([ngModule]);
-      const $filter = injector.get<FilterService>('$filter');
+      const $filter = injector.get('$filter');
 
       // Numeric, NOT lexicographic — `10` ranks above `2`.
       expect($filter('orderBy')([10, 2, 1, 20], '+')).toEqual([1, 2, 10, 20]);
@@ -193,7 +193,7 @@ describe('orderBy built-in filter (FS §2.12)', () => {
 
     it('compares strings case-insensitively', () => {
       const injector = createInjector([ngModule]);
-      const $filter = injector.get<FilterService>('$filter');
+      const $filter = injector.get('$filter');
 
       // `'Adam'` and `'adam'` compare equal under lowercase folding;
       // tie-break preserves input order.
@@ -203,7 +203,7 @@ describe('orderBy built-in filter (FS §2.12)', () => {
     it('null and undefined sort to the END (ascending)', () => {
       // AngularJS orderBySpec.js: 'should sort `undefined` and `null` values to the end'
       const injector = createInjector([ngModule]);
-      const $filter = injector.get<FilterService>('$filter');
+      const $filter = injector.get('$filter');
 
       const items = [{ x: 2 }, { x: null }, { x: 1 }, { x: undefined }, { x: 3 }];
       const result = $filter('orderBy')(items, 'x') as ReadonlyArray<{ x: unknown }>;
@@ -217,7 +217,7 @@ describe('orderBy built-in filter (FS §2.12)', () => {
 
     it('null and undefined still sort to the END under descending order', () => {
       const injector = createInjector([ngModule]);
-      const $filter = injector.get<FilterService>('$filter');
+      const $filter = injector.get('$filter');
 
       const items = [{ x: 2 }, { x: null }, { x: 1 }, { x: undefined }, { x: 3 }];
       const result = $filter('orderBy')(items, '-x') as ReadonlyArray<{ x: unknown }>;
@@ -230,7 +230,7 @@ describe('orderBy built-in filter (FS §2.12)', () => {
 
     it('mixed types compare by typeof precedence (lexical order of type names)', () => {
       const injector = createInjector([ngModule]);
-      const $filter = injector.get<FilterService>('$filter');
+      const $filter = injector.get('$filter');
 
       // `'boolean' < 'number' < 'string'` lexically — booleans rank
       // first, then numbers, then strings.
@@ -245,35 +245,35 @@ describe('orderBy built-in filter (FS §2.12)', () => {
   describe('empty / identity predicates', () => {
     it("'+' sorts by item identity itself", () => {
       const injector = createInjector([ngModule]);
-      const $filter = injector.get<FilterService>('$filter');
+      const $filter = injector.get('$filter');
 
       expect($filter('orderBy')([3, 1, 2], '+')).toEqual([1, 2, 3]);
     });
 
     it("'-' sorts by item identity, descending", () => {
       const injector = createInjector([ngModule]);
-      const $filter = injector.get<FilterService>('$filter');
+      const $filter = injector.get('$filter');
 
       expect($filter('orderBy')([3, 1, 2], '-')).toEqual([3, 2, 1]);
     });
 
     it("'' (empty string) sorts by item identity", () => {
       const injector = createInjector([ngModule]);
-      const $filter = injector.get<FilterService>('$filter');
+      const $filter = injector.get('$filter');
 
       expect($filter('orderBy')([3, 1, 2], '')).toEqual([1, 2, 3]);
     });
 
     it('undefined predicate sorts by item identity', () => {
       const injector = createInjector([ngModule]);
-      const $filter = injector.get<FilterService>('$filter');
+      const $filter = injector.get('$filter');
 
       expect($filter('orderBy')([3, 1, 2], undefined)).toEqual([1, 2, 3]);
     });
 
     it('empty predicate array `[]` defaults to identity ascending', () => {
       const injector = createInjector([ngModule]);
-      const $filter = injector.get<FilterService>('$filter');
+      const $filter = injector.get('$filter');
 
       expect($filter('orderBy')([3, 1, 2], [])).toEqual([1, 2, 3]);
     });
@@ -282,7 +282,7 @@ describe('orderBy built-in filter (FS §2.12)', () => {
   describe('non-mutation guarantee', () => {
     it('does not mutate a frozen input array', () => {
       const injector = createInjector([ngModule]);
-      const $filter = injector.get<FilterService>('$filter');
+      const $filter = injector.get('$filter');
       const frozen = Object.freeze([{ n: 'Beth' }, { n: 'Adam' }]);
 
       const out = $filter('orderBy')(frozen, 'n') as ReadonlyArray<{ n: string }>;
@@ -295,7 +295,7 @@ describe('orderBy built-in filter (FS §2.12)', () => {
 
     it('returns a fresh array reference even when the input is already sorted', () => {
       const injector = createInjector([ngModule]);
-      const $filter = injector.get<FilterService>('$filter');
+      const $filter = injector.get('$filter');
       const input = [{ n: 'Adam' }, { n: 'Beth' }];
 
       const out = $filter('orderBy')(input, 'n');
@@ -307,21 +307,21 @@ describe('orderBy built-in filter (FS §2.12)', () => {
   describe('non-array input', () => {
     it('returns null unchanged', () => {
       const injector = createInjector([ngModule]);
-      const $filter = injector.get<FilterService>('$filter');
+      const $filter = injector.get('$filter');
 
       expect($filter('orderBy')(null, 'name')).toBe(null);
     });
 
     it('returns undefined unchanged', () => {
       const injector = createInjector([ngModule]);
-      const $filter = injector.get<FilterService>('$filter');
+      const $filter = injector.get('$filter');
 
       expect($filter('orderBy')(undefined, 'name')).toBe(undefined);
     });
 
     it('returns a plain object reference unchanged', () => {
       const injector = createInjector([ngModule]);
-      const $filter = injector.get<FilterService>('$filter');
+      const $filter = injector.get('$filter');
       const obj = { not: 'an array' };
 
       expect($filter('orderBy')(obj, 'name')).toBe(obj);
@@ -329,7 +329,7 @@ describe('orderBy built-in filter (FS §2.12)', () => {
 
     it('returns a string unchanged (string is not array-typed for this filter)', () => {
       const injector = createInjector([ngModule]);
-      const $filter = injector.get<FilterService>('$filter');
+      const $filter = injector.get('$filter');
 
       expect($filter('orderBy')('hello', '+')).toBe('hello');
     });
@@ -339,7 +339,7 @@ describe('orderBy built-in filter (FS §2.12)', () => {
     it('items with equal sort keys retain their relative input order (sentinel _origIndex)', () => {
       // AngularJS orderBySpec.js: 'should sort stably'
       const injector = createInjector([ngModule]);
-      const $filter = injector.get<FilterService>('$filter');
+      const $filter = injector.get('$filter');
 
       // Build an input where every item has the SAME sort key but a
       // distinct sentinel `_origIndex`. After sorting, the sentinel
@@ -353,7 +353,7 @@ describe('orderBy built-in filter (FS §2.12)', () => {
 
     it('items with equal primary keys retain order on the secondary fallback', () => {
       const injector = createInjector([ngModule]);
-      const $filter = injector.get<FilterService>('$filter');
+      const $filter = injector.get('$filter');
 
       type Item = { group: string; _origIndex: number };
       const items: Item[] = [
@@ -374,14 +374,14 @@ describe('orderBy built-in filter (FS §2.12)', () => {
   describe('empty array sanity (FS §2.12 implicit 13th)', () => {
     it('returns an empty array unchanged in shape', () => {
       const injector = createInjector([ngModule]);
-      const $filter = injector.get<FilterService>('$filter');
+      const $filter = injector.get('$filter');
 
       expect($filter('orderBy')([], 'name')).toEqual([]);
     });
 
     it('empty input + reverse + comparator still returns []', () => {
       const injector = createInjector([ngModule]);
-      const $filter = injector.get<FilterService>('$filter');
+      const $filter = injector.get('$filter');
 
       const result = $filter('orderBy')([], 'name', true, () => 0);
       expect(result).toEqual([]);
@@ -391,7 +391,7 @@ describe('orderBy built-in filter (FS §2.12)', () => {
   describe('stateless contract', () => {
     it('the resolved filter has no $stateful flag', () => {
       const injector = createInjector([ngModule]);
-      const $filter = injector.get<FilterService>('$filter');
+      const $filter = injector.get('$filter');
       const filterFn: FilterFn = $filter('orderBy');
 
       expect(filterFn.$stateful).toBeUndefined();

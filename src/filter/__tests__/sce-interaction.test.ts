@@ -27,7 +27,6 @@ import { describe, expect, it } from 'vitest';
 import { ngModule } from '@core/ng-module';
 import { createInjector } from '@di/injector';
 import { createModule } from '@di/module';
-import type { InterpolateService } from '@interpolate/interpolate-types';
 import { ngSanitize } from '@sanitize/ng-sanitize-module';
 import type { SanitizeService } from '@sanitize/sanitize-types';
 import { SCE_CONTEXTS } from '@sce/sce-contexts';
@@ -46,7 +45,7 @@ describe('Filter ↔ $sce / $interpolate cross-module integration (FS §2.10)', 
   describe('(a) ngSanitize loaded — filter runs first, then trustedHtml routes through $sanitize', () => {
     it('renders a single-binding filter chain through uppercase → getTrustedHtml → $sanitize', () => {
       const injector = createInjector([ngModule, ngSanitize]);
-      const $interpolate = injector.get<InterpolateService>('$interpolate');
+      const $interpolate = injector.get('$interpolate');
 
       const fn = $interpolate('{{ markup | uppercase }}', false, SCE_CONTEXTS.HTML);
       // Pipeline:
@@ -59,7 +58,7 @@ describe('Filter ↔ $sce / $interpolate cross-module integration (FS §2.10)', 
 
     it('strips a script tag from the filter output (sanitize fired)', () => {
       const injector = createInjector([ngModule, ngSanitize]);
-      const $interpolate = injector.get<InterpolateService>('$interpolate');
+      const $interpolate = injector.get('$interpolate');
 
       const fn = $interpolate('{{ markup | uppercase }}', false, SCE_CONTEXTS.HTML);
       // The uppercased `<SCRIPT>` is dropped by $sanitize because the tag
@@ -76,7 +75,7 @@ describe('Filter ↔ $sce / $interpolate cross-module integration (FS §2.10)', 
       // false, so `getTrustedHtml` falls back to the delegate's strict
       // throw for plain strings.
       const injector = createInjector([ngModule]);
-      const $interpolate = injector.get<InterpolateService>('$interpolate');
+      const $interpolate = injector.get('$interpolate');
 
       const fn = $interpolate('{{ markup | uppercase }}', false, SCE_CONTEXTS.HTML);
       expect(() => fn({ markup: '<b>hello</b>' })).toThrow(/not trusted for context 'html'/);
@@ -84,7 +83,7 @@ describe('Filter ↔ $sce / $interpolate cross-module integration (FS §2.10)', 
 
     it('does NOT throw at compile time — the failure is deferred to render', () => {
       const injector = createInjector([ngModule]);
-      const $interpolate = injector.get<InterpolateService>('$interpolate');
+      const $interpolate = injector.get('$interpolate');
 
       // `$interpolate(...)` succeeds; only invoking the returned render
       // function on a plain string surfaces the trust error.
@@ -117,7 +116,7 @@ describe('Filter ↔ $sce / $interpolate cross-module integration (FS §2.10)', 
         ]);
 
       const injector = createInjector([ngModule, ngSanitize, appModule]);
-      const $interpolate = injector.get<InterpolateService>('$interpolate');
+      const $interpolate = injector.get('$interpolate');
 
       const fn = $interpolate('{{ markup | trustHtml }}', false, SCE_CONTEXTS.HTML);
       // Dangerous content survives intact because the custom filter
@@ -132,7 +131,7 @@ describe('Filter ↔ $sce / $interpolate cross-module integration (FS §2.10)', 
   describe('(d) Single-binding rule still applies for multi-segment interpolation in trusted contexts', () => {
     it('throws at compile time for "<p>{{ markup | uppercase }}</p>" in html context', () => {
       const injector = createInjector([ngModule, ngSanitize]);
-      const $interpolate = injector.get<InterpolateService>('$interpolate');
+      const $interpolate = injector.get('$interpolate');
 
       // The `<p>` and `</p>` literal segments make this a multi-segment
       // interpolation. Spec-011's `strictTrustActive` check fires before
@@ -145,7 +144,7 @@ describe('Filter ↔ $sce / $interpolate cross-module integration (FS §2.10)', 
 
     it('throws for two adjacent filtered expressions in html context', () => {
       const injector = createInjector([ngModule, ngSanitize]);
-      const $interpolate = injector.get<InterpolateService>('$interpolate');
+      const $interpolate = injector.get('$interpolate');
 
       // Two `{{...}}` segments — even with both filtered — violates the
       // single-binding rule.

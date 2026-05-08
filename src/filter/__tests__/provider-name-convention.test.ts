@@ -38,7 +38,7 @@ describe('<name>Filter provider-shim convention (FS §2.5)', () => {
       const injector = createInjector([appModule]);
       const $filter = injector.get('$filter');
 
-      const viaProvider = injector.get<FilterFn>('shoutFilter');
+      const viaProvider = injector.get('shoutFilter');
       const viaService = $filter('shout');
 
       expect(viaProvider).toBe(viaService);
@@ -78,7 +78,7 @@ describe('<name>Filter provider-shim convention (FS §2.5)', () => {
       expect($filter('myFilter')('hi')).toBe('[hi]');
 
       // `injector.get('myFilterFilter')` is the literal provider name.
-      const viaProvider = injector.get<FilterFn>('myFilterFilter');
+      const viaProvider = injector.get('myFilterFilter');
       expect(viaProvider('hi')).toBe('[hi]');
 
       // Both refer to the same singleton.

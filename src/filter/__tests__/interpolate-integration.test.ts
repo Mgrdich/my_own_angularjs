@@ -16,7 +16,6 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { ngModule } from '@core/ng-module';
 import { createInjector } from '@di/injector';
 import { createModule, resetRegistry } from '@di/module';
-import type { InterpolateService } from '@interpolate/interpolate-types';
 import { parse } from '@parser/index';
 
 describe('Built-in filters × $interpolate integration (Slice 5)', () => {
@@ -28,7 +27,7 @@ describe('Built-in filters × $interpolate integration (Slice 5)', () => {
   describe('single filter inside an interpolation', () => {
     it('renders {{ name | uppercase }} with the upper-cased scope value', () => {
       const injector = createInjector([ngModule]);
-      const $interpolate = injector.get<InterpolateService>('$interpolate');
+      const $interpolate = injector.get('$interpolate');
 
       const fn = $interpolate('Hello {{ name | uppercase }}!');
       const out = fn({ name: 'world' });
@@ -38,7 +37,7 @@ describe('Built-in filters × $interpolate integration (Slice 5)', () => {
 
     it('renders {{ greeting | lowercase }} with the lower-cased scope value', () => {
       const injector = createInjector([ngModule]);
-      const $interpolate = injector.get<InterpolateService>('$interpolate');
+      const $interpolate = injector.get('$interpolate');
 
       const fn = $interpolate('say {{ greeting | lowercase }}');
 
@@ -49,7 +48,7 @@ describe('Built-in filters × $interpolate integration (Slice 5)', () => {
   describe('chained filters', () => {
     it('round-trips through uppercase | lowercase to the lowercased form', () => {
       const injector = createInjector([ngModule]);
-      const $interpolate = injector.get<InterpolateService>('$interpolate');
+      const $interpolate = injector.get('$interpolate');
 
       const fn = $interpolate('{{ greeting | uppercase | lowercase }}');
 
@@ -61,7 +60,7 @@ describe('Built-in filters × $interpolate integration (Slice 5)', () => {
   describe('json filter with explicit spacing argument', () => {
     it('renders {{ obj | json:0 }} as compact JSON', () => {
       const injector = createInjector([ngModule]);
-      const $interpolate = injector.get<InterpolateService>('$interpolate');
+      const $interpolate = injector.get('$interpolate');
 
       const fn = $interpolate('{{ obj | json:0 }}');
 
@@ -72,7 +71,7 @@ describe('Built-in filters × $interpolate integration (Slice 5)', () => {
   describe('parse-time success for an unknown filter', () => {
     it('parsing {{ x | nonexistent }} does NOT throw at $interpolate setup time', () => {
       const injector = createInjector([ngModule]);
-      const $interpolate = injector.get<InterpolateService>('$interpolate');
+      const $interpolate = injector.get('$interpolate');
 
       // Build the interpolation function — must not throw even though
       // `nonexistent` is not registered. The runtime failure path is

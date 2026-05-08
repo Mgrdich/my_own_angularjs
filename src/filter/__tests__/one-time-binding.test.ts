@@ -21,7 +21,7 @@ import { ngModule } from '@core/ng-module';
 import { createInjector } from '@di/injector';
 import { createModule, resetRegistry } from '@di/module';
 import { $FilterProvider } from '@filter/filter-provider';
-import type { FilterFn, FilterService } from '@filter/filter-types';
+import type { FilterFn } from '@filter/filter-types';
 import { $InterpolateProvider } from '@interpolate/interpolate-provider';
 import { $SceDelegateProvider } from '@sce/sce-delegate-provider';
 import { $SceProvider } from '@sce/sce-provider';
@@ -40,7 +40,7 @@ describe('one-time bindings with filters (FS §2.9)', () => {
   describe('filtered-output stabilization', () => {
     it('\'::items | orderBy:"name"\' deregisters once the orderBy output is a defined array', () => {
       const injector = createInjector([ngModule]);
-      const $filter = injector.get<FilterService>('$filter');
+      const $filter = injector.get('$filter');
       const scope = Scope.create<{ items?: { name: string }[] }>({ filterLookup: $filter });
 
       const listener = vi.fn();
@@ -86,7 +86,7 @@ describe('one-time bindings with filters (FS §2.9)', () => {
 
       const appModule = createModule('app', ['ng']).filter('gate', [() => gateFilter]);
       const injector = createInjector([ngModule, appModule]);
-      const $filter = injector.get<FilterService>('$filter');
+      const $filter = injector.get('$filter');
       const scope = Scope.create<{ value: string }>({ filterLookup: $filter });
       scope.value = 'defined-value';
 
@@ -136,7 +136,7 @@ describe('one-time bindings with filters (FS §2.9)', () => {
       );
       const appModule = createModule('app', ['ng']).filter('clock', [() => statefulFilter]);
       const injector = createInjector([ngModule, appModule]);
-      const $filter = injector.get<FilterService>('$filter');
+      const $filter = injector.get('$filter');
       const scope = Scope.create<{ value: number }>({ filterLookup: $filter });
       scope.value = 1;
 
@@ -158,7 +158,7 @@ describe('one-time bindings with filters (FS §2.9)', () => {
   describe('constant input through stateless filter', () => {
     it("'::someConst | uppercase' fires once with the snapshot then deregisters", () => {
       const injector = createInjector([ngModule]);
-      const $filter = injector.get<FilterService>('$filter');
+      const $filter = injector.get('$filter');
       const scope = Scope.create<{ flip: number }>({ filterLookup: $filter });
       scope.flip = 0;
 
@@ -182,7 +182,7 @@ describe('one-time bindings with filters (FS §2.9)', () => {
 
     it("'someConst | uppercase' (no `::`) also upgrades to a constant watch", () => {
       const injector = createInjector([ngModule]);
-      const $filter = injector.get<FilterService>('$filter');
+      const $filter = injector.get('$filter');
       const scope = Scope.create<{ flip: number }>({ filterLookup: $filter });
       scope.flip = 0;
 

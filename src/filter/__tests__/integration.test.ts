@@ -23,7 +23,6 @@ import { describe, expect, it } from 'vitest';
 import { ngModule } from '@core/ng-module';
 import { createInjector } from '@di/injector';
 import { createModule } from '@di/module';
-import type { InterpolateService } from '@interpolate/interpolate-types';
 import { ngSanitize } from '@sanitize/ng-sanitize-module';
 
 describe('Cross-module filter composition (Slice 12)', () => {
@@ -35,7 +34,7 @@ describe('Cross-module filter composition (Slice 12)', () => {
     ]);
 
     const injector = createInjector([ngModule, ngSanitize, appModule]);
-    const $interpolate = injector.get<InterpolateService>('$interpolate');
+    const $interpolate = injector.get('$interpolate');
 
     // 'hi' → 'ih' (reverse) → 'IH' (uppercase)
     expect($interpolate('{{ message | reverse | uppercase }}')({ message: 'hi' })).toBe('IH');
@@ -44,7 +43,7 @@ describe('Cross-module filter composition (Slice 12)', () => {
   it('chains a built-in limitTo with a built-in json filter using its default 2-space indent', () => {
     const appModule = createModule('app', ['ng', 'ngSanitize']);
     const injector = createInjector([ngModule, ngSanitize, appModule]);
-    const $interpolate = injector.get<InterpolateService>('$interpolate');
+    const $interpolate = injector.get('$interpolate');
 
     // The grouping parens are required: filter args parse via `assignment`,
     // which itself includes the filter-chain rule, so `limitTo:2 | json`
@@ -58,7 +57,7 @@ describe('Cross-module filter composition (Slice 12)', () => {
   it('renders a currency-formatted value from a numeric scope binding through a single filter', () => {
     const appModule = createModule('app', ['ng', 'ngSanitize']);
     const injector = createInjector([ngModule, ngSanitize, appModule]);
-    const $interpolate = injector.get<InterpolateService>('$interpolate');
+    const $interpolate = injector.get('$interpolate');
 
     // 12.5 | currency:'€':2 → '€12.50' (en-US default pattern, custom symbol)
     expect($interpolate('{{ price | currency:"€":2 }}')({ price: 12.5 })).toBe('€12.50');

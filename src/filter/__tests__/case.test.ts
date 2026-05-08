@@ -14,7 +14,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { ngModule } from '@core/ng-module';
 import { createInjector } from '@di/injector';
 import { createModule, resetRegistry } from '@di/module';
-import type { FilterFn, FilterService } from '@filter/filter-types';
+import type { FilterFn } from '@filter/filter-types';
 
 describe('uppercase / lowercase built-in filters (FS §§2.17, 2.18)', () => {
   // Re-register a fresh `'ng'` shell so any module declared with
@@ -30,21 +30,21 @@ describe('uppercase / lowercase built-in filters (FS §§2.17, 2.18)', () => {
   describe('uppercase (FS §2.17)', () => {
     it('uppercases a lowercase string', () => {
       const injector = createInjector([ngModule]);
-      const $filter = injector.get<FilterService>('$filter');
+      const $filter = injector.get('$filter');
 
       expect($filter('uppercase')('hello')).toBe('HELLO');
     });
 
     it('uppercases a mixed-case string fully', () => {
       const injector = createInjector([ngModule]);
-      const $filter = injector.get<FilterService>('$filter');
+      const $filter = injector.get('$filter');
 
       expect($filter('uppercase')('Hello World')).toBe('HELLO WORLD');
     });
 
     it('returns numbers, booleans, null, undefined, and objects unchanged', () => {
       const injector = createInjector([ngModule]);
-      const $filter = injector.get<FilterService>('$filter');
+      const $filter = injector.get('$filter');
       const upper = $filter('uppercase');
 
       expect(upper(42)).toBe(42);
@@ -58,14 +58,14 @@ describe('uppercase / lowercase built-in filters (FS §§2.17, 2.18)', () => {
 
     it('returns the empty string unchanged', () => {
       const injector = createInjector([ngModule]);
-      const $filter = injector.get<FilterService>('$filter');
+      const $filter = injector.get('$filter');
 
       expect($filter('uppercase')('')).toBe('');
     });
 
     it('is idempotent on already-uppercase input', () => {
       const injector = createInjector([ngModule]);
-      const $filter = injector.get<FilterService>('$filter');
+      const $filter = injector.get('$filter');
       const upper = $filter('uppercase');
 
       expect(upper('HELLO')).toBe('HELLO');
@@ -74,7 +74,7 @@ describe('uppercase / lowercase built-in filters (FS §§2.17, 2.18)', () => {
 
     it('is registered as a stateless filter (no $stateful flag)', () => {
       const injector = createInjector([ngModule]);
-      const $filter = injector.get<FilterService>('$filter');
+      const $filter = injector.get('$filter');
       const upper: FilterFn = $filter('uppercase');
 
       expect(upper.$stateful).toBeUndefined();
@@ -84,21 +84,21 @@ describe('uppercase / lowercase built-in filters (FS §§2.17, 2.18)', () => {
   describe('lowercase (FS §2.18)', () => {
     it('lowercases an uppercase string', () => {
       const injector = createInjector([ngModule]);
-      const $filter = injector.get<FilterService>('$filter');
+      const $filter = injector.get('$filter');
 
       expect($filter('lowercase')('HELLO')).toBe('hello');
     });
 
     it('lowercases a mixed-case string fully', () => {
       const injector = createInjector([ngModule]);
-      const $filter = injector.get<FilterService>('$filter');
+      const $filter = injector.get('$filter');
 
       expect($filter('lowercase')('Hello World')).toBe('hello world');
     });
 
     it('returns non-string input unchanged', () => {
       const injector = createInjector([ngModule]);
-      const $filter = injector.get<FilterService>('$filter');
+      const $filter = injector.get('$filter');
       const lower = $filter('lowercase');
 
       expect(lower(42)).toBe(42);
@@ -111,14 +111,14 @@ describe('uppercase / lowercase built-in filters (FS §§2.17, 2.18)', () => {
 
     it('returns the empty string unchanged', () => {
       const injector = createInjector([ngModule]);
-      const $filter = injector.get<FilterService>('$filter');
+      const $filter = injector.get('$filter');
 
       expect($filter('lowercase')('')).toBe('');
     });
 
     it('is idempotent on already-lowercase input', () => {
       const injector = createInjector([ngModule]);
-      const $filter = injector.get<FilterService>('$filter');
+      const $filter = injector.get('$filter');
       const lower = $filter('lowercase');
 
       expect(lower('hello')).toBe('hello');
@@ -127,7 +127,7 @@ describe('uppercase / lowercase built-in filters (FS §§2.17, 2.18)', () => {
 
     it('is registered as a stateless filter (no $stateful flag)', () => {
       const injector = createInjector([ngModule]);
-      const $filter = injector.get<FilterService>('$filter');
+      const $filter = injector.get('$filter');
       const lower: FilterFn = $filter('lowercase');
 
       expect(lower.$stateful).toBeUndefined();
@@ -137,7 +137,7 @@ describe('uppercase / lowercase built-in filters (FS §§2.17, 2.18)', () => {
   describe('cross-filter independence', () => {
     it('uppercase and lowercase resolve to distinct filter instances', () => {
       const injector = createInjector([ngModule]);
-      const $filter = injector.get<FilterService>('$filter');
+      const $filter = injector.get('$filter');
 
       const upper = $filter('uppercase');
       const lower = $filter('lowercase');
