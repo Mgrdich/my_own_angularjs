@@ -721,6 +721,34 @@ describe('spec 010 — parse metadata flags', () => {
     });
   });
 
+  describe('spec 016 slice 11 — $$ast handle', () => {
+    it('exposes the AST body on the returned function under $$ast', () => {
+      const fn = parse('a + b');
+      expect(fn.$$ast).toBeDefined();
+      expect(fn.$$ast.type).toBe('BinaryExpression');
+    });
+
+    it('exposes the FilterExpression node for a filtered expression', () => {
+      const fn = parse('value | uppercase');
+      expect(fn.$$ast.type).toBe('FilterExpression');
+    });
+
+    it('makes $$ast non-enumerable so it does not leak into Object.keys', () => {
+      const fn = parse('a');
+      const keys = Object.keys(fn);
+      expect(keys).not.toContain('$$ast');
+      // But it is still readable via direct property access.
+      expect(fn.$$ast).toBeDefined();
+    });
+
+    it('makes $$ast non-writable so callers cannot stomp on the AST handle', () => {
+      const fn = parse('a');
+      const descriptor = Object.getOwnPropertyDescriptor(fn, '$$ast');
+      expect(descriptor?.writable).toBe(false);
+      expect(descriptor?.configurable).toBe(false);
+    });
+  });
+
   describe('oneTime is always false in slice 1 (no :: support yet)', () => {
     const samples = [
       'a',

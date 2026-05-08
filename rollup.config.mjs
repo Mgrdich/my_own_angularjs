@@ -25,6 +25,7 @@ const entries = [
   { name: 'sce/index', input: 'src/sce/index.ts' },
   { name: 'sanitize/index', input: 'src/sanitize/index.ts' },
   { name: 'exception-handler/index', input: 'src/exception-handler/index.ts' },
+  { name: 'filter/index', input: 'src/filter/index.ts' },
 ];
 
 // Path aliases declared in `tsconfig.json` are used across the codebase
@@ -41,6 +42,7 @@ const tsPathAliases = {
   '@sce/*': ['src/sce/*'],
   '@sanitize/*': ['src/sanitize/*'],
   '@exception-handler/*': ['src/exception-handler/*'],
+  '@filter/*': ['src/filter/*'],
 };
 
 const bundleConfigs = entries.map((entry) => ({

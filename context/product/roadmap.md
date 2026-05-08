@@ -76,10 +76,10 @@ _The layer that connects the runtime to templates and the DOM._
   - [x] **Digest Integration:** Route watch, listener, `$evalAsync`, and `$applyAsync` exceptions through `$exceptionHandler` instead of the current inline `console.error` in `src/core/scope.ts` — resolves the runtime-error deferral from spec 011 §2.10.
   - [x] **$interpolate Integration:** Route render-time expression exceptions through `$exceptionHandler` when an interpolation fn is used inside a digest.
 
-- [ ] **Filters**
-  - [ ] **Filter Registration & Pipeline:** Implement the filter system with `$filterProvider` and chained filter expressions.
-  - [ ] **Module DSL `.filter(name, factory)`:** Expose `.filter` on `createModule(...)` as a thin wrapper over `$filterProvider.register` — ng-module parity, shared registry, no duplicated state.
-  - [ ] **Built-in Filters:** Implement core filters (`filter`, `orderBy`, `limitTo`, `currency`, `number`, `date`, `uppercase`, `lowercase`, `json`).
+- [x] **Filters**
+  - [x] **Filter Registration & Pipeline:** Implement the filter system with `$filterProvider` and chained filter expressions.
+  - [x] **Module DSL `.filter(name, factory)`:** Expose `.filter` on `createModule(...)` as a thin wrapper over `$filterProvider.register` — ng-module parity, shared registry, no duplicated state.
+  - [x] **Built-in Filters:** Implement core filters (`filter`, `orderBy`, `limitTo`, `currency`, `number`, `date`, `uppercase`, `lowercase`, `json`).
 
 - [ ] **Directives & DOM Compilation**
   - [ ] **Compiler ($compile):** Implement directive collection, sorting by priority, and terminal directives.

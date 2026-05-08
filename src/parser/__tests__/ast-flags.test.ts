@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { lex } from '@parser/lexer';
 import { buildAST } from '@parser/ast';
-import { isConstant, isLiteral } from '@parser/ast-flags';
+import { containsStatefulFilter, isConstant, isLiteral } from '@parser/ast-flags';
+import type { FilterFn, FilterService } from '@filter/filter-types';
 
 /**
  * Drive the full lex → buildAST pipeline so tests exercise real AST nodes
@@ -327,5 +328,61 @@ describe('isLiteral', () => {
         expect(isLiteral(astOf(expr))).toBe(expected);
       });
     });
+  });
+});
+
+describe('containsStatefulFilter', () => {
+  const stateless: FilterFn = (v: unknown) => v;
+  const stateful: FilterFn = Object.assign((v: unknown) => v, { $stateful: true });
+  const lookup =
+    (registry: Record<string, FilterFn>): FilterService =>
+    (name: string) => {
+      const fn = registry[name];
+      if (!fn) {
+        throw new Error(`Unknown filter: ${name}`);
+      }
+      return fn;
+    };
+
+  it('returns false for an expression with no filters', () => {
+    const $filter = lookup({});
+    expect(containsStatefulFilter(astOf('a + b').body, $filter)).toBe(false);
+  });
+
+  it('returns false when every filter in the chain is stateless', () => {
+    const $filter = lookup({ a: stateless, b: stateless });
+    expect(containsStatefulFilter(astOf('value | a | b').body, $filter)).toBe(false);
+  });
+
+  it('returns true when any filter in the chain is stateful', () => {
+    const $filter = lookup({ a: stateless, b: stateful });
+    expect(containsStatefulFilter(astOf('value | a | b').body, $filter)).toBe(true);
+  });
+
+  it('returns true when a stateful filter sits at the head of the chain', () => {
+    const $filter = lookup({ a: stateful, b: stateless });
+    expect(containsStatefulFilter(astOf('value | a | b').body, $filter)).toBe(true);
+  });
+
+  it('walks into filter arguments and detects nested stateful filters', () => {
+    const $filter = lookup({ outer: stateless, nested: stateful });
+    // The nested filter sits inside an argument expression. The walk must
+    // descend into argument trees.
+    expect(containsStatefulFilter(astOf('value | outer : (n | nested)').body, $filter)).toBe(true);
+  });
+
+  it('walks into the filter input and detects upstream stateful filters', () => {
+    const $filter = lookup({ outer: stateless, inner: stateful });
+    // Equivalent shape: outer's input is itself a filter expression.
+    expect(containsStatefulFilter(astOf('value | inner | outer').body, $filter)).toBe(true);
+  });
+
+  it('walks structural nodes (binary, conditional, call) without filters', () => {
+    const $filter = lookup({});
+    expect(containsStatefulFilter(astOf('a + b * c').body, $filter)).toBe(false);
+    expect(containsStatefulFilter(astOf('a ? b : c').body, $filter)).toBe(false);
+    expect(containsStatefulFilter(astOf('fn(a, b)').body, $filter)).toBe(false);
+    expect(containsStatefulFilter(astOf('[1, 2, 3]').body, $filter)).toBe(false);
+    expect(containsStatefulFilter(astOf('{a: 1, b: 2}').body, $filter)).toBe(false);
   });
 });

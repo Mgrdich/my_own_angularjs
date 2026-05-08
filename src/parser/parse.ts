@@ -10,7 +10,7 @@ import type { ExpressionFn } from './parse-types';
 import { lex } from './lexer';
 import { buildAST } from './ast';
 import { evaluate } from './interpreter';
-import { isConstant, isLiteral } from './ast-flags';
+import { containsFilterExpression, isConstant, isLiteral } from './ast-flags';
 
 /**
  * Parse an AngularJS expression string into a reusable evaluation function.
@@ -54,8 +54,17 @@ export function parse(expr: string): ExpressionFn {
   const fn = (scope?: Record<string, unknown>, locals?: Record<string, unknown>) => evaluate(ast.body, scope, locals);
   Object.defineProperties(fn, {
     oneTime: { value: oneTime, writable: false, enumerable: true, configurable: false },
-    constant: { value: isConstant(ast.body), writable: false, enumerable: true, configurable: false },
+    constant: {
+      value: isConstant(ast.body) && !containsFilterExpression(ast.body),
+      writable: false,
+      enumerable: true,
+      configurable: false,
+    },
     literal: { value: isLiteral(ast), writable: false, enumerable: true, configurable: false },
+    // Non-enumerable: $$-prefixed internal handle for scope's watch-install
+    // re-check (Slice 11). Hidden from iteration so it never leaks into
+    // accidental `Object.keys` / spread surfaces of `ExpressionFn`.
+    $$ast: { value: ast.body, writable: false, enumerable: false, configurable: false },
   });
   return fn as ExpressionFn;
 }

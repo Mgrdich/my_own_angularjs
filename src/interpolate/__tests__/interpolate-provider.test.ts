@@ -1,10 +1,21 @@
 import { describe, expect, it } from 'vitest';
 
 import { consoleErrorExceptionHandler, type ExceptionHandler } from '@exception-handler/index';
+import { FilterLookupError } from '@filter/filter-error';
+import type { FilterFn, FilterService } from '@filter/filter-types';
 import { $InterpolateProvider } from '@interpolate/interpolate-provider';
 import type { InterpolateService } from '@interpolate/interpolate-types';
 import { sce } from '@sce/sce';
 import type { SceService } from '@sce/sce-types';
+
+// Stub `$filter` for unit tests: the bare `$InterpolateProvider` has no
+// injector context, so we simulate the run-phase service with a closure that
+// throws `FilterLookupError` for any name (no filters registered in unit
+// tests). Tests that exercise actual filter resolution live in integration
+// tests under `src/filter/__tests__/`.
+const stubFilter: FilterService = (name: string): FilterFn => {
+  throw new FilterLookupError(name);
+};
 
 describe('$InterpolateProvider — Slice 5 (config-phase configurator)', () => {
   describe('default delimiters', () => {
@@ -87,17 +98,19 @@ describe('$InterpolateProvider — Slice 5 (config-phase configurator)', () => {
   });
 
   describe('$get factory', () => {
-    // Spec 012 slice 6 added `$sce` and spec 014 slice 7 added `$exceptionHandler`
-    // as deps on `$get`, so the factory is the THIRD element of the array. Unit
-    // tests here simulate the injector by passing in the ESM `sce` default
-    // instance and the default console-error exception handler directly.
+    // Spec 012 slice 6 added `$sce`, spec 014 slice 7 added `$exceptionHandler`,
+    // and spec 016 slice 4 added `$filter` as deps on `$get`, so the factory is
+    // the FOURTH element of the array. Unit tests here simulate the injector by
+    // passing in the ESM `sce` default instance, the default console-error
+    // exception handler, and a stub `$filter` directly.
     const invokeFactory = (
       provider: $InterpolateProvider,
       $sce: SceService = sce,
       $exceptionHandler: ExceptionHandler = consoleErrorExceptionHandler,
+      $filter: FilterService = stubFilter,
     ): InterpolateService => {
-      const factory = provider.$get[2];
-      return factory($sce, $exceptionHandler);
+      const factory = provider.$get[3];
+      return factory($sce, $exceptionHandler, $filter);
     };
 
     it('returns a configured $interpolate service when invoked', () => {
@@ -121,14 +134,15 @@ describe('$InterpolateProvider — Slice 5 (config-phase configurator)', () => {
       expect(service('Hi [[name]]')({ name: 'Bob' })).toBe('Hi Bob');
     });
 
-    it('$get is a readonly array-style invokable declaring $sce and $exceptionHandler as deps', () => {
+    it('$get is a readonly array-style invokable declaring $sce, $exceptionHandler, and $filter as deps', () => {
       const provider = new $InterpolateProvider();
-      // Array-style invokable with two deps — leading elements are dep names,
+      // Array-style invokable with three deps — leading elements are dep names,
       // trailing element is the factory.
-      expect(provider.$get).toHaveLength(3);
+      expect(provider.$get).toHaveLength(4);
       expect(provider.$get[0]).toBe('$sce');
       expect(provider.$get[1]).toBe('$exceptionHandler');
-      expect(provider.$get[2]).toBeTypeOf('function');
+      expect(provider.$get[2]).toBe('$filter');
+      expect(provider.$get[3]).toBeTypeOf('function');
     });
   });
 });

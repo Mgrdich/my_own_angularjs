@@ -49,6 +49,11 @@
       "import": "./dist/esm/exception-handler/index.mjs",
       "require": "./dist/cjs/exception-handler/index.cjs",
       "types": "./dist/types/exception-handler/index.d.ts"
+    },
+    "./filter": {
+      "import": "./dist/esm/filter/index.mjs",
+      "require": "./dist/cjs/filter/index.cjs",
+      "types": "./dist/types/filter/index.d.ts"
     }
   },
   "repository": "https://github.com/Mgrdich/my_own_angularjs.git",

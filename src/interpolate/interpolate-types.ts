@@ -25,6 +25,7 @@
  */
 
 import type { ExceptionHandler } from '@exception-handler/index';
+import type { FilterService } from '@filter/filter-types';
 import type { SceContext } from '@sce/sce-types';
 
 /**
@@ -71,6 +72,20 @@ export interface InterpolateOptions {
    * indicate programming errors, not runtime evaluation failures.
    */
   readonly exceptionHandler?: ExceptionHandler;
+  /**
+   * Filter-lookup service consulted by parsed expressions during render.
+   * When provided, each per-segment `parse(expr)(context, locals)` call
+   * merges `{ $$filter: filterLookup }` into `locals` so `FilterExpression`
+   * AST nodes can resolve names. The DI provider
+   * (`$InterpolateProvider.$get`) wires this through the `$filter` service
+   * automatically; pure-ESM consumers may supply it explicitly to enable
+   * filter expressions in their templates.
+   *
+   * When omitted, filter expressions inside templates throw
+   * `FilterLookupError` at render time, which routes through the
+   * configured `exceptionHandler` with cause `'$filter'`.
+   */
+  readonly filterLookup?: FilterService;
 }
 
 /**

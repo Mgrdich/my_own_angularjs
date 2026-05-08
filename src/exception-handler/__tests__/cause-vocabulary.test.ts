@@ -1,8 +1,9 @@
 /**
- * Locks the `$exceptionHandler` cause-descriptor vocabulary at the eight
- * tokens declared in FS § 2.13. The `length === 8` assertion is intentionally
- * a "trap" — adding a ninth cause is a public-API change that must update
- * both `EXCEPTION_HANDLER_CAUSES` and the FS § 2.13 vocabulary table in lockstep.
+ * Locks the `$exceptionHandler` cause-descriptor vocabulary at the nine
+ * tokens declared in FS § 2.13 (spec 014) plus `'$filter'` introduced by
+ * spec 016 slice 4. The `length === 9` assertion is intentionally a "trap"
+ * — adding a tenth cause is a public-API change that must update both
+ * `EXCEPTION_HANDLER_CAUSES` and the FS § 2.13 vocabulary table in lockstep.
  *
  * The `satisfies ExceptionHandlerCause` block below is a compile-time guard
  * that fails `pnpm typecheck` if the const tuple and the derived union ever
@@ -18,13 +19,13 @@ describe('EXCEPTION_HANDLER_CAUSES', () => {
     expect(Object.isFrozen(EXCEPTION_HANDLER_CAUSES)).toBe(true);
   });
 
-  it('declares exactly eight cause descriptors', () => {
+  it('declares exactly nine cause descriptors', () => {
     // Lock-in trap: bumping this number is a public-API change that must
     // update FS § 2.13 in the same commit.
-    expect(EXCEPTION_HANDLER_CAUSES.length).toBe(8);
+    expect(EXCEPTION_HANDLER_CAUSES.length).toBe(9);
   });
 
-  it('lists the eight tokens in declared order', () => {
+  it('lists the nine tokens in declared order', () => {
     expect(EXCEPTION_HANDLER_CAUSES).toEqual([
       'watchFn',
       'watchListener',
@@ -34,6 +35,7 @@ describe('EXCEPTION_HANDLER_CAUSES', () => {
       'eventListener',
       '$digest',
       '$interpolate',
+      '$filter',
     ]);
   });
 
@@ -46,6 +48,7 @@ describe('EXCEPTION_HANDLER_CAUSES', () => {
     EXCEPTION_HANDLER_CAUSES[5] satisfies ExceptionHandlerCause;
     EXCEPTION_HANDLER_CAUSES[6] satisfies ExceptionHandlerCause;
     EXCEPTION_HANDLER_CAUSES[7] satisfies ExceptionHandlerCause;
+    EXCEPTION_HANDLER_CAUSES[8] satisfies ExceptionHandlerCause;
 
     expect(true).toBe(true);
   });

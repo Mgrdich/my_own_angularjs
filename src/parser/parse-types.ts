@@ -122,6 +122,21 @@ export interface AssignmentExpression {
   readonly right: ASTNode;
 }
 
+/**
+ * A filter pipe expression: `input | filterName : arg1 : arg2 ...`.
+ *
+ * `name` is a string (not an `Identifier` node) — filter names are
+ * syntactically distinct from scope identifiers in AngularJS expressions
+ * and cannot themselves be expressions. Filters resolve via a `$filter`
+ * lookup at evaluation time, not via scope.
+ */
+export interface FilterExpression {
+  readonly type: 'FilterExpression';
+  readonly input: ASTNode;
+  readonly name: string;
+  readonly arguments: ASTNode[];
+}
+
 /** Union of all AST node types used in the expression parser. */
 export type ASTNode =
   | Program
@@ -137,7 +152,8 @@ export type ASTNode =
   | BinaryExpression
   | LogicalExpression
   | ConditionalExpression
-  | AssignmentExpression;
+  | AssignmentExpression
+  | FilterExpression;
 
 // ──────────────────────────────────────────────────────────────────────────────
 // Public API types
@@ -148,4 +164,13 @@ export type ExpressionFn = ((scope?: Record<string, unknown>, locals?: Record<st
   readonly oneTime: boolean;
   readonly constant: boolean;
   readonly literal: boolean;
+  /**
+   * Internal handle on the parsed AST body (the `Program.body` node, not the
+   * `Program` wrapper). Non-enumerable — the `$$` prefix flags it as
+   * private API consumed by scope's watch-install path to re-check the
+   * `constant` / `oneTime` classification once the runtime `$filter`
+   * lookup is available (see `containsStatefulFilter` in `ast-flags.ts`).
+   * Public callers must NOT depend on this surface.
+   */
+  readonly $$ast: ASTNode;
 };

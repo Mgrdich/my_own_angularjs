@@ -23,6 +23,7 @@
 
 import { toInterpolationString } from '@core/utils';
 import { consoleErrorExceptionHandler, invokeExceptionHandler } from '@exception-handler/index';
+import { FilterLookupError } from '@filter/filter-error';
 import { parse, type ExpressionFn } from '@parser/index';
 import { isValidSceContext, type SceContext } from '@sce/sce-contexts';
 
@@ -36,6 +37,13 @@ export function createInterpolate(options: InterpolateOptions = {}): Interpolate
   const sceGetTrusted = options.sceGetTrusted;
   const sceIsEnabled = options.sceIsEnabled;
   const handler = options.exceptionHandler ?? consoleErrorExceptionHandler;
+  // Filter lookup wired through by `$InterpolateProvider.$get` (see
+  // `interpolate-provider.ts`). Per-segment expression evaluation merges this
+  // into the locals it passes to `parse(seg)(context, locals)` under the
+  // reserved `$$filter` key — symmetric to the `Scope` wiring in
+  // `src/core/scope.ts`. Pure-ESM consumers who omit it accept that filter
+  // expressions inside their templates will surface `FilterLookupError`.
+  const filterLookup = options.filterLookup;
 
   validateDelimiters(startSymbol, endSymbol);
 
@@ -88,17 +96,24 @@ export function createInterpolate(options: InterpolateOptions = {}): Interpolate
 
     const render = (context: Record<string, unknown>): string | undefined => {
       let out = textSegments[0] ?? '';
+      // Build the locals object once per render — only when a filter lookup
+      // is wired. Pure-ESM consumers without filter wiring keep the zero-cost
+      // path that omits the `$$filter` injection entirely.
+      const locals: Record<string, unknown> | undefined =
+        filterLookup === undefined ? undefined : { $$filter: filterLookup };
       for (let i = 0; i < parsedFns.length; i++) {
         const fn = parsedFns[i];
         const segment = textSegments[i + 1] ?? '';
         // Throws from per-expression evaluation are routed through the
         // captured handler and treated as `undefined` so `allOrNothing` /
         // `oneTime` short-circuits behave the same as a returned `undefined`.
+        // FilterLookupError gets the dedicated `'$filter'` cause so consumers
+        // can distinguish "missing filter" from "expression itself threw".
         let value: unknown;
         try {
-          value = fn === undefined ? undefined : fn(context);
+          value = fn === undefined ? undefined : fn(context, locals);
         } catch (err) {
-          invokeExceptionHandler(handler, err, '$interpolate');
+          invokeExceptionHandler(handler, err, err instanceof FilterLookupError ? '$filter' : '$interpolate');
           value = undefined;
         }
         // When strict trust is active the compile-time check guarantees

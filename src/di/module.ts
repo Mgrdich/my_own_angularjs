@@ -1,3 +1,5 @@
+import type { FilterFn, IFilterProvider } from '@filter/filter-types';
+
 import type { Invokable, InvokableReturn, RequiredConfigRegistry, RequiredRunRegistry, ResolveDeps } from './di-types';
 
 /**
@@ -343,6 +345,62 @@ export class Module<
   run(invokable: Invokable): Module<Registry, ConfigRegistry, Name, Requires> {
     this.$$runBlocks.push(invokable);
     return this as unknown as Module<Registry, ConfigRegistry, Name, Requires>;
+  }
+
+  /**
+   * Register a filter under `name`. Sugar for the canonical AngularJS pair —
+   * a provider under `<name>Filter` whose `$get` proxies through `$filter`,
+   * plus a config block that calls `$filterProvider.register(name, factory)`.
+   * The dual-write keeps `injector.get('<name>Filter')` and
+   * `$filter('<name>')` referencing the same singleton, while the actual
+   * registration map remains authoritative inside `$filterProvider`.
+   *
+   * Mechanically equivalent to writing:
+   *
+   * ```ts
+   * module
+   *   .provider(`${name}Filter`, { $get: ['$filter', $f => $f(name)] })
+   *   .config(['$filterProvider', $fp => $fp.register(name, factory)]);
+   * ```
+   *
+   * The factory accepts any {@link Invokable} shape — array-style annotation,
+   * a `$inject`-tagged function, or a bare function with no deps. The factory
+   * is invoked once on first `$filter('<name>')` lookup and the resulting
+   * filter function is cached as a singleton (same lifecycle as every other
+   * `factory`/`service` registration).
+   *
+   * Last-wins applies both within a single `.filter` chain and across the
+   * boundary with `$filterProvider.register(...)` — both writers share one
+   * registration map.
+   *
+   * @example
+   * ```ts
+   * createModule('app', ['ng']).filter('shout', [() => (s: unknown) => `${String(s)}!`]);
+   * // injector.get('$filter')('shout')('hi') === 'hi!'
+   * // injector.get('shoutFilter')           === injector.get('$filter')('shout')
+   * ```
+   */
+
+  filter<K extends string, F extends FilterFn>(
+    name: K,
+    factory: Invokable<F>,
+  ): Module<Registry & { [P in K as `${P}Filter`]: F }, ConfigRegistry, Name, Requires> {
+    // `.filter()` is sugar over `.config(['$filterProvider', $fp =>
+    // $fp.register(name, factory)])`. `$filterProvider.register` itself
+    // routes through `$provide.factory(name + 'Filter', factory)`, so the
+    // filter ends up as a normal injector-resolvable factory under
+    // `<name>Filter` — making `module.decorator('<name>Filter', …)` reach
+    // it and making last-wins across multiple registrations (`.filter` /
+    // `$filterProvider.register` / `$provide.factory`) work uniformly
+    // through the shared `applyRegistrationRecord` timeline.
+    this.$$configBlocks.push([
+      '$filterProvider',
+      ($filterProvider: IFilterProvider) => {
+        $filterProvider.register(name, factory);
+      },
+    ]);
+
+    return this as unknown as Module<Registry & { [P in K as `${P}Filter`]: F }, ConfigRegistry, Name, Requires>;
   }
 }
 
@@ -704,6 +762,31 @@ export interface TypedModule<
    * signature on the `Module` class `run` method.
    */
   run(invokable: Invokable): TypedModule<Registry, ConfigRegistry, Name, Requires>;
+
+  /**
+   * Register a filter under `name`. Sugar for the canonical AngularJS
+   * dual-write — a `<name>Filter` provider shim plus a config block that
+   * routes through `$filterProvider.register(name, factory)`. The chain is
+   * widened to record `${K}Filter: F` so a downstream
+   * `decorator('shoutFilter', ['$delegate', …])` call gets `$delegate` typed
+   * as the filter shape registered here.
+   *
+   * The factory is an {@link Invokable} of any shape (array-style annotation,
+   * `$inject`-tagged function, or a bare zero-dep function). Last-wins
+   * applies both within a single chain (`a` then `b` for the same name) and
+   * across the boundary with `$filterProvider.register(...)`.
+   *
+   * @example
+   * ```ts
+   * createModule('app', ['ng']).filter('shout', [() => (s: unknown) => `${String(s)}!`]);
+   * // injector.get('$filter')('shout')('hi') === 'hi!'
+   * // injector.get('shoutFilter') === injector.get('$filter')('shout')
+   * ```
+   */
+  filter<const K extends string, F extends FilterFn>(
+    name: K,
+    factory: Invokable<F>,
+  ): TypedModule<Registry & { [P in K as `${P}Filter`]: F }, ConfigRegistry, Name, Requires>;
 }
 
 /**

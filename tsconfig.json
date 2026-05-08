@@ -18,7 +18,8 @@
       "@interpolate/*": ["./src/interpolate/*"],
       "@sce/*": ["./src/sce/*"],
       "@sanitize/*": ["./src/sanitize/*"],
-      "@exception-handler/*": ["./src/exception-handler/*"]
+      "@exception-handler/*": ["./src/exception-handler/*"],
+      "@filter/*": ["./src/filter/*"]
     }
   },
   "include": ["src"],

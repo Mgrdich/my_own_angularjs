@@ -16,6 +16,7 @@ import { ngModule } from '@core/ng-module';
 import { createInjector } from '@di/injector';
 import { createModule, resetRegistry } from '@di/module';
 import { consoleErrorExceptionHandler } from '@exception-handler/index';
+import { $FilterProvider } from '@filter/filter-provider';
 import { createInterpolate } from '@interpolate/interpolate';
 import { $InterpolateProvider } from '@interpolate/interpolate-provider';
 import { sce } from '@sce/sce';
@@ -31,7 +32,8 @@ describe('$interpolate ↔ $sce integration — Slice 6', () => {
         .factory('$exceptionHandler', [() => consoleErrorExceptionHandler])
         .provider('$sceDelegate', $SceDelegateProvider)
         .provider('$sce', $SceProvider)
-        .provider('$interpolate', $InterpolateProvider);
+        .provider('$interpolate', $InterpolateProvider)
+        .provider('$filter', ['$provide', $FilterProvider]);
     });
 
     it('renders a single {{expr}} template in html context when the scope value is TrustedHtml', () => {
@@ -107,7 +109,8 @@ describe('$interpolate ↔ $sce integration — Slice 6', () => {
         .factory('$exceptionHandler', [() => consoleErrorExceptionHandler])
         .provider('$sceDelegate', $SceDelegateProvider)
         .provider('$sce', $SceProvider)
-        .provider('$interpolate', $InterpolateProvider);
+        .provider('$interpolate', $InterpolateProvider)
+        .provider('$filter', ['$provide', $FilterProvider]);
     });
 
     it('allows a template with no expressions — literal text passes through untouched', () => {
@@ -134,7 +137,8 @@ describe('$interpolate ↔ $sce integration — Slice 6', () => {
         .factory('$exceptionHandler', [() => consoleErrorExceptionHandler])
         .provider('$sceDelegate', $SceDelegateProvider)
         .provider('$sce', $SceProvider)
-        .provider('$interpolate', $InterpolateProvider);
+        .provider('$interpolate', $InterpolateProvider)
+        .provider('$filter', ['$provide', $FilterProvider]);
     });
 
     it('bypasses the compile-time single-binding check', () => {
@@ -184,7 +188,8 @@ describe('$interpolate ↔ $sce integration — Slice 6', () => {
         .factory('$exceptionHandler', [() => consoleErrorExceptionHandler])
         .provider('$sceDelegate', $SceDelegateProvider)
         .provider('$sce', $SceProvider)
-        .provider('$interpolate', $InterpolateProvider);
+        .provider('$interpolate', $InterpolateProvider)
+        .provider('$filter', ['$provide', $FilterProvider]);
     });
 
     it('throws synchronously for an unrecognized context string', () => {
@@ -209,7 +214,8 @@ describe('$interpolate ↔ $sce integration — Slice 6', () => {
         .factory('$exceptionHandler', [() => consoleErrorExceptionHandler])
         .provider('$sceDelegate', $SceDelegateProvider)
         .provider('$sce', $SceProvider)
-        .provider('$interpolate', $InterpolateProvider);
+        .provider('$interpolate', $InterpolateProvider)
+        .provider('$filter', ['$provide', $FilterProvider]);
     });
 
     it('mustHaveExpression wins on a literal-only trusted-context template (returns undefined, no throw)', () => {
@@ -309,7 +315,8 @@ describe('$interpolate ↔ $sce integration — Slice 6', () => {
         .factory('$exceptionHandler', [() => consoleErrorExceptionHandler])
         .provider('$sceDelegate', $SceDelegateProvider)
         .provider('$sce', $SceProvider)
-        .provider('$interpolate', $InterpolateProvider);
+        .provider('$interpolate', $InterpolateProvider)
+        .provider('$filter', ['$provide', $FilterProvider]);
     });
 
     it('a config-time $sceProvider.enabled(false) is observed by the DI-resolved $interpolate', () => {
