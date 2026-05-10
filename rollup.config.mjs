@@ -43,6 +43,7 @@ const tsPathAliases = {
   '@sanitize/*': ['src/sanitize/*'],
   '@exception-handler/*': ['src/exception-handler/*'],
   '@filter/*': ['src/filter/*'],
+  '@compiler/*': ['src/compiler/*'],
 };
 
 const bundleConfigs = entries.map((entry) => ({

@@ -19,7 +19,8 @@
       "@sce/*": ["./src/sce/*"],
       "@sanitize/*": ["./src/sanitize/*"],
       "@exception-handler/*": ["./src/exception-handler/*"],
-      "@filter/*": ["./src/filter/*"]
+      "@filter/*": ["./src/filter/*"],
+      "@compiler/*": ["./src/compiler/*"]
     }
   },
   "include": ["src"],

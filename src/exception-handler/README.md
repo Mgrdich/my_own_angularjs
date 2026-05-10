@@ -20,7 +20,7 @@ digest.
 | Export | Kind | Purpose |
 | --- | --- | --- |
 | `ExceptionHandler` | type | `(exception: unknown, cause?: string) => void` — the public callable contract |
-| `ExceptionHandlerCause` | type | Union of the nine cause-descriptor strings (derived from `EXCEPTION_HANDLER_CAUSES`) |
+| `ExceptionHandlerCause` | type | Union of the ten cause-descriptor strings (derived from `EXCEPTION_HANDLER_CAUSES`) |
 | `EXCEPTION_HANDLER_CAUSES` | value | Frozen tuple of all cause tokens — runtime mirror of the union |
 | `consoleErrorExceptionHandler` | value | Default handler — `console.error('[$exceptionHandler]', exception, cause)` |
 | `noopExceptionHandler` | value | `() => {}` — for tests only; do NOT use in production |
@@ -45,6 +45,7 @@ tokens — future specs that add new internal call sites must extend
 | `'$digest'` | TTL exhaustion — the constructed `Error` is reported via the handler before being re-thrown to the `$apply` caller |
 | `'$interpolate'` | An interpolated `{{expr}}` evaluation throws inside the render fn |
 | `'$filter'` | A filter-lookup failure (`Unknown filter: <name>`) thrown from inside a watch / listener / async-task / interpolation expression — narrowed via `instanceof FilterLookupError` (spec 016) |
+| `'$compile'` | Directive factory invocation (lazy at first `<name>Directive` lookup), `compile` function, `pre-link` / `post-link` function, or `$set`-driven `$observe` callback throws during `$compile` walk or link (spec 017) |
 
 ## Override paths
 

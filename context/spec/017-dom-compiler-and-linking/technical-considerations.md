@@ -1,7 +1,7 @@
 # Technical Specification: DOM Compiler — `$compile` with Pre/Post Linking
 
 - **Functional Specification:** [`functional-spec.md`](./functional-spec.md)
-- **Status:** Draft
+- **Status:** Completed
 - **Author(s):** Mgrdich
 
 ---
