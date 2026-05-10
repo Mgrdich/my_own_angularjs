@@ -330,19 +330,16 @@ describe('AttributesImpl.$observe — Slice 9 (FS §2.11)', () => {
     });
     const fnB = vi.fn<(value: string | undefined) => void>();
     let capturedAttrs: Attributes | undefined;
-    const { $compile, scope } = compileWith(
-      ($cp) => {
-        $cp.directive(
-          'myDir',
-          ddoFactory({
-            link: (_scope, _el, attrs) => {
-              capturedAttrs = attrs;
-            },
-          }),
-        );
-      },
-      handlerSpy,
-    );
+    const { $compile, scope } = compileWith(($cp) => {
+      $cp.directive(
+        'myDir',
+        ddoFactory({
+          link: (_scope, _el, attrs) => {
+            capturedAttrs = attrs;
+          },
+        }),
+      );
+    }, handlerSpy);
 
     const node = document.createElement('div');
     node.setAttribute('my-dir', '');

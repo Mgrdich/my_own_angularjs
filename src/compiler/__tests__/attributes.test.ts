@@ -124,7 +124,9 @@ describe('AttributesImpl.$set — DOM sync (Slice 8, FS §2.11)', () => {
     const attrs = new AttributesImpl(comment);
 
     // `$set` on a Comment must update `attrs[name]` and not throw.
-    expect(() => { attrs.$set('foo', 'bar'); }).not.toThrow();
+    expect(() => {
+      attrs.$set('foo', 'bar');
+    }).not.toThrow();
     expect(attrs.foo).toBe('bar');
   });
 });
@@ -180,7 +182,9 @@ describe('AttributesImpl.$set — observer notification (Slice 8, FS §2.11)', (
     const attrs = new AttributesImpl(el);
 
     // No pre-population — the observers map is empty for `myAttr`.
-    expect(() => { attrs.$set('myAttr', 'val'); }).not.toThrow();
+    expect(() => {
+      attrs.$set('myAttr', 'val');
+    }).not.toThrow();
     expect(attrs.myAttr).toBe('val');
   });
 

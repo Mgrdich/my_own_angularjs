@@ -25,17 +25,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { $CompileProvider } from '@compiler/compile-provider';
-import {
-  addElementCleanup,
-  destroyElementScope,
-  getElementScope,
-  setElementScope,
-} from '@compiler/cleanup';
-import type {
-  CompileService,
-  DirectiveFactory,
-  DirectiveFactoryReturn,
-} from '@compiler/directive-types';
+import { addElementCleanup, destroyElementScope, getElementScope, setElementScope } from '@compiler/cleanup';
+import type { CompileService, DirectiveFactory, DirectiveFactoryReturn } from '@compiler/directive-types';
 import { Scope } from '@core/index';
 import { createInjector } from '@di/injector';
 import { createModule, resetRegistry } from '@di/module';
@@ -180,7 +171,7 @@ describe('scope: true — child-scope creation (FS §2.12)', () => {
     expect(aScope).not.toBe(parentScope);
   });
 
-  it('descendants with scope: false share the parent element\'s child scope', () => {
+  it("descendants with scope: false share the parent element's child scope", () => {
     let parentLinkScope: Scope | null = null;
     let childLinkScope: Scope | null = null;
     const $compile = compileWith(($cp) => {
@@ -219,7 +210,7 @@ describe('scope: true — child-scope creation (FS §2.12)', () => {
     expect(childLinkScope).toBe(parentLinkScope);
   });
 
-  it('descendants with scope: true create a nested child scope off the parent\'s child scope', () => {
+  it("descendants with scope: true create a nested child scope off the parent's child scope", () => {
     let parentLinkScope: Scope | null = null;
     let childLinkScope: Scope | null = null;
     const $compile = compileWith(($cp) => {
@@ -494,7 +485,9 @@ describe('cleanup registry — setElementScope / getElementScope / addElementCle
     });
     addElementCleanup(node, () => ran.push('c'));
 
-    expect(() => { destroyElementScope(node); }).toThrow(boom);
+    expect(() => {
+      destroyElementScope(node);
+    }).toThrow(boom);
     // All three ran — the throw did NOT short-circuit subsequent
     // entries (FS / tech §2.8 — "errors are caught per entry; the
     // first one is re-thrown after the queue completes").
@@ -527,7 +520,9 @@ describe('cleanup registry — setElementScope / getElementScope / addElementCle
 
     // Second call — registries were cleared during the first call so
     // `$destroy` should NOT fire again, and no error is thrown.
-    expect(() => { destroyElementScope(node); }).not.toThrow();
+    expect(() => {
+      destroyElementScope(node);
+    }).not.toThrow();
     expect(destroySpy).toHaveBeenCalledTimes(1);
   });
 
@@ -535,6 +530,8 @@ describe('cleanup registry — setElementScope / getElementScope / addElementCle
     const node = document.createElement('div');
     // No `setElementScope`, no `addElementCleanup` — both registries
     // are empty. Must not throw.
-    expect(() => { destroyElementScope(node); }).not.toThrow();
+    expect(() => {
+      destroyElementScope(node);
+    }).not.toThrow();
   });
 });

@@ -29,12 +29,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { $CompileProvider } from '@compiler/compile-provider';
-import type {
-  CompileService,
-  Directive,
-  DirectiveFactory,
-  DirectiveFactoryReturn,
-} from '@compiler/directive-types';
+import type { CompileService, Directive, DirectiveFactory, DirectiveFactoryReturn } from '@compiler/directive-types';
 import { Scope } from '@core/index';
 import { createInjector } from '@di/injector';
 import { createModule, resetRegistry } from '@di/module';

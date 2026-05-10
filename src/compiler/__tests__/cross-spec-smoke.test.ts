@@ -42,16 +42,18 @@ function bootstrapNgModule(): void {
 describe('cross-spec smoke (Slice 12 final verification)', () => {
   it('Scope.create() (spec 002) — digest runs without error', () => {
     const scope = Scope.create();
-    expect(() => { scope.$digest(); }).not.toThrow();
+    expect(() => {
+      scope.$digest();
+    }).not.toThrow();
   });
 
-  it('parse(\'a||b\') (spec 003 / 009) — lex + parse + interpret produce a callable expression', () => {
+  it("parse('a||b') (spec 003 / 009) — lex + parse + interpret produce a callable expression", () => {
     const fn = parse('a || b');
     expect(typeof fn).toBe('function');
     expect(fn({ a: false, b: 'fallback' })).toBe('fallback');
   });
 
-  it('createInjector([\'ng\']) (spec 007/008) — canonical injector resolves $injector self-reference', () => {
+  it("createInjector(['ng']) (spec 007/008) — canonical injector resolves $injector self-reference", () => {
     bootstrapNgModule();
     const injector = createInjector([ngModule]);
     expect(injector.get('$injector')).toBe(injector);
@@ -79,7 +81,9 @@ describe('cross-spec smoke (Slice 12 final verification)', () => {
     const injector = createInjector([ngModule]);
     const handler = injector.get('$exceptionHandler');
     expect(typeof handler).toBe('function');
-    expect(() => { handler(new Error('smoke'), 'watchFn'); }).not.toThrow();
+    expect(() => {
+      handler(new Error('smoke'), 'watchFn');
+    }).not.toThrow();
   });
 
   it("$filter('uppercase')('hi') (spec 016) — built-in filter resolves and runs", () => {

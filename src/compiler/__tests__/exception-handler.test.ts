@@ -33,10 +33,7 @@ import type {
 import { Scope } from '@core/index';
 import { createInjector } from '@di/injector';
 import { createModule, resetRegistry } from '@di/module';
-import {
-  EXCEPTION_HANDLER_CAUSES,
-  type ExceptionHandlerCause,
-} from '@exception-handler/index';
+import { EXCEPTION_HANDLER_CAUSES, type ExceptionHandlerCause } from '@exception-handler/index';
 import { $FilterProvider } from '@filter/filter-provider';
 import { $InterpolateProvider } from '@interpolate/interpolate-provider';
 import { $SceDelegateProvider } from '@sce/sce-delegate-provider';
