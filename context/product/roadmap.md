@@ -82,8 +82,8 @@ _The layer that connects the runtime to templates and the DOM._
   - [x] **Built-in Filters:** Implement core filters (`filter`, `orderBy`, `limitTo`, `currency`, `number`, `date`, `uppercase`, `lowercase`, `json`).
 
 - [ ] **Directives & DOM Compilation**
-  - [ ] **Compiler ($compile):** Implement directive collection, sorting by priority, and terminal directives.
-  - [ ] **Linking (Pre & Post):** Implement the compile-link separation with pre-link and post-link functions.
+  - [x] **Compiler ($compile):** Implement directive collection, sorting by priority, and terminal directives. _(spec 017)_
+  - [x] **Linking (Pre & Post):** Implement the compile-link separation with pre-link and post-link functions. _(spec 017)_
   - [ ] **Transclusion:** Support basic and multi-slot transclusion.
   - [ ] **Template Loading:** Support inline templates and `templateUrl` with async loading.
   - [ ] **Controllers ($controller):** Implement `$controller` service and `$controllerProvider.register` so named controllers can be instantiated by the compiler and bound to scopes.

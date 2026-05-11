@@ -64,3 +64,24 @@ export {
   EXCEPTION_HANDLER_CAUSES,
 } from './exception-handler/index';
 export type { ExceptionHandler, ExceptionHandlerCause } from './exception-handler/index';
+
+export {
+  AttributesImpl,
+  createCompile,
+  directiveNormalize,
+  InvalidDirectiveFactoryError,
+  InvalidDirectiveNameError,
+  IsolateScopeNotSupportedError,
+} from './compiler/index';
+export type {
+  Attributes,
+  CompileFn,
+  CompileOptions,
+  CompileService,
+  Directive,
+  DirectiveDefinition,
+  DirectiveFactory,
+  DirectiveFactoryReturn,
+  Linker,
+  LinkFn,
+} from './compiler/index';

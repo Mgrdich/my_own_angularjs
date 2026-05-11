@@ -15,6 +15,8 @@
  * before the run phase begins.
  */
 
+import { $CompileProvider } from '@compiler/compile-provider';
+import type { CompileService } from '@compiler/directive-types';
 import { createModule } from '@di/module';
 import { consoleErrorExceptionHandler, type ExceptionHandler } from '@exception-handler/index';
 import { lowercaseFilterFactory, uppercaseFilterFactory } from '@filter/case';
@@ -45,6 +47,7 @@ declare module '@di/di-types' {
         $sce: SceService;
         $filter: FilterService;
         $locale: LocaleService;
+        $compile: CompileService;
         uppercaseFilter: FilterFn;
         lowercaseFilter: FilterFn;
         jsonFilter: FilterFn;
@@ -60,6 +63,7 @@ declare module '@di/di-types' {
         $sceDelegateProvider: $SceDelegateProvider;
         $sceProvider: $SceProvider;
         $filterProvider: $FilterProvider;
+        $compileProvider: $CompileProvider;
       };
     };
   }
@@ -77,6 +81,7 @@ export const ngModule = createModule('ng', [])
   .provider('$sce', $SceProvider)
   .provider('$interpolate', $InterpolateProvider)
   .provider<'$filter', FilterService, $FilterProvider>('$filter', ['$provide', $FilterProvider])
+  .provider<'$compile', CompileService, $CompileProvider>('$compile', ['$provide', $CompileProvider])
   // `$locale` carries the en-US default. Apps swap the entire object
   // via `module.factory('$locale', () => myLocale)` — the `currency`,
   // `number`, and (Slice 8) `date` filters read it lazily so a swap at

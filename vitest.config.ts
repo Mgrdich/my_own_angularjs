@@ -12,6 +12,7 @@ export default defineConfig({
       '@sanitize': path.resolve(__dirname, 'src/sanitize'),
       '@exception-handler': path.resolve(__dirname, 'src/exception-handler'),
       '@filter': path.resolve(__dirname, 'src/filter'),
+      '@compiler': path.resolve(__dirname, 'src/compiler'),
     },
   },
   test: {

@@ -145,9 +145,16 @@ describe('Filter ↔ $exceptionHandler integration (FS §2.8)', () => {
   });
 
   describe("FS §2.8 #5: EXCEPTION_HANDLER_CAUSES includes '$filter'", () => {
-    it('the runtime cause vocabulary is widened by exactly one token', () => {
+    it('the runtime cause vocabulary contains the spec-016 token', () => {
+      // The spec-016 contract: '$filter' was added to the
+      // EXCEPTION_HANDLER_CAUSES tuple as the 9th token. Spec 017
+      // subsequently added '$compile' as the 10th, so the original
+      // "widened by exactly one token" framing only captured the
+      // moment in time when spec 016 landed. Future specs may extend
+      // the tuple again — the assertion that matters here is that
+      // '$filter' is and remains a member of the public token list.
       expect(EXCEPTION_HANDLER_CAUSES).toContain('$filter');
-      expect(EXCEPTION_HANDLER_CAUSES.length).toBe(9);
+      expect(EXCEPTION_HANDLER_CAUSES.length).toBeGreaterThanOrEqual(9);
     });
   });
 
