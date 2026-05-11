@@ -101,6 +101,12 @@ export type TranscludeFn = (
  * nominal type. A `TranscludeSlotName` is always a valid camelCase JS
  * identifier (enforced at registration in Slice 2 via
  * `InvalidTranscludeSlotNameError`).
+ *
+ * @example
+ * ```ts
+ * const slot: TranscludeSlotName = 'titleSlot';
+ * $transclude(() => undefined, null, slot);
+ * ```
  */
 export type TranscludeSlotName = string;
 
@@ -121,6 +127,19 @@ export type TranscludeSlotName = string;
  *
  * INTERNAL — exposed via {@link TranscludeSlotMap} for tooling but not
  * intended as a public construction surface for directive authors.
+ *
+ * @example
+ * ```ts
+ * // Produced by `normalizeDirective` from a DDO entry:
+ * //   transclude: { '?subtitleSlot': 'card-subtitle' }
+ * // is normalized to:
+ * const slot: TranscludeSlot = {
+ *   name: 'subtitleSlot',
+ *   selector: 'card-subtitle',
+ *   normalizedSelector: 'cardSubtitle',
+ *   required: false,
+ * };
+ * ```
  */
 export interface TranscludeSlot {
   name: string;
@@ -135,6 +154,22 @@ export interface TranscludeSlot {
  * entries (i.e. JS object-literal property order). The array is frozen
  * at registration time so downstream consumers may rely on
  * immutability.
+ *
+ * @example
+ * ```ts
+ * // The DDO declaration:
+ * //   transclude: {
+ * //     titleSlot:         'card-title',
+ * //     '?subtitleSlot':   'card-subtitle',
+ * //     bodySlot:          'card-body',
+ * //   }
+ * // normalizes to the following (frozen) TranscludeSlotMap:
+ * const slots: TranscludeSlotMap = Object.freeze([
+ *   { name: 'titleSlot',    selector: 'card-title',    normalizedSelector: 'cardTitle',    required: true },
+ *   { name: 'subtitleSlot', selector: 'card-subtitle', normalizedSelector: 'cardSubtitle', required: false },
+ *   { name: 'bodySlot',     selector: 'card-body',     normalizedSelector: 'cardBody',     required: true },
+ * ]);
+ * ```
  */
 export type TranscludeSlotMap = readonly TranscludeSlot[];
 
@@ -151,11 +186,15 @@ export type TranscludeSlotMap = readonly TranscludeSlot[];
  *   (`[]` for `kind: 'content'`).
  * - `kind` — discriminator: `'content'` for `transclude: true`,
  *   `'slots'` for the multi-slot object form.
+ * - `directiveName` — the host directive's name (used by
+ *   `ng-transclude` Slice 5 in error messages so an undeclared-slot
+ *   report cites the host, not the marker).
  */
 export interface BoundTranscludeFn {
   fn: TranscludeFn;
   declaredSlots: TranscludeSlotMap;
   kind: 'content' | 'slots';
+  directiveName: string;
 }
 
 /**

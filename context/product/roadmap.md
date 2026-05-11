@@ -84,7 +84,7 @@ _The layer that connects the runtime to templates and the DOM._
 - [ ] **Directives & DOM Compilation**
   - [x] **Compiler ($compile):** Implement directive collection, sorting by priority, and terminal directives. _(spec 017)_
   - [x] **Linking (Pre & Post):** Implement the compile-link separation with pre-link and post-link functions. _(spec 017)_
-  - [ ] **Transclusion:** Support basic and multi-slot transclusion.
+  - [x] **Transclusion:** Support basic and multi-slot transclusion. _(spec 018)_
   - [ ] **Template Loading:** Support inline templates and `templateUrl` with async loading.
   - [ ] **Controllers ($controller):** Implement `$controller` service and `$controllerProvider.register` so named controllers can be instantiated by the compiler and bound to scopes.
   - [ ] **Module DSL `.directive` / `.component` / `.controller`:** Expose `.directive(name, fn)`, `.component(name, def)` (AngularJS 1.5+ sugar), and `.controller(name, fn)` on `createModule(...)` as thin wrappers over `$compileProvider.directive` / `.component` and `$controllerProvider.register` — ng-module parity, shared registries, no duplicated state.

@@ -30,12 +30,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { $CompileProvider } from '@compiler/compile-provider';
 import { RequiredTranscludeSlotUnfilledError, UndeclaredTranscludeSlotError } from '@compiler/compile-error';
-import type {
-  CompileService,
-  DirectiveFactory,
-  DirectiveFactoryReturn,
-  TranscludeFn,
-} from '@compiler/directive-types';
+import type { CompileService, DirectiveFactory, DirectiveFactoryReturn, TranscludeFn } from '@compiler/directive-types';
 import type { BoundTranscludeFn } from '@compiler/transclude-types';
 import { Scope } from '@core/index';
 import { createInjector } from '@di/injector';
@@ -204,10 +199,14 @@ describe('multi-slot routing — optional `?` prefix (FS §2.3 + §2.4)', () => 
 
     let cloneArg: Node[] | null = null;
     let scopeArg: Scope | null = null;
-    const projection = xclude?.((clone, scope) => {
-      cloneArg = clone;
-      scopeArg = scope;
-    }, null, 'subtitleSlot');
+    const projection = xclude?.(
+      (clone, scope) => {
+        cloneArg = clone;
+        scopeArg = scope;
+      },
+      null,
+      'subtitleSlot',
+    );
 
     expect(projection).toEqual([]);
     expect(cloneArg).toEqual([]);
@@ -215,9 +214,7 @@ describe('multi-slot routing — optional `?` prefix (FS §2.3 + §2.4)', () => 
     // No RequiredTranscludeSlotUnfilledError fired anywhere — the
     // unfilled slot was optional. The eager link-time pass and the
     // call-site path should both be silent.
-    const required = handler.mock.calls.filter(
-      ([err]) => err instanceof RequiredTranscludeSlotUnfilledError,
-    );
+    const required = handler.mock.calls.filter(([err]) => err instanceof RequiredTranscludeSlotUnfilledError);
     expect(required.length).toBe(0);
   });
 });
@@ -246,9 +243,7 @@ describe('multi-slot routing — required-slot unfilled (FS §2.9)', () => {
     // Directive's link DID run.
     expect(linkSpy).toHaveBeenCalledTimes(1);
     // Eager link-time error report fired exactly once.
-    const required = handler.mock.calls.filter(
-      ([err]) => err instanceof RequiredTranscludeSlotUnfilledError,
-    );
+    const required = handler.mock.calls.filter(([err]) => err instanceof RequiredTranscludeSlotUnfilledError);
     expect(required.length).toBe(1);
     const [errOnly, cause] = required[0] ?? [];
     expect(errOnly).toBeInstanceOf(RequiredTranscludeSlotUnfilledError);
@@ -280,17 +275,19 @@ describe('multi-slot routing — required-slot unfilled (FS §2.9)', () => {
     // Reset the spy to isolate the call-site report from the eager one.
     handler.mockClear();
     let attachCalled = false;
-    const projection = xclude?.(() => {
-      attachCalled = true;
-    }, null, 'titleSlot');
+    const projection = xclude?.(
+      () => {
+        attachCalled = true;
+      },
+      null,
+      'titleSlot',
+    );
 
     expect(projection).toEqual([]);
     // The required-unfilled path does NOT invoke cloneAttachFn (no
     // scope, nothing to render).
     expect(attachCalled).toBe(false);
-    const required = handler.mock.calls.filter(
-      ([err]) => err instanceof RequiredTranscludeSlotUnfilledError,
-    );
+    const required = handler.mock.calls.filter(([err]) => err instanceof RequiredTranscludeSlotUnfilledError);
     expect(required.length).toBe(1);
     expect((required[0]?.[0] as Error).message).toContain('titleSlot');
   });
@@ -323,9 +320,7 @@ describe('multi-slot routing — undeclared slot name (FS §2.9)', () => {
     const projection = xclude?.(() => undefined, null, 'noSuchSlot');
 
     expect(projection).toEqual([]);
-    const undeclared = handler.mock.calls.filter(
-      ([err]) => err instanceof UndeclaredTranscludeSlotError,
-    );
+    const undeclared = handler.mock.calls.filter(([err]) => err instanceof UndeclaredTranscludeSlotError);
     expect(undeclared.length).toBe(1);
     const [err, cause] = undeclared[0] ?? [];
     expect((err as Error).message).toContain('myCard');

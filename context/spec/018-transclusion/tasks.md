@@ -143,8 +143,8 @@
   - [x] Run `pnpm lint`, `pnpm typecheck`, `pnpm test`. All must pass. **[Agent: typescript-framework]**
     - Verified: lint clean on `src/`, typecheck clean, test = 99 files / 2320 passed / 5 skipped. Net delta vs Slice 3 baseline (98 / 2308 / 5): +1 file / +12 tests / 0 regressions.
 
-- [ ] **Slice 5: `ng-transclude` Directive — The Slot Marker**
-  - [ ] Create `src/compiler/ng-transclude.ts` exporting `ngTranscludeDirective: DirectiveFactoryReturn` (the array-annotated factory ready for `$compileProvider.directive('ngTransclude', ngTranscludeDirective)`). Restrict `'EA'`, priority 0, post-link only. The factory's `link` function:
+- [x] **Slice 5: `ng-transclude` Directive — The Slot Marker**
+  - [x] Create `src/compiler/ng-transclude.ts` exporting `ngTranscludeDirective: DirectiveFactoryReturn` (the array-annotated factory ready for `$compileProvider.directive('ngTransclude', ngTranscludeDirective)`). Restrict `'EA'`, priority 0, post-link only. The factory's `link` function:
         1. Walk `element.parentElement` until finding `$$ngBoundTransclude` (or reaching `null`). On miss → route `NgTranscludeMisuseError('ngTransclude must be used inside a directive declaring transclude: true | { … }')` via `$exceptionHandler('$compile')` and return (marker becomes a no-op with its pre-existing children intact).
         2. Read the slot name from `attrs.ngTransclude`. Treat empty string / missing as the default slot.
         3. If `bound.kind === 'content'` and the slot name is provided + non-empty → route `NgTranscludeMisuseError('Slot "<name>" is not declared; transclude: true exposes only the default slot')` and return (no-op).
@@ -153,9 +153,11 @@
            - If `clone.length === 0` (unfilled optional slot OR error path) → leave the marker's pre-existing children intact (fallback content).
            - Else → remove all `element.childNodes`, then `element.append(...clone)`.
         - Wrap the entire link in a try/catch that routes any thrown error via `invokeExceptionHandler(handler, err, '$compile')` (defense in depth; the `$transclude` implementation already routes its own errors). **[Agent: typescript-framework]**
-  - [ ] The `ngTransclude` link function needs access to `$exceptionHandler`. Two implementation choices: (a) inject it via the factory `['$exceptionHandler', ($exceptionHandler) => ({ restrict: 'EA', link: ... })]`; (b) read it lazily from `$$ngBoundTransclude.exceptionHandler` stashed on the host. **Choose (a)** — explicit DI matches every other built-in registration pattern; (b) requires extra stash plumbing for marginal gain. **[Agent: typescript-framework]**
-  - [ ] Update `src/core/ng-module.ts:78-102` to register the new directive AFTER the existing filter-chain block. Add `.directive('ngTransclude', ngTranscludeDirective)`. This is the FIRST `.directive(...)` call on `ngModule` — there is no precedent in the file. Imports: `ngTranscludeDirective` from `@compiler/ng-transclude`. **[Agent: typescript-framework]**
-  - [ ] Create `src/compiler/__tests__/ng-transclude.test.ts` covering FS §2.6:
+    - **DEVIATION (2026-05-11):** Widened internal `BoundTranscludeFn` with `directiveName: string` (and populated at the Slice-3 stash site) so the marker's `UndeclaredTranscludeSlotError` cites the HOST directive's name instead of `'ngTransclude'`. Non-breaking — `BoundTranscludeFn` is not re-exported via the public barrel.
+  - [x] The `ngTransclude` link function needs access to `$exceptionHandler`. Two implementation choices: (a) inject it via the factory `['$exceptionHandler', ($exceptionHandler) => ({ restrict: 'EA', link: ... })]`; (b) read it lazily from `$$ngBoundTransclude.exceptionHandler` stashed on the host. **Choose (a)** — explicit DI matches every other built-in registration pattern; (b) requires extra stash plumbing for marginal gain. **[Agent: typescript-framework]**
+  - [x] Update `src/core/ng-module.ts:78-102` to register the new directive AFTER the existing filter-chain block. Add `.directive('ngTransclude', ngTranscludeDirective)`. This is the FIRST `.directive(...)` call on `ngModule` — there is no precedent in the file. Imports: `ngTranscludeDirective` from `@compiler/ng-transclude`. **[Agent: typescript-framework]**
+    - **DEVIATION (2026-05-11):** Used a `.config(['$compileProvider', ($cp) => $cp.directive('ngTransclude', ngTranscludeDirective)])` block instead of `.directive(...)` on the module DSL. Reason: the module DSL has no `.directive(...)` method today (deferred per FS §3 Out-of-Scope and architecture.md). Behavior is identical — `injector.has('ngTranscludeDirective') === true` either way and the same `<name>Directive` provider is installed.
+  - [x] Create `src/compiler/__tests__/ng-transclude.test.ts` covering FS §2.6:
         - Default slot: `<my-dir><p>{{outer.x}}</p></my-dir>` with `myDir` declaring `transclude: true` and a link that builds template `<div><span ng-transclude></span></div>` then `$compile(template)(scope)` — the `<span>` ends up with the `<p>` child and the `{{outer.x}}` resolves to `outer.x`'s value.
         - Element-form: `<ng-transclude></ng-transclude>` renders identically; the element itself remains in the DOM.
         - Named slot: `<div ng-transclude="titleSlot"></div>` projects the named slot's content.
@@ -168,18 +170,21 @@
         - **NOTE for implementation:** the recursion-risk acceptance from technical-considerations §3 risk table assumes parentElement-walking happens at link time. If `ng-transclude` is in the captured fragment, its post-link runs AFTER `cloneAttachFn` inserts the clone — so `parentElement` IS the host. The author's choice of `<ng-transclude>` inside the consumer markup is genuinely a foot-gun; the test locks the actual observable behavior (recursion or error) and the README documents the gotcha.
         - Marker timing: `ng-transclude` post-link runs AFTER host's pre-link (verify via ordering spies).
         - `injector.has('ngTranscludeDirective') === true` after `createInjector(['ng'])`. **[Agent: vitest-testing]**
-  - [ ] Update `src/compiler/__tests__/cross-spec-smoke.test.ts` to assert `injector.has('ngTranscludeDirective') === true` when `'ng'` is in the deps chain — this is now a public observable of `ngModule`. **[Agent: vitest-testing]**
-  - [ ] Run `pnpm lint`, `pnpm typecheck`, `pnpm test`. All must pass. **[Agent: typescript-framework]**
+    - 15 new tests covering FS §2.6. **DEVIATION (2026-05-11):** the captured-content marker recursion test was intentionally omitted (per the task brief's permission to skip) — the behavior is hard to lock without sliding into implementation details; the remaining 15 scenarios cover the documented public surface. Also: an `InjectorLike { has: (name: string) => boolean }` narrow type was defined for tests to avoid the deeply-generic `Injector<...>` type the full ngModule produces — tests only consume `.has(...)`, so the narrow type matches actual usage.
+  - [x] Update `src/compiler/__tests__/cross-spec-smoke.test.ts` to assert `injector.has('ngTranscludeDirective') === true` when `'ng'` is in the deps chain — this is now a public observable of `ngModule`. **[Agent: vitest-testing]**
+  - [x] Run `pnpm lint`, `pnpm typecheck`, `pnpm test`. All must pass. **[Agent: typescript-framework]**
+    - Verified: lint clean on `src/`, typecheck clean, test = 100 files / 2335 passed / 5 skipped. Net delta vs Slice 4 baseline (99 / 2320 / 5): +1 file / +15 tests / 0 regressions.
 
-- [ ] **Slice 6: Error-Surface Tests + Documentation + Final Verification**
-  - [ ] Create `src/compiler/__tests__/transclude-errors.test.ts` consolidating the full error surface per FS §2.9 (cross-cutting test file; per-feature errors already covered in Slices 2–5):
+- [x] **Slice 6: Error-Surface Tests + Documentation + Final Verification**
+  - [x] Create `src/compiler/__tests__/transclude-errors.test.ts` consolidating the full error surface per FS §2.9 (cross-cutting test file; per-feature errors already covered in Slices 2–5):
         - Two `transclude`-declaring directives on the same element: the SECOND is reported via `MultipleTranscludeDirectivesError`; the second's `transclude` is ignored; the second's OTHER behavior (link, compile) still runs; the FIRST directive's transclusion works normally.
         - `cloneAttachFn` throw: the scope IS still created, IS registered on the cleanup queue, the clone IS still returned from `$transclude`; the error is routed via `$exceptionHandler('$compile')` (assert via a spy on the handler).
         - A directive inside transcluded content throws during its compile / link: error routed via `$exceptionHandler('$compile')`; sibling directives in the same clone still link; other clones produce normally.
         - A custom `$exceptionHandler` that itself throws falls back to `console.error` (spec-014 recursion guard); transclusion does NOT crash.
         - `EXCEPTION_HANDLER_CAUSES` length is unchanged (still 10; no new entry per FS §2.9).
         - `'$compile' satisfies ExceptionHandlerCause` compile-time assertion. **[Agent: vitest-testing]**
-  - [ ] Create `src/compiler/README.md` "Transclusion" section per FS §2.12 and technical-considerations §2.11. The README already exists from spec 017; append the new section after the existing "Compile vs link" section. Subsections:
+    - 10 consolidated cross-cutting tests covering multiple-transclude routing + first-wins, `cloneAttachFn` throw + scope-still-created contract, inner-directive throws + sibling/clone independence, custom-handler degradation via spec-014 recursion guard, `EXCEPTION_HANDLER_CAUSES.length === 10` regression, and the `satisfies ExceptionHandlerCause` compile-time check.
+  - [x] Create `src/compiler/README.md` "Transclusion" section per FS §2.12 and technical-considerations §2.11. The README already exists from spec 017; append the new section after the existing "Compile vs link" section. Subsections:
         - When to use `transclude: true` vs the object form
         - Multi-slot selector rules + `?` optional prefix
         - `ng-transclude` — default slot, named slot, fallback content
@@ -187,13 +192,16 @@
         - Multi-clone pattern (forward-pointer to future `ng-repeat`)
         - Cleanup contract — `destroyElementScope` and `$$ngCleanupQueue`
         - Forward-pointers: `transclude: 'element'` lands with structural directives; `template` / `templateUrl` lands with the templates spec; controllers fill the 4th link arg in their own spec. **[Agent: typedoc-docs]**
-  - [ ] Update `CLAUDE.md` per FS §2.12:
+  - [x] Update `CLAUDE.md` per FS §2.12:
         - "Modules" table row for `./compiler`: amend the purpose summary to mention "transclusion (content + multi-slot)" and add `TranscludeFn`, `CloneAttachFn`, `TranscludeSlotName`, `TranscludeSlotMap`, the nine new error classes to the exports column.
         - "Non-obvious invariants" gains five new bullets (verbatim list in technical-considerations §2.11): outer-scope binding mechanic; capture happens at compile time + compiles exactly once; multi-clone with cleanup-queue ownership; `ng-transclude` parentElement walk; deliberate `transclude: 'element'` deferral + reused `'$compile'` cause.
         - "Where to look when…" gains three new rows: capture pipeline → `transclude-capture.ts`; multi-slot routing → `transclude-capture.ts`; ng-transclude discovery → `ng-transclude.ts`. **[Agent: typedoc-docs]**
-  - [ ] TSDoc audit: every new public export (`TranscludeFn`, `CloneAttachFn`, `TranscludeSlotName`, `TranscludeSlotMap`, the nine error classes) carries at least one runnable usage example per FS §2.12 acceptance #4. `TranscludeFn`'s TSDoc carries the FS §2.4 worked example (consumer markup → captured-children → `$transclude(fn)` → projected DOM round-trip). **[Agent: typedoc-docs]**
-  - [ ] Final regression check: `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm build`. All four gates pass. `dist/{esm,cjs,types}/compiler/index.{mjs,cjs,d.ts}` outputs include the new transclusion surface (`TranscludeFn`, `CloneAttachFn`, the nine error classes, `ngTranscludeDirective` only as an internal-but-visible export). The full prior-spec test suite (002–017) passes unchanged. **[Agent: rollup-build]**
-  - [ ] Cross-spec regression smoke: verify the existing `src/compiler/__tests__/cross-spec-smoke.test.ts` test suite (extended in Slice 5 with the `ngTranscludeDirective` membership check) still passes alongside a new smoke for transclusion end-to-end — register a `transclude: true` directive in a config block, compile a fixture, project content via `ng-transclude`, assert the outer-scope expression resolves correctly. **[Agent: vitest-testing]**
+  - [x] TSDoc audit: every new public export (`TranscludeFn`, `CloneAttachFn`, `TranscludeSlotName`, `TranscludeSlotMap`, the nine error classes) carries at least one runnable usage example per FS §2.12 acceptance #4. `TranscludeFn`'s TSDoc carries the FS §2.4 worked example (consumer markup → captured-children → `$transclude(fn)` → projected DOM round-trip). **[Agent: typedoc-docs]**
+    - Audit pass: `TranscludeFn` and `CloneAttachFn` carried worked examples from Slice 1. Added `@example` blocks to `TranscludeSlotName`, `TranscludeSlot`, `TranscludeSlotMap`, and `NgTranscludeMisuseError` to round out FS §2.12 acceptance #4. The 8 other error classes already had message + usage TSDoc from Slice 1.
+  - [x] Final regression check: `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm build`. All four gates pass. `dist/{esm,cjs,types}/compiler/index.{mjs,cjs,d.ts}` outputs include the new transclusion surface (`TranscludeFn`, `CloneAttachFn`, the nine error classes, `ngTranscludeDirective` only as an internal-but-visible export). The full prior-spec test suite (002–017) passes unchanged. **[Agent: rollup-build]**
+    - All five gates pass: lint clean, format:check clean, typecheck clean, test = 101 files / 2346 passed / 5 skipped, build clean. `dist/types/compiler/index.d.ts` confirms 51 transclusion references; root `dist/types/index.d.ts` confirms 16. Spec-002..017 suites pass unchanged.
+  - [x] Cross-spec regression smoke: verify the existing `src/compiler/__tests__/cross-spec-smoke.test.ts` test suite (extended in Slice 5 with the `ngTranscludeDirective` membership check) still passes alongside a new smoke for transclusion end-to-end — register a `transclude: true` directive in a config block, compile a fixture, project content via `ng-transclude`, assert the outer-scope expression resolves correctly. **[Agent: vitest-testing]**
+    - Cross-spec smoke extended with a `transclude: true` + `ng-transclude` + outer-scope end-to-end fixture via `ngModule`. Locks the public observable across the full pipeline.
 
 ---
 

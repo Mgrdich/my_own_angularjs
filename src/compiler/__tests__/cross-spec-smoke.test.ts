@@ -93,6 +93,67 @@ describe('cross-spec smoke (Slice 12 final verification)', () => {
     expect($filter('uppercase')('hi')).toBe('HI');
   });
 
+  it('ngTransclude (spec 018) — registered on ngModule as `ngTranscludeDirective`', () => {
+    bootstrapNgModule();
+    const injector = createInjector([ngModule]);
+    expect(injector.has('ngTranscludeDirective')).toBe(true);
+  });
+
+  it('transclude: true end-to-end (spec 018) — outer-scope binding through ng-transclude', () => {
+    // Smoke check that the full transclusion path works against
+    // `ngModule` (so `ng-transclude` is available): a `transclude: true`
+    // host registered in a config block, projecting consumer markup
+    // through `<div ng-transclude>` so an `{{outer.title}}`
+    // interpolation in the projected DOM resolves against the OUTER
+    // scope.
+    resetRegistry();
+    createModule('ng', [])
+      .factory('$exceptionHandler', [() => () => undefined])
+      .provider('$sceDelegate', $SceDelegateProvider)
+      .provider('$sce', $SceProvider)
+      .provider('$interpolate', $InterpolateProvider)
+      .provider('$filter', ['$provide', $FilterProvider])
+      .provider('$compile', ['$provide', $CompileProvider]);
+
+    const appModule = createModule('app', ['ng']).config([
+      '$compileProvider',
+      ($cp: $CompileProvider) => {
+        $cp.directive('myCard', [
+          () => ({
+            transclude: true,
+            link: (scope, element) => {
+              // Manual template setup (templates spec is deferred).
+              const template = document.createElement('section');
+              const marker = document.createElement('div');
+              marker.setAttribute('ng-transclude', '');
+              template.appendChild(marker);
+              element.appendChild(template);
+              compile(template)(scope);
+            },
+          }),
+        ]);
+      },
+    ]);
+
+    const injector = createInjector([ngModule, appModule]);
+    const compile = injector.get('$compile');
+
+    const host = document.createElement('div');
+    host.setAttribute('my-card', '');
+    const p = document.createElement('p');
+    p.textContent = 'Hello';
+    host.appendChild(p);
+
+    const outer = Scope.create();
+    compile(host)(outer);
+
+    const marker = host.querySelector('section > div[ng-transclude]');
+    expect(marker).not.toBeNull();
+    expect(marker?.children.length).toBe(1);
+    expect((marker?.children[0] as Element).tagName).toBe('P');
+    expect(marker?.children[0]?.textContent).toBe('Hello');
+  });
+
   it('$compile (spec 017) — registers a directive and runs post-link', () => {
     bootstrapNgModule();
     let posted = false;

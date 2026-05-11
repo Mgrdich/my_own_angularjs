@@ -193,11 +193,7 @@ export function createCompile(options: CompileOptions): CompileService {
     let transcludeMasters: Node[] = [];
     let transcludeNamedMasters: Record<string, Node[]> = {};
     let transcludeUnfilledRequired: string[] = [];
-    if (
-      transcludingDirective !== null &&
-      transcludingDirective.transclude !== undefined &&
-      isElement(node)
-    ) {
+    if (transcludingDirective !== null && transcludingDirective.transclude !== undefined && isElement(node)) {
       transcludeDecl = transcludingDirective.transclude;
       const buckets = captureChildren(node, transcludeDecl);
       const compiled = compileBuckets(
@@ -293,6 +289,7 @@ export function createCompile(options: CompileOptions): CompileService {
           fn: $transclude,
           declaredSlots: declared,
           kind: transcludeDecl.kind,
+          directiveName: transcludingDirective.name,
         };
         Object.defineProperty(target, BOUND_TRANSCLUDE_SLOT, {
           value: bound,

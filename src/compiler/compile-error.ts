@@ -292,6 +292,29 @@ export class UndeclaredTranscludeSlotError extends Error {
  * Routed through `$exceptionHandler('$compile')`; the marker becomes a
  * no-op (its pre-existing children remain unchanged) so the surrounding
  * directive link does not crash.
+ *
+ * @example
+ * ```ts
+ * // (1) Unenclosed marker — no transcluding ancestor:
+ * const stray = document.createElement('div');
+ * stray.setAttribute('ng-transclude', '');
+ * $compile(stray)(scope);
+ * // → NgTranscludeMisuseError('ngTransclude must be used inside a directive declaring transclude: true | { … }')
+ *
+ * // (2) Named slot under a `transclude: true` host:
+ * $compileProvider.directive('myCard', () => ({
+ *   transclude: true,
+ *   link: (s, el) => {
+ *     const t = document.createElement('div');
+ *     const marker = document.createElement('div');
+ *     marker.setAttribute('ng-transclude', 'titleSlot');
+ *     t.appendChild(marker);
+ *     el.appendChild(t);
+ *     $compile(t)(s);
+ *   },
+ * }));
+ * // → NgTranscludeMisuseError('Slot "titleSlot" is not declared; transclude: true exposes only the default slot')
+ * ```
  */
 export class NgTranscludeMisuseError extends Error {
   readonly name = 'NgTranscludeMisuseError' as const;

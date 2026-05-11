@@ -17,6 +17,7 @@
 
 import { $CompileProvider } from '@compiler/compile-provider';
 import type { CompileService } from '@compiler/directive-types';
+import { ngTranscludeDirective } from '@compiler/ng-transclude';
 import { createModule } from '@di/module';
 import { consoleErrorExceptionHandler, type ExceptionHandler } from '@exception-handler/index';
 import { lowercaseFilterFactory, uppercaseFilterFactory } from '@filter/case';
@@ -99,4 +100,17 @@ export const ngModule = createModule('ng', [])
   .filter('number', numberFilterFactory)
   .filter('date', dateFilterFactory)
   .filter('filter', filterFilterFactory)
-  .filter('orderBy', orderByFilterFactory);
+  .filter('orderBy', orderByFilterFactory)
+  // Built-in directives — spec 018 Slice 5 introduces the FIRST
+  // `.directive(...)` registration on `ngModule`. The module DSL
+  // currently has no `.directive(...)` method, so we register via a
+  // config block on `$compileProvider`. `ngTransclude` is the
+  // slot-marker directive consumed by transcluding hosts to render
+  // captured content (default / named / fallback paths). See
+  // `src/compiler/ng-transclude.ts` for the implementation.
+  .config([
+    '$compileProvider',
+    ($compileProvider: $CompileProvider) => {
+      $compileProvider.directive('ngTransclude', ngTranscludeDirective);
+    },
+  ]);

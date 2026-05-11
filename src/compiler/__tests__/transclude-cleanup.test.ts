@@ -18,12 +18,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 
 import { destroyElementScope } from '@compiler/cleanup';
 import { $CompileProvider } from '@compiler/compile-provider';
-import type {
-  CompileService,
-  DirectiveFactory,
-  DirectiveFactoryReturn,
-  TranscludeFn,
-} from '@compiler/directive-types';
+import type { CompileService, DirectiveFactory, DirectiveFactoryReturn, TranscludeFn } from '@compiler/directive-types';
 import { Scope } from '@core/index';
 import { createInjector } from '@di/injector';
 import { createModule, resetRegistry } from '@di/module';
