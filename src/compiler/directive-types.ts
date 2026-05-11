@@ -144,6 +144,25 @@ export interface DirectiveDefinition {
   compile?: CompileFn;
   scope?: false | true | Record<string, string>;
   name?: string;
+  /**
+   * Transclusion declaration (spec 018). Three shapes are accepted at
+   * registration:
+   *
+   * - `true` — content transclusion (capture this element's children).
+   * - `{ [slotName]: 'fill-tag' | '?fill-tag' }` — multi-slot
+   *   transclusion (the multi-slot object form). `?` prefix declares
+   *   an optional slot.
+   * - `false` or omitted — no transclusion (default).
+   *
+   * `'element'` and any other runtime value are REJECTED at
+   * registration with a typed error class routed via
+   * `$exceptionHandler('$compile')`. See `compile-error.ts` for the
+   * full surface. The runtime field shape is `unknown` here because
+   * `normalizeDirective` validates the value lazily and the typed
+   * field would force authors to import `NormalizedTransclude`
+   * (which is internal).
+   */
+  transclude?: boolean | string | Record<string, string>;
 }
 
 /**
