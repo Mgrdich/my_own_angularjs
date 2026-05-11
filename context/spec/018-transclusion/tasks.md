@@ -5,8 +5,8 @@
 
 ---
 
-- [ ] **Slice 1: Foundation — Public Types + Error Classes (No Behavior Change)**
-  - [ ] Create `src/compiler/transclude-types.ts` exporting the public transclusion type surface per technical-considerations §2.1:
+- [x] **Slice 1: Foundation — Public Types + Error Classes (No Behavior Change)**
+  - [x] Create `src/compiler/transclude-types.ts` exporting the public transclusion type surface per technical-considerations §2.1:
         - `type CloneAttachFn = (clone: Node[], scope: Scope) => void`
         - `type TranscludeFn = (cloneAttachFn?: CloneAttachFn, futureParent?: Element | null, slotName?: string | null) => Node[]`
         - `type TranscludeSlotName = string` (named type alias for clarity at call sites)
@@ -14,7 +14,7 @@
         - `type TranscludeSlotMap = readonly TranscludeSlot[]`
         - `interface BoundTranscludeFn { fn: TranscludeFn; declaredSlots: TranscludeSlotMap; kind: 'content' | 'slots' }` — the shape stashed on `$$ngBoundTransclude`
         - `type NormalizedTransclude = { kind: 'content' } | { kind: 'slots'; slots: TranscludeSlotMap }` — the post-normalize internal shape stored on each `Directive`. **[Agent: typescript-framework]**
-  - [ ] Extend `src/compiler/compile-error.ts` with nine new error classes per technical-considerations §2.10, all following the existing pattern at `compile-error.ts:29-80` (extends `Error`, `readonly name = '<ClassName>' as const`, single-string constructor, deterministic message):
+  - [x] Extend `src/compiler/compile-error.ts` with nine new error classes per technical-considerations §2.10, all following the existing pattern at `compile-error.ts:29-80` (extends `Error`, `readonly name = '<ClassName>' as const`, single-string constructor, deterministic message):
         - `InvalidTranscludeValueError(directiveName: string, description: string)` → `Invalid transclude value for directive <name>: <description>`
         - `ElementTranscludeNotSupportedError(directiveName: string)` → `Element transclusion (transclude: 'element') is not yet supported; this spec ships only transclude: true and the multi-slot object form. Directive: <name>`
         - `DuplicateTranscludeSelectorError(directiveName: string, selector: string)` → `Duplicate transclude selector "<selector>" in directive <name>`
@@ -24,20 +24,22 @@
         - `RequiredTranscludeSlotUnfilledError(directiveName: string, slotName: string, selector: string)` → `Required transclusion slot "<slotName>" expected one or more elements matching "<selector>", got none (directive <name>)`
         - `UndeclaredTranscludeSlotError(directiveName: string, slotName: string)` → `No transclusion slot "<slotName>" declared on directive <name>`
         - `NgTranscludeMisuseError(reason: string)` → message depends on `reason`: `ngTransclude must be used inside a directive declaring transclude: true | { … }` OR `Slot "<name>" is not declared; transclude: true exposes only the default slot`. **[Agent: typescript-framework]**
-  - [ ] Widen `LinkFn` and `CompileFn` in `src/compiler/directive-types.ts:77` and `:86-90`:
+    - **DEVIATION (2026-05-11):** `NgTranscludeMisuseError`'s single-arg constructor (`constructor(reason: string) { super(reason); }`) triggered `@typescript-eslint/no-useless-constructor`. Added an inline ESLint disable with justification per CLAUDE.md's "every disable carries an inline justification" rule — the explicit single-arg constructor narrows the public surface so callers cannot pass the looser `Error`-overload `new NgTranscludeMisuseError('msg', { cause: x })`. No deviation from the spec's `(reason: string)` signature.
+  - [x] Widen `LinkFn` and `CompileFn` in `src/compiler/directive-types.ts:77` and `:86-90`:
         - `LinkFn`: `(scope: Scope, element: Element, attrs: Attributes, controllers?: undefined, $transclude?: TranscludeFn) => void`
         - `CompileFn`: `(element: Element, attrs: Attributes, $transclude?: TranscludeFn) => LinkFn | { pre?: LinkFn; post?: LinkFn } | void`
         - `controllers` is a stable placeholder reserved for the controllers spec — document via TSDoc that directives MUST NOT introspect it as `undefined` until controllers ship.
         - Re-export `TranscludeFn`, `CloneAttachFn`, `TranscludeSlotName` from this file so `directive-types.ts` remains the single inbound type-import for directive authors. **[Agent: typescript-framework]**
-  - [ ] Extend `Directive` in `src/compiler/directive-types.ts` with a new `transclude?: NormalizedTransclude` field. When unset, the directive has no transclusion semantics (spec-017 behavior preserved). The field is populated by `normalizeDirective` in Slice 2. **[Agent: typescript-framework]**
-  - [ ] Update `src/compiler/index.ts` barrel to re-export the new public surface: `TranscludeFn`, `CloneAttachFn`, `TranscludeSlotName`, `TranscludeSlotMap`, `TranscludeSlot`, and the nine new error classes. `BoundTranscludeFn` and `NormalizedTransclude` are INTERNAL and not re-exported. **[Agent: typescript-framework]**
-  - [ ] Update `src/index.ts` (root barrel) to re-export the new types and error classes mirroring the existing compiler re-export pattern. **[Agent: typescript-framework]**
-  - [ ] Create `src/compiler/__tests__/transclude-errors-foundation.test.ts` instantiating each of the nine new error classes and asserting the message format and the `name` discriminator exactly. Verify each `new XError(...) instanceof Error === true` and that each `error.name === '<ClassName>'`. **[Agent: vitest-testing]**
-  - [ ] Add a type-level back-compat block to `src/compiler/__tests__/transclude-errors-foundation.test.ts` (inside a `describe('LinkFn/CompileFn type widening')` block): assign a spec-017-canonical 3-arg `LinkFn` and a 4-arg `LinkFn` with `controllers: undefined` and a 5-arg `LinkFn` with `$transclude: TranscludeFn` to the widened type. Same for 2-arg + 3-arg `CompileFn`. Runtime assertions just call them with placeholder values to ensure they're invoked — the real value is in the typecheck pass. **[Agent: vitest-testing]**
-  - [ ] Run `pnpm lint`, `pnpm typecheck`, `pnpm test`. Every test from prior specs (002, 003, 006, 007, 008, 009, 010, 011, 012, 013, 014, 015, 016, 017) continues to pass. The new error tests pass. No public ng-module surface change yet; no `EXCEPTION_HANDLER_CAUSES` change. **[Agent: typescript-framework]**
+  - [x] Extend `Directive` in `src/compiler/directive-types.ts` with a new `transclude?: NormalizedTransclude` field. When unset, the directive has no transclusion semantics (spec-017 behavior preserved). The field is populated by `normalizeDirective` in Slice 2. **[Agent: typescript-framework]**
+  - [x] Update `src/compiler/index.ts` barrel to re-export the new public surface: `TranscludeFn`, `CloneAttachFn`, `TranscludeSlotName`, `TranscludeSlotMap`, `TranscludeSlot`, and the nine new error classes. `BoundTranscludeFn` and `NormalizedTransclude` are INTERNAL and not re-exported. **[Agent: typescript-framework]**
+  - [x] Update `src/index.ts` (root barrel) to re-export the new types and error classes mirroring the existing compiler re-export pattern. **[Agent: typescript-framework]**
+  - [x] Create `src/compiler/__tests__/transclude-errors-foundation.test.ts` instantiating each of the nine new error classes and asserting the message format and the `name` discriminator exactly. Verify each `new XError(...) instanceof Error === true` and that each `error.name === '<ClassName>'`. **[Agent: vitest-testing]**
+  - [x] Add a type-level back-compat block to `src/compiler/__tests__/transclude-errors-foundation.test.ts` (inside a `describe('LinkFn/CompileFn type widening')` block): assign a spec-017-canonical 3-arg `LinkFn` and a 4-arg `LinkFn` with `controllers: undefined` and a 5-arg `LinkFn` with `$transclude: TranscludeFn` to the widened type. Same for 2-arg + 3-arg `CompileFn`. Runtime assertions just call them with placeholder values to ensure they're invoked — the real value is in the typecheck pass. **[Agent: vitest-testing]**
+  - [x] Run `pnpm lint`, `pnpm typecheck`, `pnpm test`. Every test from prior specs (002, 003, 006, 007, 008, 009, 010, 011, 012, 013, 014, 015, 016, 017) continues to pass. The new error tests pass. No public ng-module surface change yet; no `EXCEPTION_HANDLER_CAUSES` change. **[Agent: typescript-framework]**
+    - Verified: lint clean, typecheck clean, test = 93 files / 2259 passed / 5 skipped. Net delta vs spec-017 baseline (92 / 2226 / 5): +1 file / +33 tests / 0 regressions. Compiler subset: 19 files / 203 tests, all passing. No `EXCEPTION_HANDLER_CAUSES` change (still 10 entries).
 
-- [ ] **Slice 2: Registration-Phase Validation — `normalizeDirective` Extension**
-  - [ ] Extend `normalizeDirective` in `src/compiler/compile-provider.ts:265-310` per technical-considerations §2.3. After the existing isolate-scope rejection at `:276` and before the directive object is frozen, add a `transclude` validation block:
+- [x] **Slice 2: Registration-Phase Validation — `normalizeDirective` Extension**
+  - [x] Extend `normalizeDirective` in `src/compiler/compile-provider.ts:265-310` per technical-considerations §2.3. After the existing isolate-scope rejection at `:276` and before the directive object is frozen, add a `transclude` validation block:
         - `transclude === undefined` or `transclude === false` → leave normalized `transclude` field unset.
         - `transclude === true` → set normalized `transclude` to `{ kind: 'content' }`.
         - `typeof transclude === 'object' && transclude !== null && !Array.isArray(transclude)` → iterate `Object.entries(transclude)`:
@@ -48,8 +50,11 @@
           - Build `slots: TranscludeSlotMap` (frozen array) and set normalized `transclude` to `{ kind: 'slots', slots }`.
         - `transclude === 'element'` → throw `ElementTranscludeNotSupportedError(name)`.
         - Any other value → throw `InvalidTranscludeValueError(name, describeValue(value))`. **[Agent: typescript-framework]**
-  - [ ] Verify the existing factory-invocation try/catch in `$$buildDirectiveArrayProvider` at `compile-provider.ts:200-208` catches the new throws and routes them via `$exceptionHandler('$compile')`. The directive is dropped from the array; siblings continue. Mirrors spec-017's `IsolateScopeNotSupportedError` routing exactly. No code change needed — just confirm via the new test below. **[Agent: typescript-framework]**
-  - [ ] Create `src/compiler/__tests__/transclude-registration.test.ts` covering FS §2.1 + §2.3 registration acceptance:
+    - **DEVIATION (2026-05-11):** `describeValue` returns bracketed `[typeof] (typeof)` formatting (e.g., `[function] (function)`) for `function`-typed values and unhandled object instances (Dates, class instances), rather than `[object Object] (object)`. Reason: the strict-lint `@typescript-eslint/no-base-to-string` rule rejects `String(value)` on an `unknown` that may stringify to `[object Object]`. The four spec-documented examples (`42`, `'true'`, `[]`, `null`) all hit deterministic branches above this fallback and produce the exact strings the spec mandates.
+    - **DEVIATION (2026-05-11):** The DDO's user-facing `transclude` field is read via a narrow `(ddo as { transclude?: unknown }).transclude` cast rather than widening the public `DirectiveDefinition` interface. Reason: the task constraint restricted production edits to `compile-provider.ts` only. `DirectiveDefinition` will be widened naturally in Slice 3 when the runtime path begins consuming the field.
+  - [x] Verify the existing factory-invocation try/catch in `$$buildDirectiveArrayProvider` at `compile-provider.ts:200-208` catches the new throws and routes them via `$exceptionHandler('$compile')`. The directive is dropped from the array; siblings continue. Mirrors spec-017's `IsolateScopeNotSupportedError` routing exactly. No code change needed — just confirm via the new test below. **[Agent: typescript-framework]**
+    - Confirmed via the `transclude: 'element'` and other `$exceptionHandler`-spy tests in the new test file. The existing factory try/catch routes every `normalizeDirective`-thrown error through `$exceptionHandler('$compile')` unchanged.
+  - [x] Create `src/compiler/__tests__/transclude-registration.test.ts` covering FS §2.1 + §2.3 registration acceptance:
         - `transclude: true` registers and produces a normalized `{ kind: 'content' }` form (assert via the directive's `transclude` field after `injector.get('myDirDirective')`).
         - `transclude: { titleSlot: 'card-title' }` registers and produces `{ kind: 'slots', slots: [{ name: 'titleSlot', selector: 'card-title', normalizedSelector: 'cardTitle', required: true }] }`.
         - `?card-subtitle` selector prefix parses off to `required: false`, `normalizedSelector: 'cardSubtitle'`.
@@ -61,7 +66,9 @@
         - Invalid selector value (`{ a: '' }`, `{ a: 42 }`, `{ a: 'NotKebab' }`, `{ a: null }`) routes `InvalidTranscludeSelectorError`.
         - Duplicate selector `{ a: 'card-title', b: 'card-title' }` routes `DuplicateTranscludeSelectorError`.
         - Two slots with the same NAME `{ a: 'x', a: 'y' }` collapses per JS literal duplicate-key semantics (last entry wins); only ONE slot in the normalized output. **[Agent: vitest-testing]**
-  - [ ] Run `pnpm lint`, `pnpm typecheck`, `pnpm test`. All must pass. Existing spec-017 tests still pass — no behavior change for directives that don't declare `transclude`. **[Agent: typescript-framework]**
+    - 20 new tests across the FS §2.1 + §2.3 acceptance surface. Note: the `null` case is routed differently depending on nesting level — top-level `transclude: null` falls through the object-check (since `typeof null === 'object'` but the explicit `transclude !== null` guard rejects it) and routes via `InvalidTranscludeValueError`. Slot-level `{ a: null }` routes via `InvalidTranscludeSelectorError` because the value is inside the slot map. Both paths covered.
+  - [x] Run `pnpm lint`, `pnpm typecheck`, `pnpm test`. All must pass. Existing spec-017 tests still pass — no behavior change for directives that don't declare `transclude`. **[Agent: typescript-framework]**
+    - Verified: lint clean, typecheck clean, test = 94 files / 2279 passed / 5 skipped. Net delta vs Slice 1 baseline (93 / 2259 / 5): +1 file / +20 tests / 0 regressions. No behavior change for directives without a `transclude` declaration — every spec-017 test passes unchanged.
 
 - [ ] **Slice 3: Minimum Runnable — Content Transclusion (`transclude: true`) End-to-End**
   - [ ] Create `src/compiler/transclude-capture.ts` exporting `captureChildren(host: Element, transclude: NormalizedTransclude): { defaultBucket: Node[]; slotBuckets: Record<string, Node[]>; unfilledRequired: string[]; unfilledOptional: string[] }`. For `{ kind: 'content' }`, drain `host.childNodes` into `defaultBucket` (order preserved; text + comments + elements all captured); leave `slotBuckets` empty. Drain is destructive: nodes are detached from the live DOM. The `{ kind: 'slots' }` branch lands in Slice 4 — for this slice, throw `Error('multi-slot capture lands in Slice 4')` if invoked with that kind (defensive; not reachable since the pre-pass only handles `kind: 'content'` here). **[Agent: typescript-framework]**

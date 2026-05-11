@@ -29,10 +29,16 @@ import type { InterpolateService } from '@interpolate/interpolate-types';
 
 import { createCompile } from './compile';
 import {
+  DuplicateTranscludeSelectorError,
+  ElementTranscludeNotSupportedError,
   InvalidDirectiveFactoryError,
   InvalidDirectiveNameError,
+  InvalidTranscludeSelectorError,
+  InvalidTranscludeSlotNameError,
+  InvalidTranscludeValueError,
   IsolateScopeNotSupportedError,
 } from './compile-error';
+import { directiveNormalize } from './directive-normalize';
 import type {
   CompileFn,
   CompileService,
@@ -42,6 +48,7 @@ import type {
   DirectiveFactoryReturn,
   LinkFn,
 } from './directive-types';
+import type { NormalizedTransclude, TranscludeSlot, TranscludeSlotMap } from './transclude-types';
 
 const VALID_DIRECTIVE_NAME = /^[a-zA-Z][a-zA-Z0-9]*$/;
 
@@ -246,6 +253,99 @@ function isValidFactoryShape(factory: unknown): factory is DirectiveFactory {
   return false;
 }
 
+/**
+ * Slot-name validator (camelCase JS identifier). Used by
+ * `normalizeDirective` to reject keys like `'1bad'`, `''`, `'has space'`.
+ */
+const VALID_SLOT_NAME = /^[a-zA-Z_$][a-zA-Z0-9_$]*$/;
+
+/**
+ * Selector validator (kebab-case tag name). Used by `normalizeDirective`
+ * to reject values like `''`, `'NotKebab'`, `'42abc'`. Applied AFTER the
+ * optional leading `?` has been stripped.
+ */
+const VALID_SLOT_SELECTOR = /^[a-z][a-z0-9-]*$/;
+
+/**
+ * Short human-readable description of an arbitrary runtime value, used
+ * when reporting an {@link InvalidTranscludeValueError} from
+ * `normalizeDirective`. The format follows the spec-018 acceptance
+ * examples (`42 (number)`, `'true' (string)`, `[] (array)`,
+ * `null (null)`).
+ */
+function describeValue(value: unknown): string {
+  if (value === null) {
+    return 'null (null)';
+  }
+  if (Array.isArray(value)) {
+    return '[] (array)';
+  }
+  if (typeof value === 'string') {
+    return `'${value}' (string)`;
+  }
+  if (typeof value === 'number' || typeof value === 'boolean' || typeof value === 'bigint') {
+    return `${value.toString()} (${typeof value})`;
+  }
+  if (typeof value === 'symbol') {
+    return `${value.toString()} (symbol)`;
+  }
+  // Reachable for `function` and the rare `object`-typed value that
+  // bypassed the multi-slot path (e.g. `Date`, a class instance). The
+  // bracketed-type fallback is acceptable; the error class also names
+  // the directive so the author can debug.
+  return `[${typeof value}] (${typeof value})`;
+}
+
+/**
+ * Validates and normalizes the `transclude` DDO field per spec-018
+ * Slice 2 / technical-considerations §2.3.
+ *
+ * Returns the post-normalize {@link NormalizedTransclude} discriminated
+ * union for `true` and the multi-slot object form, or `undefined` when
+ * the directive opts out (`undefined`, `false`, or the field omitted).
+ *
+ * Throws on any other input — all throws are routed through
+ * `$exceptionHandler('$compile')` by the factory-invocation try/catch
+ * in {@link $$buildDirectiveArrayProvider} above.
+ */
+function normalizeTransclude(directiveName: string, transclude: unknown): NormalizedTransclude | undefined {
+  if (transclude === undefined || transclude === false) {
+    return undefined;
+  }
+  if (transclude === true) {
+    return { kind: 'content' };
+  }
+  if (transclude === 'element') {
+    throw new ElementTranscludeNotSupportedError(directiveName);
+  }
+  if (typeof transclude === 'object' && transclude !== null && !Array.isArray(transclude)) {
+    const slots: TranscludeSlot[] = [];
+    const seenNormalizedSelectors = new Map<string, string>();
+    for (const [key, rawValue] of Object.entries(transclude as Record<string, unknown>)) {
+      if (!VALID_SLOT_NAME.test(key)) {
+        throw new InvalidTranscludeSlotNameError(directiveName, key);
+      }
+      if (typeof rawValue !== 'string' || rawValue.length === 0) {
+        throw new InvalidTranscludeSelectorError(directiveName, key);
+      }
+      const optional = rawValue.charAt(0) === '?';
+      const selector = optional ? rawValue.slice(1) : rawValue;
+      if (!VALID_SLOT_SELECTOR.test(selector)) {
+        throw new InvalidTranscludeSelectorError(directiveName, key);
+      }
+      const normalizedSelector = directiveNormalize(selector);
+      if (seenNormalizedSelectors.has(normalizedSelector)) {
+        throw new DuplicateTranscludeSelectorError(directiveName, selector);
+      }
+      seenNormalizedSelectors.set(normalizedSelector, key);
+      slots.push({ name: key, selector, normalizedSelector, required: !optional });
+    }
+    const frozenSlots: TranscludeSlotMap = Object.freeze([...slots]);
+    return { kind: 'slots', slots: frozenSlots };
+  }
+  throw new InvalidTranscludeValueError(directiveName, describeValue(transclude));
+}
+
 function normalizeDirective(name: string, factoryReturn: DirectiveFactoryReturn): Directive {
   if (typeof factoryReturn === 'function') {
     // Sugar form: `() => function postLink(scope, el, attrs) {…}`.
@@ -276,6 +376,15 @@ function normalizeDirective(name: string, factoryReturn: DirectiveFactoryReturn)
     throw new IsolateScopeNotSupportedError(name);
   }
 
+  // Validate + normalize the `transclude` field per spec-018 Slice 2.
+  // The DDO field is user-supplied and may carry any runtime value, so
+  // it is read via an `unknown`-typed view rather than the typed
+  // `DirectiveDefinition` interface. The returned shape becomes the
+  // `Directive.transclude` field; `undefined` means the directive
+  // opted out and the property is omitted from the normalized object.
+  const rawTransclude = (ddo as { transclude?: unknown }).transclude;
+  const transclude = normalizeTransclude(name, rawTransclude);
+
   const priority = ddo.priority ?? 0;
   if (Number.isNaN(priority)) {
     throw new Error(`Invalid priority for directive ${name}: NaN`);
@@ -297,7 +406,7 @@ function normalizeDirective(name: string, factoryReturn: DirectiveFactoryReturn)
     compile = undefined;
   }
 
-  return {
+  const directive: Directive = {
     name: ddo.name ?? name,
     restrict: ddo.restrict ?? 'EA',
     priority,
@@ -307,4 +416,8 @@ function normalizeDirective(name: string, factoryReturn: DirectiveFactoryReturn)
     link: ddo.link,
     scope,
   };
+  if (transclude !== undefined) {
+    directive.transclude = transclude;
+  }
+  return directive;
 }

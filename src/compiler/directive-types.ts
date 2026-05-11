@@ -16,6 +16,16 @@ import type { Injector, Invokable } from '@di/di-types';
 import type { ExceptionHandler } from '@exception-handler/index';
 import type { InterpolateService } from '@interpolate/interpolate-types';
 
+import type { CloneAttachFn, NormalizedTransclude, TranscludeFn, TranscludeSlotName } from './transclude-types';
+
+// Re-export the public transclusion types so directive authors can
+// pull every signature they need from a single barrel
+// (`@compiler/directive-types`). The internal types
+// (`NormalizedTransclude`, `BoundTranscludeFn`) are NOT re-exported
+// here — they remain visible to other compiler modules via direct
+// `./transclude-types` import only.
+export type { CloneAttachFn, TranscludeFn, TranscludeSlotName };
+
 /**
  * The shared {@link Attributes} object passed to every `compile`,
  * `pre-link`, and `post-link` invocation on a single element.
@@ -67,14 +77,35 @@ export interface Attributes {
  * Post-link / pre-link function signature.
  *
  * Receives the bound scope, the raw DOM `Element` (or `Comment` for
- * an M-restricted match in a future slice), and the shared
- * {@link Attributes} for the element. Returns nothing.
+ * an M-restricted match in a future slice), the shared
+ * {@link Attributes} for the element, an OPTIONAL `controllers`
+ * placeholder reserved for the controllers spec, and an OPTIONAL
+ * `$transclude` callable (spec 018) made available only when the
+ * directive declares `transclude: true | { … }`. Returns nothing.
+ *
+ * **`controllers` is a stable placeholder.** Spec 018 defers the
+ * controllers DDO; directives MUST NOT introspect this argument as
+ * `undefined` until the controllers spec ships. The slot is preserved
+ * so the future addition can fill it in without breaking the
+ * signature. The TypeScript type is narrowed to `undefined` exactly
+ * so accidental `controllers as ControllerInstance` casts surface at
+ * compile time.
+ *
+ * **`$transclude` is `undefined` unless the directive's DDO declared
+ * `transclude`.** TypeScript function-parameter subtyping keeps the
+ * spec-017-canonical 3-arg `(scope, element, attrs)` callers
+ * assignable to this widened type without source changes.
  *
  * Errors thrown from a link function are routed through
- * `$exceptionHandler` with cause `'$compile'` in Slice 11; for now
- * (Slice 2) they propagate.
+ * `$exceptionHandler` with cause `'$compile'` (spec 017 Slice 11).
  */
-export type LinkFn = (scope: Scope, element: Element, attrs: Attributes) => void;
+export type LinkFn = (
+  scope: Scope,
+  element: Element,
+  attrs: Attributes,
+  controllers?: undefined,
+  $transclude?: TranscludeFn,
+) => void;
 
 /**
  * Compile function signature.
@@ -82,10 +113,17 @@ export type LinkFn = (scope: Scope, element: Element, attrs: Attributes) => void
  * Runs once per template (NOT per scope). May mutate the element in
  * place; its return value becomes the link function (or
  * `{ pre, post }`) for the directive.
+ *
+ * **`$transclude` lands as the 3rd argument on `compile`** since
+ * `compile` has no `scope` / `controllers` slots (this matches
+ * AngularJS exactly). The argument is `undefined` unless the
+ * directive's DDO declared `transclude`. Spec-017-canonical 2-arg
+ * `(element, attrs)` callers remain assignable.
  */
 export type CompileFn = (
   element: Element,
   attrs: Attributes,
+  $transclude?: TranscludeFn,
   // eslint-disable-next-line @typescript-eslint/no-invalid-void-type -- AngularJS-canonical: a directive's compile fn may legitimately return nothing (`void`) to signal "no link function". The union mirrors the public AngularJS API surface; rejecting `void` here would force callers into `undefined` returns that don't match the historical contract.
 ) => LinkFn | { pre?: LinkFn; post?: LinkFn } | void;
 
@@ -149,6 +187,13 @@ export interface Directive {
   compile: CompileFn | undefined;
   link: LinkFn | { pre?: LinkFn; post?: LinkFn } | undefined;
   scope: false | true;
+  /**
+   * Post-normalize transclusion declaration (spec 018). Unset when the
+   * directive did not declare `transclude` — preserves spec-017
+   * behavior. Populated by `normalizeDirective` in Slice 2 from the
+   * factory's `transclude: true | false | { … }` field.
+   */
+  transclude?: NormalizedTransclude;
 }
 
 /**
