@@ -1,0 +1,195 @@
+# Tasks: Transclusion — Content + Multi-Slot
+
+- **Specification:** `context/spec/018-transclusion/`
+- **Status:** Draft
+
+---
+
+- [ ] **Slice 1: Foundation — Public Types + Error Classes (No Behavior Change)**
+  - [ ] Create `src/compiler/transclude-types.ts` exporting the public transclusion type surface per technical-considerations §2.1:
+        - `type CloneAttachFn = (clone: Node[], scope: Scope) => void`
+        - `type TranscludeFn = (cloneAttachFn?: CloneAttachFn, futureParent?: Element | null, slotName?: string | null) => Node[]`
+        - `type TranscludeSlotName = string` (named type alias for clarity at call sites)
+        - `interface TranscludeSlot { name: string; selector: string; normalizedSelector: string; required: boolean }` — the internal normalized form
+        - `type TranscludeSlotMap = readonly TranscludeSlot[]`
+        - `interface BoundTranscludeFn { fn: TranscludeFn; declaredSlots: TranscludeSlotMap; kind: 'content' | 'slots' }` — the shape stashed on `$$ngBoundTransclude`
+        - `type NormalizedTransclude = { kind: 'content' } | { kind: 'slots'; slots: TranscludeSlotMap }` — the post-normalize internal shape stored on each `Directive`. **[Agent: typescript-framework]**
+  - [ ] Extend `src/compiler/compile-error.ts` with nine new error classes per technical-considerations §2.10, all following the existing pattern at `compile-error.ts:29-80` (extends `Error`, `readonly name = '<ClassName>' as const`, single-string constructor, deterministic message):
+        - `InvalidTranscludeValueError(directiveName: string, description: string)` → `Invalid transclude value for directive <name>: <description>`
+        - `ElementTranscludeNotSupportedError(directiveName: string)` → `Element transclusion (transclude: 'element') is not yet supported; this spec ships only transclude: true and the multi-slot object form. Directive: <name>`
+        - `DuplicateTranscludeSelectorError(directiveName: string, selector: string)` → `Duplicate transclude selector "<selector>" in directive <name>`
+        - `InvalidTranscludeSlotNameError(directiveName: string, key: string)` → `Invalid transclusion slot name "<key>" in directive <name>`
+        - `InvalidTranscludeSelectorError(directiveName: string, key: string)` → `Invalid transclusion selector for slot "<key>" in directive <name>`
+        - `MultipleTranscludeDirectivesError(firstDirectiveName: string, secondDirectiveName: string)` → `Multiple directives requesting transclusion on the same element: "<first>" and "<second>". Only the first wins; "<second>"'s transclude is ignored.`
+        - `RequiredTranscludeSlotUnfilledError(directiveName: string, slotName: string, selector: string)` → `Required transclusion slot "<slotName>" expected one or more elements matching "<selector>", got none (directive <name>)`
+        - `UndeclaredTranscludeSlotError(directiveName: string, slotName: string)` → `No transclusion slot "<slotName>" declared on directive <name>`
+        - `NgTranscludeMisuseError(reason: string)` → message depends on `reason`: `ngTransclude must be used inside a directive declaring transclude: true | { … }` OR `Slot "<name>" is not declared; transclude: true exposes only the default slot`. **[Agent: typescript-framework]**
+  - [ ] Widen `LinkFn` and `CompileFn` in `src/compiler/directive-types.ts:77` and `:86-90`:
+        - `LinkFn`: `(scope: Scope, element: Element, attrs: Attributes, controllers?: undefined, $transclude?: TranscludeFn) => void`
+        - `CompileFn`: `(element: Element, attrs: Attributes, $transclude?: TranscludeFn) => LinkFn | { pre?: LinkFn; post?: LinkFn } | void`
+        - `controllers` is a stable placeholder reserved for the controllers spec — document via TSDoc that directives MUST NOT introspect it as `undefined` until controllers ship.
+        - Re-export `TranscludeFn`, `CloneAttachFn`, `TranscludeSlotName` from this file so `directive-types.ts` remains the single inbound type-import for directive authors. **[Agent: typescript-framework]**
+  - [ ] Extend `Directive` in `src/compiler/directive-types.ts` with a new `transclude?: NormalizedTransclude` field. When unset, the directive has no transclusion semantics (spec-017 behavior preserved). The field is populated by `normalizeDirective` in Slice 2. **[Agent: typescript-framework]**
+  - [ ] Update `src/compiler/index.ts` barrel to re-export the new public surface: `TranscludeFn`, `CloneAttachFn`, `TranscludeSlotName`, `TranscludeSlotMap`, `TranscludeSlot`, and the nine new error classes. `BoundTranscludeFn` and `NormalizedTransclude` are INTERNAL and not re-exported. **[Agent: typescript-framework]**
+  - [ ] Update `src/index.ts` (root barrel) to re-export the new types and error classes mirroring the existing compiler re-export pattern. **[Agent: typescript-framework]**
+  - [ ] Create `src/compiler/__tests__/transclude-errors-foundation.test.ts` instantiating each of the nine new error classes and asserting the message format and the `name` discriminator exactly. Verify each `new XError(...) instanceof Error === true` and that each `error.name === '<ClassName>'`. **[Agent: vitest-testing]**
+  - [ ] Add a type-level back-compat block to `src/compiler/__tests__/transclude-errors-foundation.test.ts` (inside a `describe('LinkFn/CompileFn type widening')` block): assign a spec-017-canonical 3-arg `LinkFn` and a 4-arg `LinkFn` with `controllers: undefined` and a 5-arg `LinkFn` with `$transclude: TranscludeFn` to the widened type. Same for 2-arg + 3-arg `CompileFn`. Runtime assertions just call them with placeholder values to ensure they're invoked — the real value is in the typecheck pass. **[Agent: vitest-testing]**
+  - [ ] Run `pnpm lint`, `pnpm typecheck`, `pnpm test`. Every test from prior specs (002, 003, 006, 007, 008, 009, 010, 011, 012, 013, 014, 015, 016, 017) continues to pass. The new error tests pass. No public ng-module surface change yet; no `EXCEPTION_HANDLER_CAUSES` change. **[Agent: typescript-framework]**
+
+- [ ] **Slice 2: Registration-Phase Validation — `normalizeDirective` Extension**
+  - [ ] Extend `normalizeDirective` in `src/compiler/compile-provider.ts:265-310` per technical-considerations §2.3. After the existing isolate-scope rejection at `:276` and before the directive object is frozen, add a `transclude` validation block:
+        - `transclude === undefined` or `transclude === false` → leave normalized `transclude` field unset.
+        - `transclude === true` → set normalized `transclude` to `{ kind: 'content' }`.
+        - `typeof transclude === 'object' && transclude !== null && !Array.isArray(transclude)` → iterate `Object.entries(transclude)`:
+          - Validate each key is a valid camelCase JS identifier (`/^[a-zA-Z_$][a-zA-Z0-9_$]*$/`) — else throw `InvalidTranscludeSlotNameError(name, key)`.
+          - Validate each value is a non-empty string. Strip optional leading `?` and record `required = !leadingQuestionMark`. Validate the remainder is a single kebab-case tag-name token (`/^[a-z][a-z0-9\-]*$/`) — else throw `InvalidTranscludeSelectorError(name, key)`.
+          - Pre-normalize the selector via `directiveNormalize(selector)` so runtime capture is a plain string-equality check against `directiveNormalize(child.tagName.toLowerCase())`.
+          - Detect duplicate `normalizedSelector` values — throw `DuplicateTranscludeSelectorError(name, selector)` on collision.
+          - Build `slots: TranscludeSlotMap` (frozen array) and set normalized `transclude` to `{ kind: 'slots', slots }`.
+        - `transclude === 'element'` → throw `ElementTranscludeNotSupportedError(name)`.
+        - Any other value → throw `InvalidTranscludeValueError(name, describeValue(value))`. **[Agent: typescript-framework]**
+  - [ ] Verify the existing factory-invocation try/catch in `$$buildDirectiveArrayProvider` at `compile-provider.ts:200-208` catches the new throws and routes them via `$exceptionHandler('$compile')`. The directive is dropped from the array; siblings continue. Mirrors spec-017's `IsolateScopeNotSupportedError` routing exactly. No code change needed — just confirm via the new test below. **[Agent: typescript-framework]**
+  - [ ] Create `src/compiler/__tests__/transclude-registration.test.ts` covering FS §2.1 + §2.3 registration acceptance:
+        - `transclude: true` registers and produces a normalized `{ kind: 'content' }` form (assert via the directive's `transclude` field after `injector.get('myDirDirective')`).
+        - `transclude: { titleSlot: 'card-title' }` registers and produces `{ kind: 'slots', slots: [{ name: 'titleSlot', selector: 'card-title', normalizedSelector: 'cardTitle', required: true }] }`.
+        - `?card-subtitle` selector prefix parses off to `required: false`, `normalizedSelector: 'cardSubtitle'`.
+        - Omitting `transclude` leaves the normalized field unset.
+        - `transclude: false` is accepted; behaves identically to omitting.
+        - `transclude: 'element'` routes `ElementTranscludeNotSupportedError` via `$exceptionHandler('$compile')`; directive is dropped; sibling directives on the same element continue.
+        - `transclude: 42` / `transclude: 'true'` / `transclude: []` route `InvalidTranscludeValueError`.
+        - Invalid slot key (`{ '1bad': 'tag' }`, `{ '': 'tag' }`, `{ 'has space': 'tag' }`) routes `InvalidTranscludeSlotNameError`.
+        - Invalid selector value (`{ a: '' }`, `{ a: 42 }`, `{ a: 'NotKebab' }`, `{ a: null }`) routes `InvalidTranscludeSelectorError`.
+        - Duplicate selector `{ a: 'card-title', b: 'card-title' }` routes `DuplicateTranscludeSelectorError`.
+        - Two slots with the same NAME `{ a: 'x', a: 'y' }` collapses per JS literal duplicate-key semantics (last entry wins); only ONE slot in the normalized output. **[Agent: vitest-testing]**
+  - [ ] Run `pnpm lint`, `pnpm typecheck`, `pnpm test`. All must pass. Existing spec-017 tests still pass — no behavior change for directives that don't declare `transclude`. **[Agent: typescript-framework]**
+
+- [ ] **Slice 3: Minimum Runnable — Content Transclusion (`transclude: true`) End-to-End**
+  - [ ] Create `src/compiler/transclude-capture.ts` exporting `captureChildren(host: Element, transclude: NormalizedTransclude): { defaultBucket: Node[]; slotBuckets: Record<string, Node[]>; unfilledRequired: string[]; unfilledOptional: string[] }`. For `{ kind: 'content' }`, drain `host.childNodes` into `defaultBucket` (order preserved; text + comments + elements all captured); leave `slotBuckets` empty. Drain is destructive: nodes are detached from the live DOM. The `{ kind: 'slots' }` branch lands in Slice 4 — for this slice, throw `Error('multi-slot capture lands in Slice 4')` if invoked with that kind (defensive; not reachable since the pre-pass only handles `kind: 'content'` here). **[Agent: typescript-framework]**
+  - [ ] Create `src/compiler/transclude-compile.ts` exporting `compileBuckets(buckets: { defaultBucket: Node[]; slotBuckets: Record<string, Node[]> }, compileNodes: (nodes: Node[]) => Linker | null): { defaultLinker: Linker | null; slotLinkers: Record<string, Linker | null> }`. Empty buckets yield `null` (sentinel for "nothing to project"). For `kind: 'content'`, only `defaultBucket` is compiled in this slice. The `compileNodes` callback is the recursive entry from `compile.ts` — passed in to keep this module free of circular imports. **[Agent: typescript-framework]**
+  - [ ] Create `src/compiler/transclude-fn.ts` exporting `buildTranscludeFn(args: { slotLinkers: { default: Linker | null; named: Record<string, Linker | null> }; declaredSlots: TranscludeSlotMap; unfilledRequired: Set<string>; outerScope: Scope; hostElement: Element; exceptionHandler: ExceptionHandler; masterFragments: { default: Node[]; named: Record<string, Node[]> } }): TranscludeFn`. Per technical-considerations §2.4 lifecycle (slot-name resolution, scope creation, deep-clone via `Node.cloneNode(true)`, link, `cloneAttachFn` synchronous invocation wrapped in try/catch routing via `invokeExceptionHandler(handler, err, '$compile')`, return cloned nodes). For this slice, only the default-slot path is exercised — named slots arrive in Slice 4. Multi-clone supported (independent scope per call); cleanup queue registration via `addElementCleanup(hostElement, () => transclusionScope.$destroy())`. **[Agent: typescript-framework]**
+  - [ ] Update `src/compiler/compile.ts` per technical-considerations §2.2:
+        1. **Pre-pass over sorted matched directives:** in `compileElementOrComment` after the matching engine returns sorted directives and BEFORE the per-directive `directive.compile(...)` loop at `:129-160`, scan the sorted list for entries whose normalized DDO has `transclude` set. Record the first match. If exactly one match exists with `{ kind: 'content' }`, run capture + compile pipeline below. If TWO matches exist, route `MultipleTranscludeDirectivesError(first.name, second.name)` via `invokeExceptionHandler(handler, err, '$compile')` and clear the second's `transclude` field on the LOCAL copy of the directive entry (other behavior continues unchanged).
+        2. **Run capture:** call `captureChildren(node, transcludeDecl)` → bucket map. Children are detached from `node`; `node.childNodes` is now empty.
+        3. **Compile buckets:** call `compileBuckets({ defaultBucket, slotBuckets }, (nodes) => compileService(nodes))` where `compileService` is the closed-over top-level entry. This is a self-call into the existing recursive walker at `compile.ts:269-291` — the top-level branch already accepts `Node[]` / `NodeList`. Empty buckets yield `null`.
+        4. **Build `$transclude` closure** inside `nodeLinker(parentScope)` BEFORE the `scope: true` `$new()` at `:205`. The closure captures `parentScope` as the OUTER scope; transclusion scope = `parentScope.$new()`.
+        5. **Stash on element:** `Object.defineProperty(node, '$$ngBoundTransclude', { value: { fn: $transclude, declaredSlots: [], kind: 'content' }, enumerable: false, writable: true, configurable: true })` per technical-considerations §2.6. (Used by ng-transclude in Slice 5; harmless in Slice 3.)
+        6. **Thread `$transclude` into compile/link calls:** the existing `directive.compile(node, attrs)` call at `:142` gains a 3rd argument; pre-link at `:236-241` and post-link at `:259-264` gain a 5th argument (4th is `undefined` per the controllers placeholder). For directives WITHOUT a transclude declaration on the same element, the argument is `undefined`. **[Agent: typescript-framework]**
+  - [ ] Implement the linker-with-clone-substitution internal extension per technical-considerations §2.4 step 4. The public `Linker` signature stays `(scope: Scope) => Element | NodeList | Comment` (spec-017 back-compat). Internally, the per-bucket linker accepts a `(scope, clonedNodes?) => void` form so `transclude-fn.ts` can pass the cloned `Node[]` and have the existing per-node closures rebind against the clone via post-order pairing. Concentrate the change in `compile.ts`'s `composeLinkers` + `nodeLinker` so the public type is unchanged. Document the indirection in a comment block above `composeLinkers`. **[Agent: typescript-framework]**
+  - [ ] Create `src/compiler/__tests__/transclude-true.test.ts` covering FS §2.2 + §2.4 + §2.7 acceptance for `transclude: true`:
+        - Capture occurs at compile time: after `$compile(node)`, the directive element has NO children; the original children are removed from the live DOM.
+        - Captured order, attributes, inline `onclick=`, text-node whitespace, and comment children are all preserved in the captured fragment.
+        - Captured children are NOT linked against the directive element by the OUTER walker — a sibling-priority directive on the host that mutates `element.children` runs against an empty list.
+        - Captured children compile EXACTLY ONCE (spy on `compileBuckets`'s recursive entry to observe one invocation regardless of clone count).
+        - `transclude: true` directive whose link function calls `$transclude(clone => container.appendChild(clone[0]))` produces a cloned `<p>` (or whatever) appended to the chosen container; the clone is bound to the OUTER scope (assert by interpolating an `{{outer.foo}}` expression and updating the outer scope).
+        - Multi-clone: two sequential `$transclude(fn1)` + `$transclude(fn2)` calls produce two independent linked clones with two independent transclusion scopes.
+        - Empty captured fragment (`<my-dir></my-dir>`) is valid; `$transclude(fn)` invokes `fn([], scope)`.
+        - Void element host (`<img my-dir />`) registers and produces an empty captured fragment.
+        - The 5th link argument is `undefined` for directives that did NOT declare `transclude` (back-compat check on a sibling directive on the same node).
+        - The 3rd compile argument and the 5th link argument are the SAME `TranscludeFn` reference (assert via `===`). **[Agent: vitest-testing]**
+  - [ ] Create `src/compiler/__tests__/transclude-scope.test.ts` covering FS §2.5:
+        - `transcludedScope.$parent === outerScope` strictly.
+        - The directive's own `scope: true` child scope is NEVER in the prototype chain of `transcludedScope`.
+        - `outer.foo = 'hi'` is visible as `t.foo`; mutations on `t.foo` do NOT leak to `outer.foo`.
+        - Two clones get two distinct scopes; mutation on one does not affect the other.
+        - `scope: true` + `transclude: true` on the same element coexist: the directive's own link sees its own child scope; `$transclude(...)` clones see the OUTER scope. **[Agent: vitest-testing]**
+  - [ ] Create `src/compiler/__tests__/transclude-cleanup.test.ts` covering FS §2.8:
+        - Each clone's scope is on `host.$$ngCleanupQueue`.
+        - `destroyElementScope(host)` `$destroy()`s every clone's scope (verify via `scope.$$destroyed === true`).
+        - `cloneAttachFn` throw STILL registers the scope for cleanup; the scope is destroyed at teardown.
+        - Idempotent re-tear-down: second `destroyElementScope(host)` call is a no-op.
+        - `outer.$destroy()` independently tears down clones via scope-tree propagation (no `destroyElementScope` call); both paths converge on `transcludedScope.$$destroyed === true`. **[Agent: vitest-testing]**
+  - [ ] Create `src/compiler/__tests__/transclude-multi-clone.test.ts` covering FS §2.7:
+        - Two sequential calls produce independent clones with independent scopes.
+        - The master fragment is never mutated (assert nodes inside the master `===` after multiple clones).
+        - 1000-clone smoke check completes without timeout (sanity guard against accidental O(N²)).
+        - Zero-call directive (declares `transclude: true` but never calls `$transclude`) is supported — the captured fragment is released to GC when the host is destroyed. **[Agent: vitest-testing]**
+  - [ ] Run `pnpm lint`, `pnpm typecheck`, `pnpm test`, AND `pnpm build` (the `./compiler` entry must compile cleanly with the new files). All must pass. Existing spec-017 tests pass unchanged. **[Agent: rollup-build]**
+
+- [ ] **Slice 4: Multi-Slot Transclusion + Required/Optional Slot Errors**
+  - [ ] Extend `src/compiler/transclude-capture.ts` to handle `{ kind: 'slots' }`. Per technical-considerations §2.2: iterate `host.childNodes` once. For each `Element` child, run `directiveNormalize(child.tagName.toLowerCase())` and check it against the slot map's `normalizedSelector` values. On match, route to the named bucket (`slotBuckets[slot.name]`); otherwise route to `defaultBucket`. Text nodes, comments, and whitespace-only text always go to `defaultBucket`. After the iteration, compute `unfilledRequired` (required slot names with empty buckets) and `unfilledOptional` (optional slot names with empty buckets). **[Agent: typescript-framework]**
+  - [ ] Extend `src/compiler/transclude-compile.ts` to compile each named-slot bucket via the same recursive entry. Each `slot.name` gets a `slotLinker` keyed under `slotLinkers[slot.name]`; empty buckets yield `null`. **[Agent: typescript-framework]**
+  - [ ] Extend `src/compiler/transclude-fn.ts` to handle the `slotName` argument:
+        - `slotName == null` → default bucket (existing path).
+        - `slotName` is in `declaredSlots` but in `unfilledRequired` → route `RequiredTranscludeSlotUnfilledError(directiveName, slotName, selector)` via `invokeExceptionHandler(handler, err, '$compile')`; return `[]` (the scope is NOT created since there's nothing to link, but `cloneAttachFn` is still invoked with `([], transclusionScope)` so callers like ng-transclude can render fallback — see Slice 5; for Slice 4 the test verifies only the error route and the `[]` return).
+        - `slotName` is in `declaredSlots` and unfilled-OPTIONAL → `slotLinker` is `null`; create the transclusion scope, register cleanup, invoke `cloneAttachFn([], transclusionScope)`, return `[]`. FS §2.4 acceptance #7.
+        - `slotName` is NOT in `declaredSlots` → route `UndeclaredTranscludeSlotError(directiveName, slotName)` via `invokeExceptionHandler`; return `[]`.
+        - `slotName` is in `declaredSlots` and FILLED → existing default-bucket logic generalized to the named bucket. **[Agent: typescript-framework]**
+  - [ ] Update `src/compiler/compile.ts` to also eagerly report unfilled REQUIRED slots once per host element after the per-element link phases complete. Per technical-considerations §2.2 step 5: each unfilled required slot name is routed via `invokeExceptionHandler(handler, new RequiredTranscludeSlotUnfilledError(...), '$compile')` after the post-link loop on the host finishes. This is independent of whether `$transclude(...)` is ever called for that slot — the report fires regardless. The directive's link STILL runs (it may render fallback chrome). **[Agent: typescript-framework]**
+  - [ ] Pass the `declaredSlots` map onto the `$$ngBoundTransclude` value so the marker (Slice 5) can validate slot-name lookups before calling `$transclude`. Update the stash to `{ fn, declaredSlots: slots, kind: 'slots' }` for the slot form, or `{ fn, declaredSlots: [], kind: 'content' }` for the content form. **[Agent: typescript-framework]**
+  - [ ] Create `src/compiler/__tests__/transclude-multi-slot.test.ts` covering FS §2.3 + §2.4 + §2.9:
+        - `transclude: { titleSlot: 'card-title', bodySlot: 'card-body' }` with `<my-card><card-title>Hi</card-title><card-body>Body</card-body></my-card>` — `$transclude(fn, null, 'titleSlot')` projects the `<card-title>` element; `$transclude(fn, null, 'bodySlot')` projects `<card-body>`.
+        - Selector kebab/camel normalization: `<cardTitle>` and `<card-title>` both match selector `'card-title'`.
+        - `?` prefix: `?card-subtitle` slot is unfilled (no `<card-subtitle>` child) — `$transclude(fn, null, 'subtitleSlot')` returns `[]`, `cloneAttachFn` invoked with `([], scope)`, no error.
+        - Required slot unfilled: `titleSlot` with no `<card-title>` child — `RequiredTranscludeSlotUnfilledError` routed via `$exceptionHandler('$compile')` at link time (host's directive link STILL runs); `$transclude(fn, null, 'titleSlot')` ALSO routes the error at the call site and returns `[]`.
+        - Undeclared slot: `$transclude(fn, null, 'noSuchSlot')` routes `UndeclaredTranscludeSlotError`.
+        - Default slot for unmatched children: `<my-card>loose text<card-title>...</card-title><other-tag>x</other-tag></my-card>` — the loose text + `<other-tag>` go to the default bucket; `$transclude(fn)` (no slot) projects them.
+        - Whitespace-only text nodes between slot-matched siblings go to default (no error, no projection unless requested).
+        - Comments inside the host go to the default slot.
+        - Each `$transclude(...)` call on a named slot produces an independent clone with its own scope (multi-clone for named slots). **[Agent: vitest-testing]**
+  - [ ] Run `pnpm lint`, `pnpm typecheck`, `pnpm test`. All must pass. **[Agent: typescript-framework]**
+
+- [ ] **Slice 5: `ng-transclude` Directive — The Slot Marker**
+  - [ ] Create `src/compiler/ng-transclude.ts` exporting `ngTranscludeDirective: DirectiveFactoryReturn` (the array-annotated factory ready for `$compileProvider.directive('ngTransclude', ngTranscludeDirective)`). Restrict `'EA'`, priority 0, post-link only. The factory's `link` function:
+        1. Walk `element.parentElement` until finding `$$ngBoundTransclude` (or reaching `null`). On miss → route `NgTranscludeMisuseError('ngTransclude must be used inside a directive declaring transclude: true | { … }')` via `$exceptionHandler('$compile')` and return (marker becomes a no-op with its pre-existing children intact).
+        2. Read the slot name from `attrs.ngTransclude`. Treat empty string / missing as the default slot.
+        3. If `bound.kind === 'content'` and the slot name is provided + non-empty → route `NgTranscludeMisuseError('Slot "<name>" is not declared; transclude: true exposes only the default slot')` and return (no-op).
+        4. If `bound.kind === 'slots'` and the slot name is NOT in `bound.declaredSlots` → route `UndeclaredTranscludeSlotError(bound directive's name, slotName)` and return (no-op).
+        5. Invoke `bound.fn(cloneAttachFn, null, slotName)` where `cloneAttachFn(clone, transcludedScope)`:
+           - If `clone.length === 0` (unfilled optional slot OR error path) → leave the marker's pre-existing children intact (fallback content).
+           - Else → remove all `element.childNodes`, then `element.append(...clone)`.
+        - Wrap the entire link in a try/catch that routes any thrown error via `invokeExceptionHandler(handler, err, '$compile')` (defense in depth; the `$transclude` implementation already routes its own errors). **[Agent: typescript-framework]**
+  - [ ] The `ngTransclude` link function needs access to `$exceptionHandler`. Two implementation choices: (a) inject it via the factory `['$exceptionHandler', ($exceptionHandler) => ({ restrict: 'EA', link: ... })]`; (b) read it lazily from `$$ngBoundTransclude.exceptionHandler` stashed on the host. **Choose (a)** — explicit DI matches every other built-in registration pattern; (b) requires extra stash plumbing for marginal gain. **[Agent: typescript-framework]**
+  - [ ] Update `src/core/ng-module.ts:78-102` to register the new directive AFTER the existing filter-chain block. Add `.directive('ngTransclude', ngTranscludeDirective)`. This is the FIRST `.directive(...)` call on `ngModule` — there is no precedent in the file. Imports: `ngTranscludeDirective` from `@compiler/ng-transclude`. **[Agent: typescript-framework]**
+  - [ ] Create `src/compiler/__tests__/ng-transclude.test.ts` covering FS §2.6:
+        - Default slot: `<my-dir><p>{{outer.x}}</p></my-dir>` with `myDir` declaring `transclude: true` and a link that builds template `<div><span ng-transclude></span></div>` then `$compile(template)(scope)` — the `<span>` ends up with the `<p>` child and the `{{outer.x}}` resolves to `outer.x`'s value.
+        - Element-form: `<ng-transclude></ng-transclude>` renders identically; the element itself remains in the DOM.
+        - Named slot: `<div ng-transclude="titleSlot"></div>` projects the named slot's content.
+        - Fallback content for unfilled optional slot: `<div ng-transclude="subtitleSlot">No subtitle</div>` keeps `No subtitle` as fallback when `subtitleSlot` is unfilled-optional; replaces with the projected content when filled.
+        - Fallback content is compiled + linked against the OUTER scope (assert by interpolating `{{outer.fallback}}` in the fallback and verifying it resolves correctly when the slot is unfilled).
+        - Named slot under a `transclude: true` host → `NgTranscludeMisuseError` routed; marker is a no-op (pre-existing children remain).
+        - Undeclared slot under a multi-slot host → `UndeclaredTranscludeSlotError` routed; marker is a no-op.
+        - Unenclosed marker (`<div ng-transclude></div>` outside any transcluding directive) → `NgTranscludeMisuseError` routed; marker is a no-op.
+        - Captured-content marker (consumer puts `<ng-transclude></ng-transclude>` INSIDE a transcluding host) — the marker is in the captured fragment; at projection time, its `parentElement` chain runs through the cloned fragment (disconnected from the original DOM until `cloneAttachFn` inserts it). Whether it finds `$$ngBoundTransclude` depends on when projection happens — assert the realistic outcome (the captured marker's `parentElement` chain WILL find the host's `$$ngBoundTransclude` ONCE the clone is inserted into the host, leading to recursion). Document the recursion risk and lock the current behavior with an inline comment.
+        - **NOTE for implementation:** the recursion-risk acceptance from technical-considerations §3 risk table assumes parentElement-walking happens at link time. If `ng-transclude` is in the captured fragment, its post-link runs AFTER `cloneAttachFn` inserts the clone — so `parentElement` IS the host. The author's choice of `<ng-transclude>` inside the consumer markup is genuinely a foot-gun; the test locks the actual observable behavior (recursion or error) and the README documents the gotcha.
+        - Marker timing: `ng-transclude` post-link runs AFTER host's pre-link (verify via ordering spies).
+        - `injector.has('ngTranscludeDirective') === true` after `createInjector(['ng'])`. **[Agent: vitest-testing]**
+  - [ ] Update `src/compiler/__tests__/cross-spec-smoke.test.ts` to assert `injector.has('ngTranscludeDirective') === true` when `'ng'` is in the deps chain — this is now a public observable of `ngModule`. **[Agent: vitest-testing]**
+  - [ ] Run `pnpm lint`, `pnpm typecheck`, `pnpm test`. All must pass. **[Agent: typescript-framework]**
+
+- [ ] **Slice 6: Error-Surface Tests + Documentation + Final Verification**
+  - [ ] Create `src/compiler/__tests__/transclude-errors.test.ts` consolidating the full error surface per FS §2.9 (cross-cutting test file; per-feature errors already covered in Slices 2–5):
+        - Two `transclude`-declaring directives on the same element: the SECOND is reported via `MultipleTranscludeDirectivesError`; the second's `transclude` is ignored; the second's OTHER behavior (link, compile) still runs; the FIRST directive's transclusion works normally.
+        - `cloneAttachFn` throw: the scope IS still created, IS registered on the cleanup queue, the clone IS still returned from `$transclude`; the error is routed via `$exceptionHandler('$compile')` (assert via a spy on the handler).
+        - A directive inside transcluded content throws during its compile / link: error routed via `$exceptionHandler('$compile')`; sibling directives in the same clone still link; other clones produce normally.
+        - A custom `$exceptionHandler` that itself throws falls back to `console.error` (spec-014 recursion guard); transclusion does NOT crash.
+        - `EXCEPTION_HANDLER_CAUSES` length is unchanged (still 10; no new entry per FS §2.9).
+        - `'$compile' satisfies ExceptionHandlerCause` compile-time assertion. **[Agent: vitest-testing]**
+  - [ ] Create `src/compiler/README.md` "Transclusion" section per FS §2.12 and technical-considerations §2.11. The README already exists from spec 017; append the new section after the existing "Compile vs link" section. Subsections:
+        - When to use `transclude: true` vs the object form
+        - Multi-slot selector rules + `?` optional prefix
+        - `ng-transclude` — default slot, named slot, fallback content
+        - The outer-scope rule with a worked `<my-card>` + `outerCtrl.title` example
+        - Multi-clone pattern (forward-pointer to future `ng-repeat`)
+        - Cleanup contract — `destroyElementScope` and `$$ngCleanupQueue`
+        - Forward-pointers: `transclude: 'element'` lands with structural directives; `template` / `templateUrl` lands with the templates spec; controllers fill the 4th link arg in their own spec. **[Agent: typedoc-docs]**
+  - [ ] Update `CLAUDE.md` per FS §2.12:
+        - "Modules" table row for `./compiler`: amend the purpose summary to mention "transclusion (content + multi-slot)" and add `TranscludeFn`, `CloneAttachFn`, `TranscludeSlotName`, `TranscludeSlotMap`, the nine new error classes to the exports column.
+        - "Non-obvious invariants" gains five new bullets (verbatim list in technical-considerations §2.11): outer-scope binding mechanic; capture happens at compile time + compiles exactly once; multi-clone with cleanup-queue ownership; `ng-transclude` parentElement walk; deliberate `transclude: 'element'` deferral + reused `'$compile'` cause.
+        - "Where to look when…" gains three new rows: capture pipeline → `transclude-capture.ts`; multi-slot routing → `transclude-capture.ts`; ng-transclude discovery → `ng-transclude.ts`. **[Agent: typedoc-docs]**
+  - [ ] TSDoc audit: every new public export (`TranscludeFn`, `CloneAttachFn`, `TranscludeSlotName`, `TranscludeSlotMap`, the nine error classes) carries at least one runnable usage example per FS §2.12 acceptance #4. `TranscludeFn`'s TSDoc carries the FS §2.4 worked example (consumer markup → captured-children → `$transclude(fn)` → projected DOM round-trip). **[Agent: typedoc-docs]**
+  - [ ] Final regression check: `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm build`. All four gates pass. `dist/{esm,cjs,types}/compiler/index.{mjs,cjs,d.ts}` outputs include the new transclusion surface (`TranscludeFn`, `CloneAttachFn`, the nine error classes, `ngTranscludeDirective` only as an internal-but-visible export). The full prior-spec test suite (002–017) passes unchanged. **[Agent: rollup-build]**
+  - [ ] Cross-spec regression smoke: verify the existing `src/compiler/__tests__/cross-spec-smoke.test.ts` test suite (extended in Slice 5 with the `ngTranscludeDirective` membership check) still passes alongside a new smoke for transclusion end-to-end — register a `transclude: true` directive in a config block, compile a fixture, project content via `ng-transclude`, assert the outer-scope expression resolves correctly. **[Agent: vitest-testing]**
+
+---
+
+## Notes for the Implementation Agent
+
+- **No new top-level subpath.** All transclusion code lives under `src/compiler/` alongside the existing files. The `./compiler` package export already covers the new surface — no `package.json` or `rollup.config.mjs` change.
+- **No new `EXCEPTION_HANDLER_CAUSES` entry.** The `'$compile'` token from spec 017 covers every transclusion error site per FS §2.9. The tuple stays at 10 entries.
+- **`transclude: 'element'` is REJECTED at registration.** Deliberate forward-compat seam — a future structural-directives spec lifts the rejection without breaking semantics.
+- **Controllers and `template`/`templateUrl` are OUT of scope.** The 4th `controllers` link argument is a stable `undefined` placeholder. Document this in TSDoc and the README so authors don't accidentally introspect it.
+- **`ng-transclude` is the FIRST built-in directive registered on `ngModule`.** Existing `src/core/ng-module.ts` has zero `.directive(...)` calls today (only providers and filters). The registration goes after the filter chain.
+- **The link/clone-substitution internal extension** (Slice 3) keeps the public `Linker` signature unchanged — back-compat for spec-017 callers. The extension is internal to `compile.ts`'s `composeLinkers` and `nodeLinker` only.
+- **Module-DSL `.directive` is still OUT of scope.** All directive registration in tests goes through `$compileProvider.directive(...)` from a config block, consistent with spec 017.
+- **`$rootScope` is still NOT registered on `ngModule`.** Tests construct `Scope.create()` directly. Deferred to "Application Bootstrap".
+- **No browser tests.** jsdom is sufficient for every transclusion scenario.
