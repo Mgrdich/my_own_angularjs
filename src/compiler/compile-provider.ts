@@ -46,6 +46,16 @@ import type {
 const VALID_DIRECTIVE_NAME = /^[a-zA-Z][a-zA-Z0-9]*$/;
 
 /**
+ * Suffix appended to every directive name when it is registered as a
+ * DI provider. `$compileProvider.directive('myDir', …)` installs a
+ * `myDirDirective` provider whose `$get` returns the array of
+ * normalized directives. The compiler reads back via the same suffix
+ * (`$injector.get('myDirDirective')`), so both call sites MUST stay in
+ * lockstep — the const exists to enforce that.
+ */
+const DIRECTIVE_PROVIDER_SUFFIX = 'Directive';
+
+/**
  * Module-level monotonically-increasing counter assigned to each
  * directive object produced from a factory invocation. Two factories
  * registered under the same name receive distinct `index` values, so
@@ -146,7 +156,7 @@ export class $CompileProvider {
       // as if it returned `undefined` — the directive is omitted from
       // the returned array, but other factories under the same name
       // (and at other names) continue to resolve normally.
-      this.$$provide.provider(`${name}Directive`, {
+      this.$$provide.provider(`${name}${DIRECTIVE_PROVIDER_SUFFIX}`, {
         $get: ['$injector', '$exceptionHandler', this.$$buildDirectiveArrayProvider(name)] as const,
       });
       this.$$registeredNames.add(name);
@@ -215,7 +225,7 @@ export class $CompileProvider {
     ($injector: Injector, $interpolate: InterpolateService, $exceptionHandler: ExceptionHandler): CompileService =>
       createCompile({
         getDirectivesByName: (name: string): Directive[] =>
-          this.$$registeredNames.has(name) ? $injector.get<Directive[]>(`${name}Directive`) : [],
+          this.$$registeredNames.has(name) ? $injector.get<Directive[]>(`${name}${DIRECTIVE_PROVIDER_SUFFIX}`) : [],
         injector: $injector,
         interpolate: $interpolate,
         exceptionHandler: $exceptionHandler,
