@@ -124,14 +124,7 @@ describe('$compile — nested-tree traversal', () => {
     // Pre-link is top-down, post-link is bottom-up, and the recursion
     // is genuinely depth-first — a flattened walker would emit pre
     // before recursing or post after recursing in a different order.
-    expect(order).toEqual([
-      'grand-pre',
-      'parent-pre',
-      'child-pre',
-      'child-post',
-      'parent-post',
-      'grand-post',
-    ]);
+    expect(order).toEqual(['grand-pre', 'parent-pre', 'child-pre', 'child-post', 'parent-post', 'grand-post']);
   });
 
   it('siblings link in DOM order — element, comment (M), element under one parent; text is skipped', () => {
@@ -196,13 +189,7 @@ describe('$compile — nested-tree traversal', () => {
 
     $compile(parent)(Scope.create());
 
-    expect(order).toEqual([
-      'parent-pre',
-      'first-post',
-      'comment-post',
-      'last-post',
-      'parent-post',
-    ]);
+    expect(order).toEqual(['parent-pre', 'first-post', 'comment-post', 'last-post', 'parent-post']);
   });
 
   it('child priority does NOT cross element boundaries — Infinity-priority child still links INSIDE parent pre/post', () => {
@@ -251,11 +238,6 @@ describe('$compile — nested-tree traversal', () => {
     // among the child element's (singleton) directives — but the
     // child element is STILL visited only after the parent's pre-link
     // and before the parent's post-link. The tree topology wins.
-    expect(order).toEqual([
-      'parent-pre-0',
-      'child-pre-INF',
-      'child-post-INF',
-      'parent-post-0',
-    ]);
+    expect(order).toEqual(['parent-pre-0', 'child-pre-INF', 'child-post-INF', 'parent-post-0']);
   });
 });
