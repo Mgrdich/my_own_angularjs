@@ -388,14 +388,51 @@ The following pieces are deliberately deferred:
   foundation for `ng-if` / `ng-repeat`) is REJECTED at registration via
   `ElementTranscludeNotSupportedError`. A future structural-directives
   spec will lift the rejection without a silent semantic change.
-- **`template` / `templateUrl`** — directive templates currently need
-  manual DOM setup inside `link`. The "Template Loading" roadmap item
-  ships these and removes the boilerplate.
 - **Controllers (the 4th link argument)** — `controllers` is a stable
   `undefined` placeholder today. The "Controllers (`$controller`)"
   roadmap item fills the slot. Directives MUST NOT introspect the 4th
   argument as `undefined` — the public type carries `controllers?: undefined`
   exactly to prevent that.
+
+## Template loading
+
+Spec 019 wires up the AngularJS-canonical template-loading model so
+directives can declare their own DOM chrome instead of building it
+imperatively inside `link`. Two DDO fields drive the surface:
+
+- `template: string | (element, attrs) => string` — inline template;
+  the resolved string is parsed via the HTML5 `<template>`-element
+  fragment parser and replaces the host element's children at compile
+  time.
+- `templateUrl: string | (element, attrs) => string` — async template;
+  the URL is passed to `$templateRequest` (which reads from
+  `$templateCache` first, falls back to `fetch`, and deduplicates
+  concurrent requests). The host's children stay empty until the
+  fetch resolves; the public `Linker` signature is unchanged.
+
+`<ng-transclude>` markers inside a template project consumer children
+captured by `transclude: true | { … }` — the canonical wrapper
+pattern works end-to-end with both inline and async forms. The
+transcluded scope binds against the OUTER scope per the spec 018
+contract.
+
+```ts
+$compileProvider.directive('myCard', () => ({
+  restrict: 'E',
+  scope: true,
+  transclude: true,
+  template: '<div class="card"><h2>{{title}}</h2><div ng-transclude></div></div>',
+  link: (scope, _el, attrs) => { scope.title = attrs.title; },
+}));
+```
+
+Full surface — function-form arguments, `$templateCache` seeding,
+`$templateRequest` deduplication, async test discipline, the wrapper
+pattern with multi-slot transclusion, and the mock-fetcher injection
+pattern for tests — lives in
+[`src/template/README.md`](../template/README.md). `replace: true` is
+REJECTED at registration via `ReplaceTrueNotSupportedError`
+(deprecated in AngularJS 1.x; will not ship).
 
 ## `Attributes.$set` and `$observe`
 
@@ -523,8 +560,15 @@ do not produce observable behavior in this spec:
   [Transclusion](#transclusion) section above. `transclude: 'element'`
   (the whole-element form, foundation for structural directives) is
   REJECTED at registration via `ElementTranscludeNotSupportedError`.
-- **Template loading** (`template`, `templateUrl`, `replace`,
-  `<script type="text/ng-template">`) — separate roadmap bullet.
+- **Template loading** (`template`, `templateUrl`,
+  `<script type="text/ng-template">`) — `template` (inline string or
+  function) and `templateUrl` (async string or function) shipped with
+  spec 019; see [Template loading](#template-loading) below and the
+  full [`src/template/README.md`](../template/README.md) for the
+  worked example. `replace: true` is REJECTED at registration via
+  `ReplaceTrueNotSupportedError` (deprecated in AngularJS 1.x; will
+  not ship). `<script type="text/ng-template">` lands with the
+  Built-in Directives roadmap bullet.
 - **Controllers** (`controller`, `controllerAs`, `bindToController`,
   `require`, `$controller` service, `$controllerProvider`) — separate
   roadmap bullet.

@@ -26,18 +26,26 @@ import type { Injector } from '@di/di-types';
 import type { ProvideService } from '@di/provide-types';
 import { invokeExceptionHandler, type ExceptionHandler } from '@exception-handler/index';
 import type { InterpolateService } from '@interpolate/interpolate-types';
+import type { TemplateRequestFn } from '@template/template-types';
 
 import { createCompile } from './compile';
 import {
   DuplicateTranscludeSelectorError,
   ElementTranscludeNotSupportedError,
+  EmptyTemplateError,
+  EmptyTemplateUrlError,
   InvalidDirectiveFactoryError,
   InvalidDirectiveNameError,
+  InvalidTemplateUrlValueError,
+  InvalidTemplateValueError,
   InvalidTranscludeSelectorError,
   InvalidTranscludeSlotNameError,
   InvalidTranscludeValueError,
   IsolateScopeNotSupportedError,
+  ReplaceTrueNotSupportedError,
+  TemplateAndTemplateUrlCombinedError,
 } from './compile-error';
+import { describeValue } from './describe-value';
 import { directiveNormalize } from './directive-normalize';
 import type {
   CompileFn,
@@ -47,6 +55,9 @@ import type {
   DirectiveFactory,
   DirectiveFactoryReturn,
   LinkFn,
+  NormalizedTemplate,
+  TemplateFn,
+  TemplateUrlFn,
 } from './directive-types';
 import type { NormalizedTransclude, TranscludeSlot, TranscludeSlotMap } from './transclude-types';
 
@@ -220,22 +231,34 @@ export class $CompileProvider {
 
   /**
    * Run-phase `$get` invokable. Resolves `$injector`, `$interpolate`,
-   * and `$exceptionHandler`, then constructs the `CompileService` via
-   * `createCompile`. The closure over `this.$$registeredNames` keeps
-   * the lookup short-circuit synchronous — unknown names skip the
-   * `$injector.get` round-trip entirely.
+   * `$exceptionHandler`, and `$templateRequest`, then constructs the
+   * `CompileService` via `createCompile`. The closure over
+   * `this.$$registeredNames` keeps the lookup short-circuit synchronous
+   * — unknown names skip the `$injector.get` round-trip entirely.
+   *
+   * **Spec 019 / Slice 5** adds `$templateRequest` to the deps list.
+   * Inline templates (this slice) do not consume it; the option threads
+   * through ahead of the async `templateUrl` deferred-drain (Slice 6)
+   * so the DI wiring is stable across the two slices.
    */
   $get = [
     '$injector',
     '$interpolate',
     '$exceptionHandler',
-    ($injector: Injector, $interpolate: InterpolateService, $exceptionHandler: ExceptionHandler): CompileService =>
+    '$templateRequest',
+    (
+      $injector: Injector,
+      $interpolate: InterpolateService,
+      $exceptionHandler: ExceptionHandler,
+      $templateRequest: TemplateRequestFn,
+    ): CompileService =>
       createCompile({
         getDirectivesByName: (name: string): Directive[] =>
           this.$$registeredNames.has(name) ? $injector.get<Directive[]>(`${name}${DIRECTIVE_PROVIDER_SUFFIX}`) : [],
         injector: $injector,
         interpolate: $interpolate,
         exceptionHandler: $exceptionHandler,
+        templateRequest: $templateRequest,
       }),
   ] as const;
 }
@@ -265,36 +288,6 @@ const VALID_SLOT_NAME = /^[a-zA-Z_$][a-zA-Z0-9_$]*$/;
  * optional leading `?` has been stripped.
  */
 const VALID_SLOT_SELECTOR = /^[a-z][a-z0-9-]*$/;
-
-/**
- * Short human-readable description of an arbitrary runtime value, used
- * when reporting an {@link InvalidTranscludeValueError} from
- * `normalizeDirective`. The format follows the spec-018 acceptance
- * examples (`42 (number)`, `'true' (string)`, `[] (array)`,
- * `null (null)`).
- */
-function describeValue(value: unknown): string {
-  if (value === null) {
-    return 'null (null)';
-  }
-  if (Array.isArray(value)) {
-    return '[] (array)';
-  }
-  if (typeof value === 'string') {
-    return `'${value}' (string)`;
-  }
-  if (typeof value === 'number' || typeof value === 'boolean' || typeof value === 'bigint') {
-    return `${value.toString()} (${typeof value})`;
-  }
-  if (typeof value === 'symbol') {
-    return `${value.toString()} (symbol)`;
-  }
-  // Reachable for `function` and the rare `object`-typed value that
-  // bypassed the multi-slot path (e.g. `Date`, a class instance). The
-  // bracketed-type fallback is acceptable; the error class also names
-  // the directive so the author can debug.
-  return `[${typeof value}] (${typeof value})`;
-}
 
 /**
  * Validates and normalizes the `transclude` DDO field per spec-018
@@ -346,6 +339,71 @@ function normalizeTransclude(directiveName: string, transclude: unknown): Normal
   throw new InvalidTranscludeValueError(directiveName, describeValue(transclude));
 }
 
+/**
+ * Validates and normalizes the `template`, `templateUrl`, and `replace`
+ * DDO fields per spec-019 Slice 4 / technical-considerations §2.6.
+ *
+ * Returns the post-normalize {@link NormalizedTemplate} discriminated
+ * union when the directive declared either `template` or `templateUrl`,
+ * or `undefined` when both are omitted. `replace` is validated as a
+ * side effect — only `false` / `undefined` are accepted; anything else
+ * (including `replace: true`) throws `ReplaceTrueNotSupportedError`.
+ *
+ * Throws on any invalid input — all throws are routed through
+ * `$exceptionHandler('$compile')` by the factory-invocation try/catch
+ * in {@link $$buildDirectiveArrayProvider} above.
+ */
+function normalizeTemplate(
+  directiveName: string,
+  rawTemplate: unknown,
+  rawTemplateUrl: unknown,
+  rawReplace: unknown,
+): NormalizedTemplate | undefined {
+  // Step 1: `replace` validation. Only `undefined` / `false` accepted;
+  // every other runtime value (including `true`, `1`, `'yes'`, `{}`) is
+  // rejected with the same error class.
+  if (rawReplace !== undefined && rawReplace !== false) {
+    throw new ReplaceTrueNotSupportedError(directiveName);
+  }
+
+  // Step 2: mutual exclusion. Declaring both `template` AND
+  // `templateUrl` is rejected at registration; the runtime cannot pick
+  // a winner safely.
+  if (rawTemplate !== undefined && rawTemplateUrl !== undefined) {
+    throw new TemplateAndTemplateUrlCombinedError(directiveName);
+  }
+
+  // Step 3: `template` validation.
+  if (rawTemplate !== undefined) {
+    if (typeof rawTemplate === 'string') {
+      if (rawTemplate.length === 0) {
+        throw new EmptyTemplateError(directiveName);
+      }
+      return { kind: 'inline-string', value: rawTemplate };
+    }
+    if (typeof rawTemplate === 'function') {
+      return { kind: 'inline-fn', value: rawTemplate as TemplateFn };
+    }
+    throw new InvalidTemplateValueError(directiveName, describeValue(rawTemplate));
+  }
+
+  // Step 4: `templateUrl` validation.
+  if (rawTemplateUrl !== undefined) {
+    if (typeof rawTemplateUrl === 'string') {
+      if (rawTemplateUrl.length === 0) {
+        throw new EmptyTemplateUrlError(directiveName);
+      }
+      return { kind: 'url-string', value: rawTemplateUrl };
+    }
+    if (typeof rawTemplateUrl === 'function') {
+      return { kind: 'url-fn', value: rawTemplateUrl as TemplateUrlFn };
+    }
+    throw new InvalidTemplateUrlValueError(directiveName, describeValue(rawTemplateUrl));
+  }
+
+  return undefined;
+}
+
 function normalizeDirective(name: string, factoryReturn: DirectiveFactoryReturn): Directive {
   if (typeof factoryReturn === 'function') {
     // Sugar form: `() => function postLink(scope, el, attrs) {…}`.
@@ -385,6 +443,18 @@ function normalizeDirective(name: string, factoryReturn: DirectiveFactoryReturn)
   const rawTransclude = (ddo as { transclude?: unknown }).transclude;
   const transclude = normalizeTransclude(name, rawTransclude);
 
+  // Validate + normalize `template` / `templateUrl` / `replace` per
+  // spec-019 Slice 4. Same `unknown`-view pattern as transclude — the
+  // runtime values are user-supplied and may not match the declared
+  // `DirectiveDefinition` types. The returned shape becomes the
+  // `Directive.template` field; `undefined` means the directive
+  // declared neither `template` nor `templateUrl`, and the property is
+  // omitted from the normalized object.
+  const rawTemplate = (ddo as { template?: unknown }).template;
+  const rawTemplateUrl = (ddo as { templateUrl?: unknown }).templateUrl;
+  const rawReplace = (ddo as { replace?: unknown }).replace;
+  const template = normalizeTemplate(name, rawTemplate, rawTemplateUrl, rawReplace);
+
   const priority = ddo.priority ?? 0;
   if (Number.isNaN(priority)) {
     throw new Error(`Invalid priority for directive ${name}: NaN`);
@@ -418,6 +488,9 @@ function normalizeDirective(name: string, factoryReturn: DirectiveFactoryReturn)
   };
   if (transclude !== undefined) {
     directive.transclude = transclude;
+  }
+  if (template !== undefined) {
+    directive.template = template;
   }
   return directive;
 }

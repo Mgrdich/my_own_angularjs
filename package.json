@@ -54,6 +54,11 @@
       "import": "./dist/esm/filter/index.mjs",
       "require": "./dist/cjs/filter/index.cjs",
       "types": "./dist/types/filter/index.d.ts"
+    },
+    "./template": {
+      "import": "./dist/esm/template/index.mjs",
+      "require": "./dist/cjs/template/index.cjs",
+      "types": "./dist/types/template/index.d.ts"
     }
   },
   "repository": "https://github.com/Mgrdich/my_own_angularjs.git",

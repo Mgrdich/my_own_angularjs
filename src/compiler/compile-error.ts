@@ -324,3 +324,266 @@ export class NgTranscludeMisuseError extends Error {
     super(reason);
   }
 }
+
+/**
+ * Thrown by `normalizeDirective` (spec 019 Slice 4) when a directive
+ * factory returns a Directive Definition Object whose `template`
+ * property is neither `undefined`, a string, nor a function — i.e. it
+ * is an unsupported runtime value such as a number, `null`, an object,
+ * or an array.
+ *
+ * Routed via `$exceptionHandler('$compile')`. The directive is dropped
+ * from the matched-directive array; sibling directives continue.
+ *
+ * @example
+ * ```ts
+ * $compileProvider.directive('myDir', () => ({ template: 42 }));
+ * // routes InvalidTemplateValueError via $exceptionHandler('$compile')
+ * ```
+ */
+export class InvalidTemplateValueError extends Error {
+  readonly name = 'InvalidTemplateValueError' as const;
+
+  constructor(directiveName: string, description: string) {
+    super(`Invalid template value for directive ${directiveName}: ${description}`);
+  }
+}
+
+/**
+ * Thrown by `normalizeDirective` (spec 019 Slice 4) when a directive
+ * factory returns a Directive Definition Object whose `templateUrl`
+ * property is neither `undefined`, a string, nor a function.
+ *
+ * Routed via `$exceptionHandler('$compile')`. The directive is dropped
+ * from the matched-directive array; sibling directives continue.
+ *
+ * @example
+ * ```ts
+ * $compileProvider.directive('myDir', () => ({ templateUrl: 42 }));
+ * // routes InvalidTemplateUrlValueError via $exceptionHandler('$compile')
+ * ```
+ */
+export class InvalidTemplateUrlValueError extends Error {
+  readonly name = 'InvalidTemplateUrlValueError' as const;
+
+  constructor(directiveName: string, description: string) {
+    super(`Invalid templateUrl value for directive ${directiveName}: ${description}`);
+  }
+}
+
+/**
+ * Thrown by `normalizeDirective` when a directive declares
+ * `template: ''` (empty string). An empty template is rejected at
+ * registration to surface authoring mistakes early — otherwise the
+ * runtime would silently strip the host's existing children and leave
+ * an empty element with no diagnostic.
+ *
+ * Routed via `$exceptionHandler('$compile')`.
+ *
+ * @example
+ * ```ts
+ * $compileProvider.directive('myDir', () => ({ template: '' }));
+ * // routes EmptyTemplateError via $exceptionHandler('$compile')
+ * ```
+ */
+export class EmptyTemplateError extends Error {
+  readonly name = 'EmptyTemplateError' as const;
+
+  constructor(directiveName: string) {
+    super(`Invalid template for directive ${directiveName}: empty string`);
+  }
+}
+
+/**
+ * Thrown by `normalizeDirective` when a directive declares
+ * `templateUrl: ''` (empty string). The empty URL is rejected at
+ * registration for the same authoring-clarity reason as
+ * {@link EmptyTemplateError}.
+ *
+ * Routed via `$exceptionHandler('$compile')`.
+ *
+ * @example
+ * ```ts
+ * $compileProvider.directive('myDir', () => ({ templateUrl: '' }));
+ * // routes EmptyTemplateUrlError via $exceptionHandler('$compile')
+ * ```
+ */
+export class EmptyTemplateUrlError extends Error {
+  readonly name = 'EmptyTemplateUrlError' as const;
+
+  constructor(directiveName: string) {
+    super(`Invalid templateUrl for directive ${directiveName}: empty string`);
+  }
+}
+
+/**
+ * Thrown by `normalizeDirective` when a directive declares BOTH
+ * `template` AND `templateUrl` on the same Directive Definition
+ * Object. The two are mutually exclusive — AngularJS-canonical
+ * behavior is to reject the combination at registration time rather
+ * than silently picking one.
+ *
+ * Routed via `$exceptionHandler('$compile')`.
+ *
+ * @example
+ * ```ts
+ * $compileProvider.directive('myDir', () => ({
+ *   template: '<p>a</p>',
+ *   templateUrl: '/tpl.html',
+ * }));
+ * // routes TemplateAndTemplateUrlCombinedError via $exceptionHandler('$compile')
+ * ```
+ */
+export class TemplateAndTemplateUrlCombinedError extends Error {
+  readonly name = 'TemplateAndTemplateUrlCombinedError' as const;
+
+  constructor(directiveName: string) {
+    super(`Cannot combine template and templateUrl on directive ${directiveName}; choose one`);
+  }
+}
+
+/**
+ * Thrown by `normalizeDirective` when a directive declares
+ * `replace: true` (or any other truthy / non-`false` runtime value).
+ * AngularJS 1.x deprecated `replace: true` and this project does not
+ * ship it — templates always become the host element's children; the
+ * host element itself is preserved with all its attributes and
+ * listeners intact.
+ *
+ * Routed via `$exceptionHandler('$compile')`. The directive's other
+ * behavior (link, compile, transclude) still runs; only the `replace`
+ * declaration is rejected.
+ *
+ * @example
+ * ```ts
+ * $compileProvider.directive('myDir', () => ({
+ *   template: '<p>hi</p>',
+ *   replace: true,
+ * }));
+ * // routes ReplaceTrueNotSupportedError via $exceptionHandler('$compile')
+ * ```
+ */
+export class ReplaceTrueNotSupportedError extends Error {
+  readonly name = 'ReplaceTrueNotSupportedError' as const;
+
+  constructor(directiveName: string) {
+    super(
+      `replace: true is deprecated in AngularJS 1.x and is not supported. Use template/templateUrl without replace; the template becomes the host element's children. Directive: ${directiveName}`,
+    );
+  }
+}
+
+/**
+ * Thrown at COMPILE time (not registration) when a function-form
+ * `template` returns a non-string value (`undefined`, `null`, a
+ * number, an object, …). Validation of the return value is per-host
+ * element so it can only run when the function is invoked — i.e. at
+ * compile time, not at registration.
+ *
+ * Routed via `$exceptionHandler('$compile')`. The host element stays
+ * empty; the directive's other behavior (link, compile) runs;
+ * siblings continue.
+ *
+ * @example
+ * ```ts
+ * $compileProvider.directive('myDir', () => ({
+ *   template: () => undefined as unknown as string,
+ * }));
+ * $compile(document.createElement('my-dir'))(scope);
+ * // routes TemplateFunctionReturnedNonStringError via $exceptionHandler('$compile')
+ * ```
+ */
+export class TemplateFunctionReturnedNonStringError extends Error {
+  readonly name = 'TemplateFunctionReturnedNonStringError' as const;
+
+  constructor(directiveName: string, description: string) {
+    super(`Template function for directive ${directiveName} returned a non-string value: ${description}`);
+  }
+}
+
+/**
+ * Thrown at COMPILE time when a function-form `templateUrl` returns a
+ * non-string value. Mirrors {@link TemplateFunctionReturnedNonStringError}
+ * for the async path.
+ *
+ * Routed via `$exceptionHandler('$compile')`. The host element stays
+ * empty; siblings continue.
+ *
+ * @example
+ * ```ts
+ * $compileProvider.directive('myDir', () => ({
+ *   templateUrl: () => 42 as unknown as string,
+ * }));
+ * // routes TemplateUrlFunctionReturnedNonStringError via $exceptionHandler('$compile')
+ * ```
+ */
+export class TemplateUrlFunctionReturnedNonStringError extends Error {
+  readonly name = 'TemplateUrlFunctionReturnedNonStringError' as const;
+
+  constructor(directiveName: string, description: string) {
+    super(`templateUrl function for directive ${directiveName} returned a non-string value: ${description}`);
+  }
+}
+
+/**
+ * Thrown at LINK time (not registration) when two directives on the
+ * SAME element BOTH declare `template` (or `templateUrl`, or one of
+ * each). AngularJS's "first wins" rule applies: the first
+ * template-declaring directive's template installs; the second's
+ * template declaration is silently ignored. The second directive's
+ * OTHER behavior — link, compile, transclude, scope — still runs.
+ *
+ * Routed through `$exceptionHandler('$compile')` from the compile
+ * pre-pass; never thrown synchronously to the caller. Deterministic
+ * for a given matched-directive set (priority desc, registration-
+ * order tie-break).
+ *
+ * @example
+ * ```ts
+ * $compileProvider.directive('dirA', () => ({ template: '<p>A</p>' }));
+ * $compileProvider.directive('dirB', () => ({ template: '<p>B</p>' }));
+ * // <div dir-a dir-b></div> — at link time, dirB triggers
+ * // MultipleTemplateDirectivesError via $exceptionHandler('$compile').
+ * // dirA's template wins; dirB's link / compile still run.
+ * ```
+ */
+export class MultipleTemplateDirectivesError extends Error {
+  readonly name = 'MultipleTemplateDirectivesError' as const;
+
+  constructor(firstDirectiveName: string, secondDirectiveName: string) {
+    super(
+      `Multiple directives requesting a template on the same element: "${firstDirectiveName}" and "${secondDirectiveName}". Only the first wins; "${secondDirectiveName}"'s template is ignored.`,
+    );
+  }
+}
+
+/**
+ * Thrown when `$templateRequest` cannot retrieve a template — typical
+ * causes are a non-2xx HTTP status, a network failure, or a CORS
+ * rejection. The error message includes both the URL and the
+ * underlying reason so the routed `$exceptionHandler('$compile')`
+ * surface carries actionable diagnostics.
+ *
+ * `$templateRequest` rejects its returned promise with this error
+ * class; the compiler's deferred-install queue catches the rejection
+ * and routes it via `$exceptionHandler('$compile')`. The host element
+ * stays empty; siblings continue.
+ *
+ * @example
+ * ```ts
+ * try {
+ *   await $templateRequest('/missing.html');
+ * } catch (err) {
+ *   if (err instanceof TemplateFetchFailedError) {
+ *     console.warn(err.message); // 'Failed to load template "/missing.html": …'
+ *   }
+ * }
+ * ```
+ */
+export class TemplateFetchFailedError extends Error {
+  readonly name = 'TemplateFetchFailedError' as const;
+
+  constructor(url: string, reason: string) {
+    super(`Failed to load template "${url}": ${reason}`);
+  }
+}

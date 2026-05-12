@@ -71,15 +71,25 @@ export {
   directiveNormalize,
   DuplicateTranscludeSelectorError,
   ElementTranscludeNotSupportedError,
+  EmptyTemplateError,
+  EmptyTemplateUrlError,
   InvalidDirectiveFactoryError,
   InvalidDirectiveNameError,
+  InvalidTemplateUrlValueError,
+  InvalidTemplateValueError,
   InvalidTranscludeSelectorError,
   InvalidTranscludeSlotNameError,
   InvalidTranscludeValueError,
   IsolateScopeNotSupportedError,
+  MultipleTemplateDirectivesError,
   MultipleTranscludeDirectivesError,
   NgTranscludeMisuseError,
+  ReplaceTrueNotSupportedError,
   RequiredTranscludeSlotUnfilledError,
+  TemplateAndTemplateUrlCombinedError,
+  TemplateFetchFailedError,
+  TemplateFunctionReturnedNonStringError,
+  TemplateUrlFunctionReturnedNonStringError,
   UndeclaredTranscludeSlotError,
 } from './compiler/index';
 export type {
@@ -94,8 +104,26 @@ export type {
   DirectiveFactoryReturn,
   Linker,
   LinkFn,
+  TemplateFn,
+  TemplateUrlFn,
   TranscludeFn,
   TranscludeSlot,
   TranscludeSlotMap,
   TranscludeSlotName,
 } from './compiler/index';
+
+export {
+  $TemplateCacheProvider,
+  $TemplateRequestProvider,
+  createTemplateCache,
+  createTemplateRequest,
+  templateCache,
+  templateRequest,
+} from './template/index';
+export type {
+  CreateTemplateRequestArgs,
+  TemplateCacheInfo,
+  TemplateCacheService,
+  TemplateFetcher,
+  TemplateRequestFn,
+} from './template/index';

@@ -36,6 +36,9 @@ import { $FilterProvider } from '@filter/filter-provider';
 import { $InterpolateProvider } from '@interpolate/interpolate-provider';
 import { $SceDelegateProvider } from '@sce/sce-delegate-provider';
 import { $SceProvider } from '@sce/sce-provider';
+import { createTemplateCache } from '@template/template-cache';
+import { createTemplateRequest } from '@template/template-request';
+import type { TemplateCacheService, TemplateRequestFn } from '@template/template-types';
 
 function bootstrapNgModule(): void {
   resetRegistry();
@@ -45,6 +48,11 @@ function bootstrapNgModule(): void {
     .provider('$sce', $SceProvider)
     .provider('$interpolate', $InterpolateProvider)
     .provider('$filter', ['$provide', $FilterProvider])
+    .factory('$templateCache', [() => createTemplateCache()])
+    .factory('$templateRequest', [
+      '$templateCache',
+      (cache: TemplateCacheService): TemplateRequestFn => createTemplateRequest({ cache }),
+    ])
     .provider('$compile', ['$provide', $CompileProvider]);
 }
 

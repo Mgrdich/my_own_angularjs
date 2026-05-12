@@ -13,6 +13,7 @@ export default defineConfig({
       '@exception-handler': path.resolve(__dirname, 'src/exception-handler'),
       '@filter': path.resolve(__dirname, 'src/filter'),
       '@compiler': path.resolve(__dirname, 'src/compiler'),
+      '@template': path.resolve(__dirname, 'src/template'),
     },
   },
   test: {

@@ -1,7 +1,7 @@
 # Technical Specification: Template Loading — Inline `template` + Async `templateUrl`
 
 - **Functional Specification:** [`functional-spec.md`](./functional-spec.md)
-- **Status:** Draft
+- **Status:** Completed
 - **Author(s):** Mgrdich
 
 ---

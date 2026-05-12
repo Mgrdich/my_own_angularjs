@@ -85,7 +85,7 @@ _The layer that connects the runtime to templates and the DOM._
   - [x] **Compiler ($compile):** Implement directive collection, sorting by priority, and terminal directives. _(spec 017)_
   - [x] **Linking (Pre & Post):** Implement the compile-link separation with pre-link and post-link functions. _(spec 017)_
   - [x] **Transclusion:** Support basic and multi-slot transclusion. _(spec 018)_
-  - [ ] **Template Loading:** Support inline templates and `templateUrl` with async loading.
+  - [x] **Template Loading:** Support inline templates and `templateUrl` with async loading. _(spec 019)_
   - [ ] **Controllers ($controller):** Implement `$controller` service and `$controllerProvider.register` so named controllers can be instantiated by the compiler and bound to scopes.
   - [ ] **Module DSL `.directive` / `.component` / `.controller`:** Expose `.directive(name, fn)`, `.component(name, def)` (AngularJS 1.5+ sugar), and `.controller(name, fn)` on `createModule(...)` as thin wrappers over `$compileProvider.directive` / `.component` and `$controllerProvider.register` — ng-module parity, shared registries, no duplicated state.
   - [ ] **Built-in Directives:** Implement the full AngularJS 1.x core-directive surface (sourced from `angular/angular.js/src/ng/directive/*`). Form-element directives (`form`, `input`, `select`, `textarea`) and `ng-model` live under Forms & Validation in Phase 3.

@@ -62,18 +62,47 @@
  *   `childNodes` (filtered to elements + comments). `Text` nodes are
  *   skipped — they match no directives.
  *
+ * **Spec 019 / Slice 6 — Async `templateUrl` deferred drain.** When
+ * the per-element pre-pass detects a directive whose normalized
+ * `template` has `kind: 'url-string' | 'url-fn'`, the URL is resolved
+ * synchronously (function form is invoked once with `(node, attrs)`),
+ * and a `DeferredTemplateEntry` is pushed onto a per-`$compile`-call
+ * queue threaded through the walker's closure. The per-element linker
+ * for the host captures `parentScope` into the entry at link time but
+ * does NOT install the template or run the host directive's compile /
+ * pre-link / post-link — those are deferred to template-install time.
+ *
+ * After the synchronous walker completes and the public `Linker` has
+ * been returned to the caller, the top-level `$compile` entry schedules
+ * `Promise.resolve().then(drainDeferredTemplateQueue)`. Each queued
+ * entry resolves its `$templateRequest(url)` in parallel; on success,
+ * the template installs as the host's children, the post-template
+ * subtree compiles recursively, and the host's per-element linker is
+ * built + invoked against the captured `outerScope`. Fetch failures
+ * route via `$exceptionHandler('$compile')`; host-destroyed-before-
+ * resolve entries are silently dropped (no error, no DOM mutation).
+ *
  * The factory ALSO accepts `injector`, `interpolate`, and
- * `exceptionHandler` collaborators (see spec 017 Slices 9 / 10 / 11).
+ * `exceptionHandler` collaborators (see spec 017 Slices 9 / 10 / 11)
+ * plus `templateRequest` (Slice 5 — wired ahead of the Slice 6 drain).
  */
 
 import type { Scope } from '@core/index';
 import { invokeExceptionHandler } from '@exception-handler/index';
 
 import { bindAttrsToScope } from './attributes';
-import { setElementScope } from './cleanup';
-import { MultipleTranscludeDirectivesError, RequiredTranscludeSlotUnfilledError } from './compile-error';
+import { addElementCleanup, setElementScope } from './cleanup';
+import {
+  MultipleTemplateDirectivesError,
+  MultipleTranscludeDirectivesError,
+  RequiredTranscludeSlotUnfilledError,
+  TemplateFunctionReturnedNonStringError,
+  TemplateUrlFunctionReturnedNonStringError,
+} from './compile-error';
+import { describeValue } from './describe-value';
 import { collectDirectives } from './directive-collector';
 import type { CompileOptions, CompileService, Directive, Linker, LinkFn, Attributes } from './directive-types';
+import { parseTemplate } from './template-parse';
 import { captureChildren } from './transclude-capture';
 import { compileBuckets } from './transclude-compile';
 import { buildTranscludeFn } from './transclude-fn';
@@ -96,6 +125,67 @@ type NodeLinker = (scope: Scope, cloneMap?: Map<Node, Node>) => void;
 const BOUND_TRANSCLUDE_SLOT = '$$ngBoundTransclude';
 
 /**
+ * Internal per-`$compile`-call queue carrying the host element + URL +
+ * pending directives for every `templateUrl`-declaring directive
+ * encountered on the synchronous walk. Filled during the recursive
+ * walker pass; drained in a microtask after the public `Linker` has
+ * been returned to the caller (spec 019 Slice 6 / technical-
+ * considerations §2.8).
+ */
+interface DeferredTemplateEntry {
+  /** The host element whose children will be replaced by the fetched template. */
+  element: Element;
+  /** The URL string (already resolved — for `url-fn`, the function was invoked synchronously). */
+  url: string;
+  /** The shared `Attributes` instance for the host. */
+  attrs: Attributes;
+  /** The template-declaring directive's name (for error messages). */
+  directiveName: string;
+  /**
+   * Matched directives for the host. The template-declaring directive
+   * is INCLUDED so its own `compile` / `link` runs against the post-
+   * template DOM (FS §2.8 acceptance #2). The runtime never re-reads
+   * the `template` field on this list; the install has already happened
+   * by the time `processDeferredEntry` walks the pending directives.
+   */
+  pendingDirectives: Directive[];
+  /** Filled at link time by the per-element linker — the OUTER scope passed by the caller. */
+  outerScope: Scope | undefined;
+  /**
+   * Set to `true` by an element-level cleanup callback (registered via
+   * `addElementCleanup`) when the host is destroyed BEFORE the deferred
+   * drain runs. The drain peeks this flag after the `await templateRequest`
+   * resumes and silently drops the install if it's set.
+   */
+  cancelled: boolean;
+}
+
+/**
+ * Element augmented with the framework-internal cleanup slots stashed
+ * by `cleanup.ts` (spec 017 Slice 10). Used here to detect whether the
+ * host has been destroyed between enqueue and template-resolve.
+ */
+interface NgManagedElement extends Element {
+  $$ngScope?: Scope;
+}
+
+/**
+ * A scope is "destroyed" when `$destroy()` sets `$$watchers = null`
+ * (spec 002 / scope.ts:516). The deferred drain peeks this slot to
+ * decide whether to install the template or silently drop the entry.
+ */
+interface ScopeWatchersSlot {
+  $$watchers: unknown[] | null;
+}
+
+function isScopeDestroyed(scope: Scope | undefined): boolean {
+  if (scope === undefined) {
+    return false;
+  }
+  return (scope as unknown as ScopeWatchersSlot).$$watchers === null;
+}
+
+/**
  * Build a `$compile` service bound to the supplied collaborators.
  *
  * @example
@@ -105,25 +195,26 @@ const BOUND_TRANSCLUDE_SLOT = '$$ngBoundTransclude';
  *   injector,
  *   interpolate,
  *   exceptionHandler,
+ *   templateRequest,
  * });
  * compile(element)(scope);
  * ```
  */
 export function createCompile(options: CompileOptions): CompileService {
-  const { getDirectivesByName, interpolate, exceptionHandler } = options;
+  const { getDirectivesByName, interpolate, exceptionHandler, templateRequest } = options;
 
-  function compileNode(node: Node): NodeLinker {
+  function compileNode(node: Node, queue: DeferredTemplateEntry[]): NodeLinker {
     if (isElement(node)) {
-      return compileElementOrComment(node, /* hasChildren */ true);
+      return compileElementOrComment(node, /* hasChildren */ true, queue);
     }
     if (isComment(node)) {
-      return compileElementOrComment(node, /* hasChildren */ false);
+      return compileElementOrComment(node, /* hasChildren */ false, queue);
     }
     return noopLinker;
   }
 
-  function compileNodes(nodes: readonly Node[]): NodeLinker {
-    const linkers = nodes.map((n) => compileNode(n));
+  function compileNodes(nodes: readonly Node[], queue: DeferredTemplateEntry[]): NodeLinker {
+    const linkers = nodes.map((n) => compileNode(n, queue));
     return (scope, cloneMap): void => {
       for (let i = 0; i < linkers.length; i++) {
         const linker = linkers[i];
@@ -140,16 +231,40 @@ export function createCompile(options: CompileOptions): CompileService {
    * Used by the capture pipeline's `compileBuckets(...)` callback so
    * each captured bucket compiles exactly once and is re-linked per
    * `$transclude(...)` invocation against a deep-cloned counterpart.
+   *
+   * Transclusion compiles synchronously at the OUTER walker's pass —
+   * the master fragment is captured before the deferred-template
+   * enqueue and its compiled linker is independent of the queue. We
+   * therefore use a FRESH queue here; any `templateUrl` directive
+   * inside transcluded content compiles + queues against that inner
+   * queue, and the inner queue is drained on the same microtask via
+   * the same top-level `$compile` schedule. Each `$transclude(...)`
+   * clone re-runs the compiled linker against a deep-clone, and
+   * cloned-counterpart `templateUrl` resolution flows through the
+   * runtime walker just like the master pass did.
    */
   function makeInternalLinker(nodes: readonly Node[]): Linker {
-    const linker = compileNodes(nodes);
+    const localQueue: DeferredTemplateEntry[] = [];
+    const linker = compileNodes(nodes, localQueue);
     return ((scope: Scope, cloneMap?: Map<Node, Node>) => {
       linker(scope, cloneMap);
+      // Local queue entries inside transcluded content drain on the
+      // same microtask as the outer `$compile` call. The drain helper
+      // is independent of where the queue was allocated.
+      if (localQueue.length > 0) {
+        void Promise.resolve().then(() => {
+          drainDeferredTemplateQueue(localQueue);
+        });
+      }
       return nodes as unknown as NodeList;
     }) as Linker;
   }
 
-  function compileElementOrComment(node: Element | Comment, hasChildren: boolean): NodeLinker {
+  function compileElementOrComment(
+    node: Element | Comment,
+    hasChildren: boolean,
+    queue: DeferredTemplateEntry[],
+  ): NodeLinker {
     const { directives, attrs } = collectDirectives(node, getDirectivesByName);
 
     // Slice 10 — `scope: true` detection (FS §2.12). Decide ONCE at
@@ -207,13 +322,151 @@ export function createCompile(options: CompileOptions): CompileService {
       transcludeUnfilledRequired = buckets.unfilledRequired;
     }
 
-    // Compile phase — for non-transcluding hosts only. Transcluding
-    // hosts defer the loop to link time so each directive's compile
-    // fn receives the link-time `$transclude` as its 3rd arg
-    // (FS §2.4 acceptance #11).
+    // ----- Spec 019 / Slices 5 + 6: template install pre-pass -----
+    //
+    // Scan the priority-sorted directive list (post-transclude
+    // accumulation) for entries whose normalized `template` field is
+    // set. The FIRST template-declaring directive wins; any subsequent
+    // match routes `MultipleTemplateDirectivesError` and its template
+    // declaration is cleared on a LOCAL shallow copy (the registered
+    // directive object is NOT mutated). The second directive's other
+    // behavior (compile, link, transclude, scope) still runs.
+    //
+    // Four `kind` discriminants are handled:
+    //
+    //   - `inline-string` — install synchronously (Slice 5).
+    //   - `inline-fn` — invoke once, validate, memoize, install (Slice 5).
+    //   - `url-string` — enqueue a deferred install (Slice 6).
+    //   - `url-fn` — invoke once to resolve URL, enqueue (Slice 6).
+    //
+    // Install runs AFTER transclude capture (so `$$ngBoundTransclude`
+    // is already stashed and `<ng-transclude>` markers inside the
+    // template will find it via the parent-element walk) and BEFORE the
+    // per-directive compile loop and the child snapshot. For the URL
+    // forms, the synchronous install path is skipped — the host stays
+    // empty until the drain resolves; the host's per-directive compile
+    // loop and pre/post link run inside `processEntry` after the
+    // template installs.
+    let pendingTemplateUrl: { url: string; directiveName: string; templateDirectiveIndex: number } | null = null;
+    let multiTemplateFirstName: string | null = null;
+    if (isElement(node)) {
+      for (let i = 0; i < effectiveDirectives.length; i++) {
+        const directive = effectiveDirectives[i];
+        if (directive === undefined || directive.template === undefined) {
+          continue;
+        }
+        // Multi-template guard — second match (and beyond) is rejected.
+        if (multiTemplateFirstName !== null) {
+          // Route the error at link time so the second directive's
+          // other behavior still runs through the normal linker. We
+          // stash the names on a queued routing here and emit at link
+          // time (mirroring `MultipleTranscludeDirectivesError`). Clear
+          // the template field on the LOCAL copy so further iterations
+          // and downstream walker logic don't re-trigger.
+          invokeExceptionHandler(
+            exceptionHandler,
+            new MultipleTemplateDirectivesError(multiTemplateFirstName, directive.name),
+            '$compile',
+          );
+          const stripped: Directive = { ...directive, template: undefined };
+          effectiveDirectives[i] = stripped;
+          continue;
+        }
+        multiTemplateFirstName = directive.name;
+
+        const tpl = directive.template;
+        if (tpl.kind === 'inline-string' || tpl.kind === 'inline-fn') {
+          let templateString: string | null = null;
+          if (tpl.kind === 'inline-string') {
+            templateString = tpl.value;
+          } else {
+            // `kind: 'inline-fn'` — invoke and validate.
+            let fnReturn: unknown;
+            try {
+              fnReturn = tpl.value(node, attrs);
+            } catch (err) {
+              invokeExceptionHandler(exceptionHandler, err, '$compile');
+              continue;
+            }
+            if (typeof fnReturn !== 'string') {
+              invokeExceptionHandler(
+                exceptionHandler,
+                new TemplateFunctionReturnedNonStringError(directive.name, describeValue(fnReturn)),
+                '$compile',
+              );
+              continue;
+            }
+            templateString = fnReturn;
+            // Memoize the resolved template on a LOCAL shallow copy.
+            const memoized: Directive = {
+              ...directive,
+              template: { kind: 'inline-string', value: fnReturn },
+            };
+            effectiveDirectives[i] = memoized;
+          }
+          // Install — clear existing children, append parsed template
+          // nodes. Multi-root templates are supported via
+          // `parseTemplate(...)`'s `<template>` element fragment.
+          const parsedNodes = parseTemplate(templateString);
+          while (node.firstChild !== null) {
+            node.removeChild(node.firstChild);
+          }
+          for (const tplNode of parsedNodes) {
+            node.appendChild(tplNode);
+          }
+        } else {
+          // `kind: 'url-string' | 'url-fn'` — deferred install.
+          let url: string | null = null;
+          if (tpl.kind === 'url-string') {
+            url = tpl.value;
+          } else {
+            let fnReturn: unknown;
+            try {
+              fnReturn = tpl.value(node, attrs);
+            } catch (err) {
+              invokeExceptionHandler(exceptionHandler, err, '$compile');
+              continue;
+            }
+            if (typeof fnReturn !== 'string') {
+              invokeExceptionHandler(
+                exceptionHandler,
+                new TemplateUrlFunctionReturnedNonStringError(directive.name, describeValue(fnReturn)),
+                '$compile',
+              );
+              continue;
+            }
+            if (fnReturn.length === 0) {
+              // Empty-string return — silently skip. (Empty `templateUrl`
+              // is rejected at registration; a runtime empty return is
+              // an authoring bug but we treat it as a no-op rather than
+              // routing a separate error class.)
+              continue;
+            }
+            url = fnReturn;
+          }
+          pendingTemplateUrl = {
+            url,
+            directiveName: directive.name,
+            templateDirectiveIndex: i,
+          };
+          // No synchronous install — the drain handles it. The walker
+          // does NOT descend into children, and the per-directive
+          // compile loop on the host does NOT run synchronously
+          // (it runs inside `processEntry` after the template installs).
+        }
+      }
+    }
+
+    // Compile phase — for non-transcluding hosts only AND only when
+    // there is no pending `templateUrl` directive (the URL forms defer
+    // the host directives' compile/link to the drain).
+    // Transcluding hosts defer the loop to link time so each
+    // directive's compile fn receives the link-time `$transclude` as
+    // its 3rd arg (FS §2.4 acceptance #11).
     const deferCompileToLink = transcludingDirective !== null;
+    const isAsyncTemplateHost = pendingTemplateUrl !== null;
     const templateTimeLinkEntries: LinkEntry[] = [];
-    if (!deferCompileToLink) {
+    if (!deferCompileToLink && !isAsyncTemplateHost) {
       for (const directive of effectiveDirectives) {
         if (directive.compile === undefined) {
           continue;
@@ -244,9 +497,13 @@ export function createCompile(options: CompileOptions): CompileService {
     // snapshot is empty and `childLinker` becomes the noop linker —
     // FS §2.2 acceptance #5 ("captured children are NOT linked
     // against the directive element by the OUTER walker").
+    //
+    // For an async-template host (pending `templateUrl`) the snapshot
+    // is intentionally skipped — the children come from the fetched
+    // template and are compiled inside the drain.
     const masterChildren: Node[] = [];
     let childLinker: NodeLinker = noopLinker;
-    if (hasChildren) {
+    if (hasChildren && !isAsyncTemplateHost) {
       const element = node as Element;
       for (let i = 0; i < element.childNodes.length; i++) {
         const child = element.childNodes.item(i);
@@ -254,13 +511,93 @@ export function createCompile(options: CompileOptions): CompileService {
           masterChildren.push(child);
         }
       }
-      childLinker = compileNodes(masterChildren);
+      childLinker = compileNodes(masterChildren, queue);
     }
 
     return (parentScope, cloneMap): void => {
       // Resolve the live target — when called under a clone map,
       // operate on the cloned counterpart rather than the master.
       const target = cloneMap?.get(node) ?? node;
+
+      // ----- Spec 019 / Slice 6: async template host — enqueue + return.
+      //
+      // For a `templateUrl` host, the per-element linker captures
+      // `parentScope` into a deferred entry and returns. The host's
+      // directive compile / pre-link / post-link, and any child link,
+      // run inside `processEntry` after the template installs.
+      //
+      // Transclude capture has ALREADY run synchronously above (the
+      // `$$ngBoundTransclude` stash is on `target` if `transclude: true`
+      // was declared), so consumer children are preserved through the
+      // async install — `<ng-transclude>` inside the fetched template
+      // will find the stash via parent-element walk.
+      if (isAsyncTemplateHost && pendingTemplateUrl !== null && isElement(target)) {
+        // Build + stash $transclude on the host BEFORE deferring so
+        // the post-install link can find it via the parent-element
+        // walk that `ng-transclude` uses.
+        if (transcludingDirective !== null && transcludeDecl !== null) {
+          const declared: TranscludeSlotMap = transcludeDecl.kind === 'slots' ? transcludeDecl.slots : [];
+          const unfilledRequiredSet = new Set<string>(transcludeUnfilledRequired);
+          const $transclude = buildTranscludeFn({
+            defaultLinker,
+            slotLinkers,
+            declaredSlots: declared,
+            unfilledRequired: unfilledRequiredSet,
+            outerScope: parentScope,
+            hostElement: target,
+            exceptionHandler,
+            masterFragments: { default: transcludeMasters, named: transcludeNamedMasters },
+            directiveName: transcludingDirective.name,
+          });
+          const bound: BoundTranscludeFn = {
+            fn: $transclude,
+            declaredSlots: declared,
+            kind: transcludeDecl.kind,
+            directiveName: transcludingDirective.name,
+          };
+          Object.defineProperty(target, BOUND_TRANSCLUDE_SLOT, {
+            value: bound,
+            writable: true,
+            configurable: true,
+            enumerable: false,
+          });
+        }
+
+        // Build the pending-directives list. We include the
+        // template-declaring directive so its own `compile` / `link`
+        // runs against the post-template DOM (FS §2.8 acceptance #2);
+        // we strip its `template` field on a LOCAL copy so the
+        // post-template walker doesn't re-trigger the install.
+        const pending: Directive[] = [];
+        for (let i = 0; i < effectiveDirectives.length; i++) {
+          const d = effectiveDirectives[i];
+          if (d === undefined) {
+            continue;
+          }
+          if (i === pendingTemplateUrl.templateDirectiveIndex) {
+            pending.push({ ...d, template: undefined });
+          } else {
+            pending.push(d);
+          }
+        }
+        const entry: DeferredTemplateEntry = {
+          element: target,
+          url: pendingTemplateUrl.url,
+          attrs: attrs as Attributes,
+          directiveName: pendingTemplateUrl.directiveName,
+          pendingDirectives: pending,
+          outerScope: parentScope,
+          cancelled: false,
+        };
+        // Cancellation hook — if the host element is torn down via
+        // `destroyElementScope` BEFORE the deferred drain resumes,
+        // mark the entry as cancelled so the drain drops the install.
+        addElementCleanup(target, () => {
+          entry.cancelled = true;
+        });
+        queue.push(entry);
+        return;
+      }
 
       // ----- Spec 018 / Slice 3: build $transclude closure -----
       //
@@ -400,6 +737,190 @@ export function createCompile(options: CompileOptions): CompileService {
     };
   }
 
+  /**
+   * Drain the per-`$compile`-call deferred-template queue. Each entry
+   * is processed in parallel via `Promise.all(entries.map(processEntry))`
+   * so sibling subtrees with independent `templateUrl` fetches don't
+   * block one another. Errors from any single entry are routed via
+   * `$exceptionHandler('$compile')` and do not affect other entries or
+   * the host page. The returned promise is awaited internally only —
+   * the public `Linker` has already returned synchronously.
+   */
+  function drainDeferredTemplateQueue(entries: DeferredTemplateEntry[]): void {
+    if (entries.length === 0) {
+      return;
+    }
+    void Promise.all(entries.map((entry) => processDeferredEntry(entry))).catch(() => {
+      // Defensive — every per-entry rejection is caught inside
+      // `processDeferredEntry`. The top-level `.catch` here only
+      // exists so an accidental escaped rejection doesn't surface as
+      // an unhandled-rejection warning.
+    });
+  }
+
+  async function processDeferredEntry(entry: DeferredTemplateEntry): Promise<void> {
+    // 1. Fetch the template via `$templateRequest`.
+    let templateString: string | undefined;
+    try {
+      templateString = await templateRequest(entry.url);
+    } catch (err) {
+      invokeExceptionHandler(exceptionHandler, err, '$compile');
+      return;
+    }
+    if (typeof templateString !== 'string') {
+      // Either `ignoreRequestError === true` was set and the fetch
+      // rejected, or the fetcher returned a non-string. Either way,
+      // no install; entry drops silently. (We don't pass
+      // `ignoreRequestError` from this site, but a decorated
+      // `$templateRequest` could.)
+      return;
+    }
+
+    // 2. Drop the install if cancellation fired (the host was torn
+    // down via `destroyElementScope`) OR the captured outer scope was
+    // destroyed since enqueue OR the host's own child scope (created
+    // lazily for `scope: true` inside a prior drain cycle) was
+    // destroyed.
+    const elementScope = (entry.element as NgManagedElement).$$ngScope;
+    if (entry.cancelled || isScopeDestroyed(elementScope) || isScopeDestroyed(entry.outerScope)) {
+      return;
+    }
+
+    // 3. Parse + install the template as the host's children.
+    const parsedNodes = parseTemplate(templateString);
+    while (entry.element.firstChild !== null) {
+      entry.element.removeChild(entry.element.firstChild);
+    }
+    for (const tplNode of parsedNodes) {
+      entry.element.appendChild(tplNode);
+    }
+
+    // 4. Build a per-element linker for the pending directives + run
+    // it. The linker reuses the captured outer scope (which becomes
+    // the parent of the directive's `scope: true` child if any). The
+    // pending directives may include another `transclude` declaration,
+    // a `template` declaration whose template-time install is irrelevant
+    // here (we've already installed THIS template — the pending
+    // template-declaring directive's template would route the multi-
+    // template error at link time), and any number of regular compile/
+    // link directives.
+    //
+    // We use `buildPostTemplateLinker` so the relevant flags (needsChild
+    // scope, the captured `$$ngBoundTransclude`) re-flow into the link.
+    if (entry.outerScope === undefined) {
+      return;
+    }
+    const innerQueue: DeferredTemplateEntry[] = [];
+    const postLinker = buildPostTemplateLinker(entry, innerQueue);
+    postLinker(entry.outerScope);
+    // Drain nested `templateUrl` directives inside the freshly-
+    // installed template. The drain is itself async, so it runs on a
+    // follow-up microtask without blocking this entry's resolution.
+    if (innerQueue.length > 0) {
+      void Promise.resolve().then(() => {
+        drainDeferredTemplateQueue(innerQueue);
+      });
+    }
+  }
+
+  /**
+   * Build a linker that runs the host's pending directives against the
+   * post-template DOM. Mirrors the synchronous per-element linker but
+   * uses the captured `outerScope` (passed at call time) and the
+   * pre-stashed `$$ngBoundTransclude` on the host (so consumer children
+   * captured BEFORE the async fetch are still projected by
+   * `<ng-transclude>` markers inside the fetched template).
+   */
+  function buildPostTemplateLinker(entry: DeferredTemplateEntry, childQueue: DeferredTemplateEntry[]): NodeLinker {
+    const { element, attrs, pendingDirectives } = entry;
+
+    // Compile the post-template subtree FIRST so `templateUrl`
+    // directives inside the fetched template enqueue against the inner
+    // child queue. They'll drain via the post-link path below.
+    const childNodes: Node[] = [];
+    for (let i = 0; i < element.childNodes.length; i++) {
+      const child = element.childNodes.item(i);
+      if (child.nodeType === 1 /* ELEMENT_NODE */ || child.nodeType === 8 /* COMMENT_NODE */) {
+        childNodes.push(child);
+      }
+    }
+    const childLinker = compileNodes(childNodes, childQueue);
+
+    // Determine `scope: true` requirement on the pending directives.
+    const needsChildScope = pendingDirectives.some((d) => d.scope);
+
+    // Run compile on each pending directive against the post-template
+    // element. Compile failures route + skip the directive.
+    const templateTimeLinkEntries: LinkEntry[] = [];
+    for (const directive of pendingDirectives) {
+      if (directive.compile === undefined) {
+        continue;
+      }
+      let compileResult: ReturnType<NonNullable<typeof directive.compile>>;
+      try {
+        // `$transclude` is `undefined` for the compile-phase call here.
+        // The compile-time arg is reserved for transcluding hosts (where
+        // we defer the compile loop to link time). The pending-directives
+        // set NEVER contains the template-declaring directive itself,
+        // and a transcluding directive that ALSO declared `templateUrl`
+        // already had its `$transclude` built + stashed at the
+        // synchronous enqueue site — the pending compile here is for
+        // OTHER directives on the host that are not themselves the
+        // transclusion source.
+        compileResult = directive.compile(element, attrs, undefined);
+      } catch (err) {
+        invokeExceptionHandler(exceptionHandler, err, '$compile');
+        continue;
+      }
+      if (compileResult === undefined) {
+        continue;
+      }
+      if (typeof compileResult === 'function') {
+        templateTimeLinkEntries.push({ post: compileResult });
+      } else {
+        templateTimeLinkEntries.push({
+          pre: compileResult.pre,
+          post: compileResult.post,
+        });
+      }
+    }
+
+    return (parentScope): void => {
+      const scope: Scope = needsChildScope ? parentScope.$new() : parentScope;
+      if (needsChildScope) {
+        setElementScope(element, scope);
+      }
+
+      // Recover the bound transclude (if any) so directive pre/post
+      // link callbacks receive the same `$transclude` they would have
+      // received synchronously. Pre-link reads the stash directly.
+      const bound = (element as unknown as Record<string, BoundTranscludeFn | undefined>)[BOUND_TRANSCLUDE_SLOT];
+      const $transclude: TranscludeFn | undefined = bound?.fn;
+
+      bindAttrsToScope(attrs, scope, interpolate, exceptionHandler);
+
+      for (const entry of templateTimeLinkEntries) {
+        if (entry.pre !== undefined) {
+          try {
+            entry.pre(scope, element, attrs, undefined, $transclude);
+          } catch (err) {
+            invokeExceptionHandler(exceptionHandler, err, '$compile');
+          }
+        }
+      }
+      childLinker(scope);
+      for (const entry of templateTimeLinkEntries.slice().reverse()) {
+        if (entry.post !== undefined) {
+          try {
+            entry.post(scope, element, attrs, undefined, $transclude);
+          } catch (err) {
+            invokeExceptionHandler(exceptionHandler, err, '$compile');
+          }
+        }
+      }
+    };
+  }
+
   return ((node: Element | NodeList | Comment): Linker => {
     if (isNodeList(node) || Array.isArray(node)) {
       const list = node as ArrayLike<Node>;
@@ -410,16 +931,28 @@ export function createCompile(options: CompileOptions): CompileService {
           masters.push(child);
         }
       }
-      const linker = compileNodes(masters);
+      const queue: DeferredTemplateEntry[] = [];
+      const linker = compileNodes(masters, queue);
       return ((scope: Scope) => {
         linker(scope);
+        if (queue.length > 0) {
+          void Promise.resolve().then(() => {
+            drainDeferredTemplateQueue(queue);
+          });
+        }
         return node;
       }) as Linker;
     }
 
-    const linker = compileNode(node);
+    const queue: DeferredTemplateEntry[] = [];
+    const linker = compileNode(node, queue);
     return ((scope: Scope) => {
       linker(scope);
+      if (queue.length > 0) {
+        void Promise.resolve().then(() => {
+          drainDeferredTemplateQueue(queue);
+        });
+      }
       return node;
     }) as Linker;
   }) as CompileService;

@@ -20,7 +20,8 @@
       "@sanitize/*": ["./src/sanitize/*"],
       "@exception-handler/*": ["./src/exception-handler/*"],
       "@filter/*": ["./src/filter/*"],
-      "@compiler/*": ["./src/compiler/*"]
+      "@compiler/*": ["./src/compiler/*"],
+      "@template/*": ["./src/template/*"]
     }
   },
   "include": ["src"],

@@ -37,6 +37,9 @@ import type { InterpolateService } from '@interpolate/interpolate-types';
 import { $SceDelegateProvider } from '@sce/sce-delegate-provider';
 import { $SceProvider } from '@sce/sce-provider';
 import type { SceDelegateService, SceService } from '@sce/sce-types';
+import { $TemplateCacheProvider } from '@template/template-cache-provider';
+import { $TemplateRequestProvider } from '@template/template-request-provider';
+import type { TemplateCacheService, TemplateRequestFn } from '@template/template-types';
 
 declare module '@di/di-types' {
   interface ModuleRegistry {
@@ -49,6 +52,8 @@ declare module '@di/di-types' {
         $filter: FilterService;
         $locale: LocaleService;
         $compile: CompileService;
+        $templateCache: TemplateCacheService;
+        $templateRequest: TemplateRequestFn;
         uppercaseFilter: FilterFn;
         lowercaseFilter: FilterFn;
         jsonFilter: FilterFn;
@@ -65,6 +70,8 @@ declare module '@di/di-types' {
         $sceProvider: $SceProvider;
         $filterProvider: $FilterProvider;
         $compileProvider: $CompileProvider;
+        $templateCacheProvider: $TemplateCacheProvider;
+        $templateRequestProvider: $TemplateRequestProvider;
       };
     };
   }
@@ -101,6 +108,27 @@ export const ngModule = createModule('ng', [])
   .filter('date', dateFilterFactory)
   .filter('filter', filterFilterFactory)
   .filter('orderBy', orderByFilterFactory)
+  // `$templateCache` — Map-backed key-value store for templates (spec
+  // 019 Slice 2). Each injector receives its own isolated cache; the
+  // provider's `$get` closes over a fresh `Map<string, string>` per
+  // invocation. Apps seed templates from a `config()` or `run()` block
+  // via `$templateCache.put(url, content)`; subsequent `templateUrl`
+  // resolutions (Slice 6) hit the cache without a network fetch.
+  // The provider class is registered (rather than a bare `.factory(...)`)
+  // so `injector.get('$templateCacheProvider')` resolves at config
+  // phase; spec 019 ships no config-phase API on it, but the public
+  // contract per §2.13 requires the provider to be reachable.
+  .provider('$templateCache', $TemplateCacheProvider)
+  // `$templateRequest` — fetch-and-cache pipeline over `$templateCache`
+  // (spec 019 Slice 3). Closes over a per-injector `inFlight` map for
+  // concurrent-fetch deduplication; uses the default
+  // `globalThis.fetch`-based fetcher. Apps that need auth headers,
+  // `$http` integration, or test-mode network stubbing override the
+  // service via `module.decorator('$templateRequest', …)` or replace
+  // the factory wholesale. As with `$templateCache`, the provider class
+  // is registered so the AngularJS-canonical
+  // `module.config(['$templateRequestProvider', …])` shape resolves.
+  .provider('$templateRequest', $TemplateRequestProvider)
   // Built-in directives — spec 018 Slice 5 introduces the FIRST
   // `.directive(...)` registration on `ngModule`. The module DSL
   // currently has no `.directive(...)` method, so we register via a
