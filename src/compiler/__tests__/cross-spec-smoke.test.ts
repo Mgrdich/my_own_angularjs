@@ -19,25 +19,13 @@ import { $CompileProvider } from '@compiler/compile-provider';
 import { Scope } from '@core/index';
 import { ngModule } from '@core/ng-module';
 import { createInjector } from '@di/injector';
-import { createModule, resetRegistry } from '@di/module';
-import { $FilterProvider } from '@filter/filter-provider';
-import { $InterpolateProvider } from '@interpolate/interpolate-provider';
+import { createModule } from '@di/module';
 import { parse } from '@parser/index';
 import { sanitize } from '@sanitize/sanitize';
 import { sce } from '@sce/sce';
-import { $SceDelegateProvider } from '@sce/sce-delegate-provider';
-import { $SceProvider } from '@sce/sce-provider';
+import type { TemplateCacheService } from '@template/template-types';
 
-function bootstrapNgModule(): void {
-  resetRegistry();
-  createModule('ng', [])
-    .factory('$exceptionHandler', [() => () => undefined])
-    .provider('$sceDelegate', $SceDelegateProvider)
-    .provider('$sce', $SceProvider)
-    .provider('$interpolate', $InterpolateProvider)
-    .provider('$filter', ['$provide', $FilterProvider])
-    .provider('$compile', ['$provide', $CompileProvider]);
-}
+import { bootstrapNgModule } from './test-helpers';
 
 describe('cross-spec smoke (Slice 12 final verification)', () => {
   it('Scope.create() (spec 002) — digest runs without error', () => {
@@ -93,6 +81,76 @@ describe('cross-spec smoke (Slice 12 final verification)', () => {
     expect($filter('uppercase')('hi')).toBe('HI');
   });
 
+  it('ngTransclude (spec 018) — registered on ngModule as `ngTranscludeDirective`', () => {
+    bootstrapNgModule();
+    const injector = createInjector([ngModule]);
+    expect(injector.has('ngTranscludeDirective')).toBe(true);
+  });
+
+  it('$templateCache (spec 019) — registered on ngModule and reachable from any consumer', () => {
+    bootstrapNgModule();
+    const injector = createInjector([ngModule]);
+    expect(injector.has('$templateCache')).toBe(true);
+    const cache = injector.get('$templateCache');
+    expect(cache.info().id).toBe('templates');
+  });
+
+  it('$templateRequest (spec 019) — registered on ngModule and callable', () => {
+    bootstrapNgModule();
+    const injector = createInjector([ngModule]);
+    expect(injector.has('$templateRequest')).toBe(true);
+    const request = injector.get('$templateRequest');
+    expect(typeof request).toBe('function');
+  });
+
+  it('transclude: true end-to-end (spec 018) — outer-scope binding through ng-transclude', () => {
+    // Smoke check that the full transclusion path works against
+    // `ngModule` (so `ng-transclude` is available): a `transclude: true`
+    // host registered in a config block, projecting consumer markup
+    // through `<div ng-transclude>` so an `{{outer.title}}`
+    // interpolation in the projected DOM resolves against the OUTER
+    // scope.
+    bootstrapNgModule();
+
+    const appModule = createModule('app', ['ng']).config([
+      '$compileProvider',
+      ($cp: $CompileProvider) => {
+        $cp.directive('myCard', [
+          () => ({
+            transclude: true,
+            link: (scope, element) => {
+              // Manual template setup (templates spec is deferred).
+              const template = document.createElement('section');
+              const marker = document.createElement('div');
+              marker.setAttribute('ng-transclude', '');
+              template.appendChild(marker);
+              element.appendChild(template);
+              compile(template)(scope);
+            },
+          }),
+        ]);
+      },
+    ]);
+
+    const injector = createInjector([ngModule, appModule]);
+    const compile = injector.get('$compile');
+
+    const host = document.createElement('div');
+    host.setAttribute('my-card', '');
+    const p = document.createElement('p');
+    p.textContent = 'Hello';
+    host.appendChild(p);
+
+    const outer = Scope.create();
+    compile(host)(outer);
+
+    const marker = host.querySelector('section > div[ng-transclude]');
+    expect(marker).not.toBeNull();
+    expect(marker?.children.length).toBe(1);
+    expect((marker?.children[0] as Element).tagName).toBe('P');
+    expect(marker?.children[0]?.textContent).toBe('Hello');
+  });
+
   it('$compile (spec 017) — registers a directive and runs post-link', () => {
     bootstrapNgModule();
     let posted = false;
@@ -114,5 +172,66 @@ describe('cross-spec smoke (Slice 12 final verification)', () => {
     node.setAttribute('smoke-dir', '');
     $compile(node)(Scope.create());
     expect(posted).toBe(true);
+  });
+
+  it('inline `template` (spec 019) — installs the template and interpolates an attribute through $observe', () => {
+    bootstrapNgModule();
+    let observed: string | undefined;
+    const appModule = createModule('app', ['ng']).config([
+      '$compileProvider',
+      ($cp: $CompileProvider) => {
+        $cp.directive('tplSmoke', [() => ({ template: '<child-dir attr="{{x}}"></child-dir>', scope: true })]);
+        $cp.directive('childDir', [
+          () => ({
+            link: (_scope, _el, attrs) => {
+              attrs.$observe('attr', (value) => {
+                observed = value;
+              });
+            },
+          }),
+        ]);
+      },
+    ]);
+    const injector = createInjector([appModule]);
+    const $compile = injector.get('$compile');
+    const node = document.createElement('div');
+    node.setAttribute('tpl-smoke', '');
+    const scope = Scope.create();
+    $compile(node)(scope);
+    scope.x = 'hi';
+    scope.$digest();
+    expect(observed).toBe('hi');
+  });
+
+  it('async `templateUrl` (spec 019) — fetched template installs after the microtask drain', async () => {
+    bootstrapNgModule();
+    const appModule = createModule('app', ['ng'])
+      .config([
+        '$compileProvider',
+        ($cp: $CompileProvider) => {
+          $cp.directive('tplUrlSmoke', [() => ({ templateUrl: '/tpl-url-smoke.html' })]);
+        },
+      ])
+      .run([
+        '$templateCache',
+        (cache: TemplateCacheService) => {
+          cache.put('/tpl-url-smoke.html', '<p>fromUrl</p>');
+        },
+      ]);
+    const injector = createInjector([appModule]);
+    const $compile = injector.get('$compile');
+    const node = document.createElement('div');
+    node.setAttribute('tpl-url-smoke', '');
+    $compile(node)(Scope.create());
+
+    // Sync linker contract — host is empty immediately.
+    expect(node.firstChild).toBeNull();
+
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(node.firstElementChild?.tagName).toBe('P');
+    expect(node.firstElementChild?.textContent).toBe('fromUrl');
   });
 });

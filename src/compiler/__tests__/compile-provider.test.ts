@@ -27,22 +27,9 @@ import {
 } from '@compiler/compile-error';
 import type { Directive, DirectiveFactory, DirectiveFactoryReturn } from '@compiler/directive-types';
 import { createInjector } from '@di/injector';
-import { createModule, resetRegistry } from '@di/module';
-import { $FilterProvider } from '@filter/filter-provider';
-import { $InterpolateProvider } from '@interpolate/interpolate-provider';
-import { $SceDelegateProvider } from '@sce/sce-delegate-provider';
-import { $SceProvider } from '@sce/sce-provider';
+import { createModule } from '@di/module';
 
-function bootstrapNgModule(): void {
-  resetRegistry();
-  createModule('ng', [])
-    .factory('$exceptionHandler', [() => () => undefined])
-    .provider('$sceDelegate', $SceDelegateProvider)
-    .provider('$sce', $SceProvider)
-    .provider('$interpolate', $InterpolateProvider)
-    .provider('$filter', ['$provide', $FilterProvider])
-    .provider('$compile', ['$provide', $CompileProvider]);
-}
+import { bootstrapNgModule } from './test-helpers';
 
 function ddoFactory(returnValue: DirectiveFactoryReturn): DirectiveFactory {
   return [() => returnValue] as DirectiveFactory;

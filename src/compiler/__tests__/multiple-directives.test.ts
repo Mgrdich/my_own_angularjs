@@ -32,22 +32,9 @@ import { $CompileProvider } from '@compiler/compile-provider';
 import type { CompileService, Directive, DirectiveFactory, DirectiveFactoryReturn } from '@compiler/directive-types';
 import { Scope } from '@core/index';
 import { createInjector } from '@di/injector';
-import { createModule, resetRegistry } from '@di/module';
-import { $FilterProvider } from '@filter/filter-provider';
-import { $InterpolateProvider } from '@interpolate/interpolate-provider';
-import { $SceDelegateProvider } from '@sce/sce-delegate-provider';
-import { $SceProvider } from '@sce/sce-provider';
+import { createModule } from '@di/module';
 
-function bootstrapNgModule(): void {
-  resetRegistry();
-  createModule('ng', [])
-    .factory('$exceptionHandler', [() => () => undefined])
-    .provider('$sceDelegate', $SceDelegateProvider)
-    .provider('$sce', $SceProvider)
-    .provider('$interpolate', $InterpolateProvider)
-    .provider('$filter', ['$provide', $FilterProvider])
-    .provider('$compile', ['$provide', $CompileProvider]);
-}
+import { bootstrapNgModule, compileWith } from './test-helpers';
 
 function buildInjector(register: ($cp: $CompileProvider) => void) {
   const appModule = createModule('app', ['ng']).config([
@@ -57,10 +44,6 @@ function buildInjector(register: ($cp: $CompileProvider) => void) {
     },
   ]);
   return createInjector([appModule]);
-}
-
-function compileWith(register: ($cp: $CompileProvider) => void): CompileService {
-  return buildInjector(register).get<CompileService>('$compile');
 }
 
 function ddoFactory(returnValue: DirectiveFactoryReturn): DirectiveFactory {
