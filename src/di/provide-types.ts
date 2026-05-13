@@ -224,4 +224,23 @@ export interface ProvideService {
 
   /** Wide fallback for dynamic decorator invokables. Config-phase only. */
   decorator(name: string, fn: Invokable): void;
+
+  /**
+   * Framework-internal phase oracle. Exposed for other config-phase
+   * providers (e.g. `$ControllerProvider`) that need to enforce the same
+   * captured-reference safety as `$provide` — they capture this thunk
+   * from their `$provide` dependency and invoke it on every method call,
+   * matching the pattern in `createProvideService` (`src/di/provide.ts`).
+   *
+   * App code MUST NOT call this. Returns `'config'` while config blocks
+   * run and `'run'` afterwards. The thunk reads the live phase flag on
+   * every call (no snapshot at factory build time), so a saved reference
+   * stays correct across the phase transition.
+   *
+   * The `$$` prefix is the AngularJS convention for framework-internal
+   * hooks; the field is part of the {@link ProvideService} interface
+   * shape so providers can type-safely depend on `'$provide'` without
+   * widening the registry type.
+   */
+  $$getPhase(): PhaseState;
 }

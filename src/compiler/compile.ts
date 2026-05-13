@@ -87,6 +87,7 @@
  * plus `templateRequest` (Slice 5 — wired ahead of the Slice 6 drain).
  */
 
+import type { ControllerLocals } from '@controller/controller-types';
 import type { Scope } from '@core/index';
 import { invokeExceptionHandler } from '@exception-handler/index';
 
@@ -201,7 +202,54 @@ function isScopeDestroyed(scope: Scope | undefined): boolean {
  * ```
  */
 export function createCompile(options: CompileOptions): CompileService {
-  const { getDirectivesByName, interpolate, exceptionHandler, templateRequest } = options;
+  const {
+    getDirectivesByName,
+    controller: $controller,
+    interpolate,
+    exceptionHandler,
+    templateRequest,
+  } = options;
+
+  /**
+   * Per-element controller seam (spec 020 Slice 4). Runs ONCE per
+   * directive on the element that declares `controller`, AFTER the
+   * attrs-to-scope binding and the `$transclude` stash, BEFORE the
+   * pre-link loop. Errors route via `$exceptionHandler('$compile')` —
+   * no new `EXCEPTION_HANDLER_CAUSES` token; the surrounding link
+   * passes on this element AND on siblings continue.
+   *
+   * Extracted to a small helper because both the transcluding-host
+   * link path and the non-transcluding link path call it with the
+   * same shape (the only difference is whether `$transclude` is
+   * threaded into the locals). The helper is closed over `$controller`
+   * + `exceptionHandler` so the call sites stay short.
+   */
+  function runControllerSeam(
+    directives: readonly Directive[],
+    scope: Scope,
+    element: Element,
+    attrs: Attributes,
+    $transclude: TranscludeFn | undefined,
+  ): void {
+    for (const directive of directives) {
+      if (directive.controller === undefined) {
+        continue;
+      }
+      const locals: ControllerLocals = {
+        $scope: scope,
+        $element: element,
+        $attrs: attrs,
+      };
+      if ($transclude !== undefined) {
+        locals.$transclude = $transclude;
+      }
+      try {
+        $controller(directive.controller, locals, directive.controllerAs);
+      } catch (err) {
+        invokeExceptionHandler(exceptionHandler, err, '$compile');
+      }
+    }
+  }
 
   function compileNode(node: Node, queue: DeferredTemplateEntry[]): NodeLinker {
     if (isElement(node)) {
@@ -677,6 +725,20 @@ export function createCompile(options: CompileOptions): CompileService {
       const effectiveLinkEntries = deferCompileToLink ? liveLinkEntries : templateTimeLinkEntries;
 
       bindAttrsToScope(attrs, scope, interpolate, exceptionHandler);
+
+      // ----- Spec 020 / Slice 4: per-element controller seam.
+      //
+      // Runs ONCE per directive declaring `controller`, AFTER attrs are
+      // bound to the scope and the `$transclude` closure has been
+      // built / stashed, BEFORE the per-directive pre-link loop (and
+      // therefore before any other directive's pre-link on this
+      // element). Errors route via `$exceptionHandler('$compile')`;
+      // the surrounding pre/post-link on this element AND siblings
+      // continue.
+      if (isElement(target)) {
+        runControllerSeam(effectiveDirectives, scope, target, attrs as Attributes, $transclude);
+      }
+
       // Pre-link: priority-DESCENDING, runs BEFORE child linking.
       for (const entry of effectiveLinkEntries) {
         if (entry.pre !== undefined) {
@@ -898,6 +960,16 @@ export function createCompile(options: CompileOptions): CompileService {
       const $transclude: TranscludeFn | undefined = bound?.fn;
 
       bindAttrsToScope(attrs, scope, interpolate, exceptionHandler);
+
+      // ----- Spec 020 / Slice 4: per-element controller seam (post-
+      // templateUrl-install path). Same contract as the synchronous
+      // path: runs AFTER attrs are bound, BEFORE pre-link. The pending
+      // directives include every directive on the host (the
+      // template-declaring directive included, with its `template`
+      // field stripped so it doesn't re-trigger the install). The
+      // `$transclude` here is whatever was stashed at enqueue time
+      // (may be `undefined` for non-transcluding hosts).
+      runControllerSeam(pendingDirectives, scope, element, attrs, $transclude);
 
       for (const entry of templateTimeLinkEntries) {
         if (entry.pre !== undefined) {

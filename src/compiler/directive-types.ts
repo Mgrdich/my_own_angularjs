@@ -12,6 +12,7 @@
  */
 
 import type { Scope } from '@core/index';
+import type { ControllerInvokable, ControllerService } from '@controller/controller-types';
 import type { Injector, Invokable } from '@di/di-types';
 import type { ExceptionHandler } from '@exception-handler/index';
 import type { InterpolateService } from '@interpolate/interpolate-types';
@@ -34,6 +35,13 @@ export type { CloneAttachFn, TranscludeFn, TranscludeSlotName };
 // is internal — re-exported for future structural directives — and
 // is NOT surfaced through the public root barrel.
 export type { NormalizedTemplate, TemplateFn, TemplateUrlFn };
+
+// Re-export `ControllerInvokable` so directive authors importing
+// `DirectiveDefinition` from `@compiler/directive-types` don't need a
+// parallel `@controller/controller-types` import to spell the
+// `controller` field's type (spec 020 Slice 4). The runtime symbol
+// stays owned by `@controller`; this is a type-only re-export.
+export type { ControllerInvokable };
 
 /**
  * The shared {@link Attributes} object passed to every `compile`,
@@ -280,6 +288,75 @@ export interface DirectiveDefinition {
    * @see ReplaceTrueNotSupportedError
    */
   replace?: boolean;
+  /**
+   * Controller declaration (spec 020). Accepts:
+   *
+   * - `string` — registered controller name; looked up at link time via
+   *   `$controller(name, locals, controllerAs)` against the names
+   *   registered with `$controllerProvider.register(name, fn)`.
+   * - `ControllerInvokable` — bare function or array-style annotation
+   *   (`['$scope', '$element', fn]`); instantiated directly via
+   *   `$controller(fn, locals, controllerAs)`.
+   *
+   * The controller is instantiated ONCE per matched element, AFTER
+   * `$transclude` setup, BEFORE any pre-link function on the element
+   * (and therefore before any post-link). The seam reuses the existing
+   * `'$compile'` cause token — no new `EXCEPTION_HANDLER_CAUSES` entry.
+   * A throw from the controller constructor routes via
+   * `$exceptionHandler('$compile')` and the directive's other behavior
+   * (pre/post-link) on the same element still runs; sibling elements
+   * are unaffected.
+   *
+   * The compiler's locals for the seam are
+   * `{ $scope, $element, $attrs, $transclude }`. `$transclude` is
+   * present only on transcluding hosts; on non-transcluding hosts the
+   * key is omitted from the locals map.
+   *
+   * @example Inline controller plus `controllerAs: 'vm'`
+   * ```ts
+   * $compileProvider.directive('myCard', () => ({
+   *   controller: ['$scope', function ($scope) {
+   *     this.value = 42;
+   *     void $scope;
+   *   }],
+   *   controllerAs: 'vm',
+   * }));
+   * // Inside the template, `vm.value` reads through scope.vm.value.
+   * ```
+   *
+   * @see ControllerAsWithoutControllerError — `controllerAs` requires
+   *      `controller`. Rejected at directive registration.
+   * @see MalformedControllerAliasError — `controllerAs` must match
+   *      `IDENT_RE`.
+   */
+  controller?: string | ControllerInvokable;
+  /**
+   * Controller alias (spec 020). Exposes the controller instance on the
+   * matched element's scope under this name (or the child scope when
+   * `scope: true`). MUST be a non-empty string matching `IDENT_RE`
+   * (`/^[A-Za-z_$][\w$]*$/`) and MUST be accompanied by `controller`.
+   *
+   * Both validations run at directive registration time inside
+   * `normalizeDirective`. Failures route via `$exceptionHandler('$compile')`
+   * through the existing factory `try/catch` in
+   * `$$buildDirectiveArrayProvider`, so the directive simply doesn't
+   * resolve — sibling directives on the same element continue to run.
+   *
+   * @example
+   * ```ts
+   * $compileProvider.directive('myCard', () => ({
+   *   controller: function ($scope) { $scope.value = 42; },
+   *   controllerAs: 'vm',
+   * }));
+   * // Inside the template, `vm.value` reads through scope.vm.value.
+   * ```
+   *
+   * @see ControllerAsWithoutControllerError — `controllerAs` without
+   *      `controller` is a registration-time error.
+   * @see MalformedControllerAliasError — Non-identifier alias strings
+   *      (e.g. `''`, `'1bad'`, `'has space'`) are rejected at registration.
+   */
+  controllerAs?: string;
 }
 
 /**
@@ -345,6 +422,22 @@ export interface Directive {
    * the type surface.
    */
   template?: NormalizedTemplate;
+  /**
+   * Post-normalize controller declaration (spec 020). Unset when the
+   * directive declared no controller. Populated by `normalizeDirective`
+   * from the factory's `controller` field. The compiler's per-element
+   * seam reads this slot once per directive and invokes `$controller`
+   * with element-local `$scope` / `$element` / `$attrs` / `$transclude`.
+   */
+  controller?: string | ControllerInvokable;
+  /**
+   * Post-normalize `controllerAs` alias (spec 020). Always paired with
+   * `controller` — `normalizeDirective` rejects `controllerAs` without
+   * `controller` via {@link DirectiveDefinition.controllerAs}'s
+   * registration check. Forwarded to `$controller` as the `ident`
+   * argument so the resolved instance is exposed on `scope[controllerAs]`.
+   */
+  controllerAs?: string;
 }
 
 /**
@@ -387,4 +480,18 @@ export interface CompileOptions {
   readonly interpolate: InterpolateService;
   readonly exceptionHandler: ExceptionHandler;
   readonly templateRequest: TemplateRequestFn;
+  /**
+   * The run-phase `$controller` service (spec 020 Slice 4). The
+   * compiler invokes it once per directive that declares a `controller`,
+   * per matched element, AFTER `$transclude` setup and BEFORE the
+   * pre-link loop. Threaded via the existing `$CompileProvider.$get`
+   * deps array — the linker holds the resolved reference in its
+   * closure rather than reaching for it through `injector.get(...)`
+   * on every element.
+   *
+   * Throws from the controller constructor route via
+   * `invokeExceptionHandler(exceptionHandler, err, '$compile')` — no
+   * new `EXCEPTION_HANDLER_CAUSES` entry; the tuple stays at 10.
+   */
+  readonly controller: ControllerService;
 }

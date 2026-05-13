@@ -33,3 +33,5 @@ export {
 } from './controller-errors';
 
 export { createController } from './controller';
+
+export { $ControllerProvider } from './controller-provider';

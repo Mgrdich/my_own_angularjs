@@ -26,6 +26,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { $CompileProvider } from '@compiler/compile-provider';
 import { MultipleTranscludeDirectivesError } from '@compiler/compile-error';
+import { $ControllerProvider } from '@controller/controller-provider';
 import type {
   CompileService,
   DirectiveFactory,
@@ -61,6 +62,7 @@ function bootstrapSpy(): SpyHarness {
     .provider('$sce', $SceProvider)
     .provider('$interpolate', $InterpolateProvider)
     .provider('$filter', ['$provide', $FilterProvider])
+    .provider('$controller', ['$provide', $ControllerProvider])
     .factory('$templateCache', [() => createTemplateCache()])
     .factory('$templateRequest', [
       '$templateCache',
@@ -360,6 +362,7 @@ describe('transclusion error surface — handler degradation (FS §2.9 #8 / spec
         .provider('$sce', $SceProvider)
         .provider('$interpolate', $InterpolateProvider)
         .provider('$filter', ['$provide', $FilterProvider])
+        .provider('$controller', ['$provide', $ControllerProvider])
         .factory('$templateCache', [() => createTemplateCache()])
         .factory('$templateRequest', [
           '$templateCache',
@@ -448,6 +451,7 @@ describe('transclusion error surface — required-slot vs. handler degradation c
         .provider('$sce', $SceProvider)
         .provider('$interpolate', $InterpolateProvider)
         .provider('$filter', ['$provide', $FilterProvider])
+        .provider('$controller', ['$provide', $ControllerProvider])
         .factory('$templateCache', [() => createTemplateCache()])
         .factory('$templateRequest', [
           '$templateCache',

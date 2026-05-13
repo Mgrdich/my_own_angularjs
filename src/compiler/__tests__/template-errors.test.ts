@@ -37,6 +37,7 @@ import {
   TemplateFunctionReturnedNonStringError,
   TemplateUrlFunctionReturnedNonStringError,
 } from '@compiler/compile-error';
+import { $ControllerProvider } from '@controller/controller-provider';
 import type {
   CompileService,
   DirectiveFactory,
@@ -86,6 +87,7 @@ function bootstrapSpy(opts?: SpyHarnessOpts): SpyHarness {
     .provider('$sce', $SceProvider)
     .provider('$interpolate', $InterpolateProvider)
     .provider('$filter', ['$provide', $FilterProvider])
+    .provider('$controller', ['$provide', $ControllerProvider])
     .factory('$templateCache', [() => createTemplateCache()])
     .factory('$templateRequest', [
       '$templateCache',

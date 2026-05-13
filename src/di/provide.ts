@@ -66,5 +66,13 @@ export function createProvideService(deps: RegistrationDeps, getPhase: () => Pha
       guard('decorator');
       applyRegistrationRecord('decorator', name, fn, deps);
     },
+    // Framework-internal phase oracle. Exposed on `ProvideService` so that
+    // other config-phase providers (e.g. `$ControllerProvider`) can capture
+    // the same thunk this object's guards use, preserving the
+    // captured-reference safety pattern. Reading `getPhase()` on every call
+    // (not snapshotting at construction) is the entire point of the hook —
+    // a saved provider reference invoked after the run phase begins still
+    // sees `'run'` and trips its caller's guard.
+    $$getPhase: getPhase,
   };
 }

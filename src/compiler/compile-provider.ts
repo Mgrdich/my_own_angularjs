@@ -22,6 +22,13 @@
  * compiled. The error message is the spec-canonical one.
  */
 
+import { IDENT_RE } from '@controller/controller';
+import {
+  ControllerAsWithoutControllerError,
+  InvalidControllerFactoryError,
+  MalformedControllerAliasError,
+} from '@controller/controller-errors';
+import type { ControllerInvokable, ControllerService } from '@controller/controller-types';
 import type { Injector } from '@di/di-types';
 import type { ProvideService } from '@di/provide-types';
 import { invokeExceptionHandler, type ExceptionHandler } from '@exception-handler/index';
@@ -230,24 +237,34 @@ export class $CompileProvider {
   }
 
   /**
-   * Run-phase `$get` invokable. Resolves `$injector`, `$interpolate`,
-   * `$exceptionHandler`, and `$templateRequest`, then constructs the
-   * `CompileService` via `createCompile`. The closure over
-   * `this.$$registeredNames` keeps the lookup short-circuit synchronous
-   * — unknown names skip the `$injector.get` round-trip entirely.
+   * Run-phase `$get` invokable. Resolves `$injector`, `$controller`,
+   * `$interpolate`, `$exceptionHandler`, and `$templateRequest`, then
+   * constructs the `CompileService` via `createCompile`. The closure
+   * over `this.$$registeredNames` keeps the lookup short-circuit
+   * synchronous — unknown names skip the `$injector.get` round-trip
+   * entirely.
    *
    * **Spec 019 / Slice 5** adds `$templateRequest` to the deps list.
    * Inline templates (this slice) do not consume it; the option threads
    * through ahead of the async `templateUrl` deferred-drain (Slice 6)
    * so the DI wiring is stable across the two slices.
+   *
+   * **Spec 020 / Slice 4** adds `$controller`. The compiler's
+   * per-element controller seam needs a resolved reference in its
+   * closure rather than reaching for it through `injector.get(...)` on
+   * every element. `$ControllerProvider.$get` only depends on
+   * `'$injector'`, so adding `'$controller'` here doesn't open a
+   * circular-dep path back to `$compile`.
    */
   $get = [
     '$injector',
+    '$controller',
     '$interpolate',
     '$exceptionHandler',
     '$templateRequest',
     (
       $injector: Injector,
+      $controller: ControllerService,
       $interpolate: InterpolateService,
       $exceptionHandler: ExceptionHandler,
       $templateRequest: TemplateRequestFn,
@@ -256,6 +273,7 @@ export class $CompileProvider {
         getDirectivesByName: (name: string): Directive[] =>
           this.$$registeredNames.has(name) ? $injector.get<Directive[]>(`${name}${DIRECTIVE_PROVIDER_SUFFIX}`) : [],
         injector: $injector,
+        controller: $controller,
         interpolate: $interpolate,
         exceptionHandler: $exceptionHandler,
         templateRequest: $templateRequest,
@@ -404,6 +422,91 @@ function normalizeTemplate(
   return undefined;
 }
 
+/**
+ * Validates and normalizes the `controller` / `controllerAs` DDO fields
+ * per spec 020 Slice 4 / technical-considerations §2.7.
+ *
+ * Validation rules:
+ *
+ * 1. `controllerAs` without `controller` is rejected with
+ *    {@link ControllerAsWithoutControllerError}. Alias-without-target is
+ *    a programming error — there is nothing to alias.
+ * 2. `controllerAs`, when present, must be a non-empty string matching
+ *    the shared {@link IDENT_RE} from `@controller/controller.ts`. The
+ *    regex is imported (not duplicated) so a future relaxation in one
+ *    surface can't drift from the other. Failures throw
+ *    {@link MalformedControllerAliasError}.
+ * 3. `controller`, when present, must be a string, a function, or a
+ *    non-empty array whose trailing element is a function. Failures
+ *    throw {@link InvalidControllerFactoryError}. String-shaped values
+ *    additionally must be non-empty — whitespace-only names are caught
+ *    later by `parseControllerName` at link time, so we only guard the
+ *    empty-string case here.
+ *
+ * Returns the `(controller?, controllerAs?)` pair to attach to the
+ * normalized directive when both validations pass. Every throw is
+ * caught by the existing factory-invocation `try/catch` in
+ * {@link $CompileProvider.$$buildDirectiveArrayProvider} and routed
+ * through `$exceptionHandler('$compile')`.
+ */
+function normalizeController(
+  directiveName: string,
+  rawController: unknown,
+  rawControllerAs: unknown,
+): { controller?: string | ControllerInvokable; controllerAs?: string } {
+  // 1. `controllerAs` without `controller` — registration-time error.
+  if (rawControllerAs !== undefined && rawController === undefined) {
+    throw new ControllerAsWithoutControllerError(directiveName);
+  }
+
+  // 2. `controllerAs` shape (when present). Reject anything that isn't
+  // a non-empty identifier-shaped string. The error message receives a
+  // human-readable shape descriptor rather than `String(value)` so an
+  // object-typed misuse doesn't surface as `'[object Object]'`.
+  let controllerAs: string | undefined;
+  if (rawControllerAs !== undefined) {
+    if (typeof rawControllerAs !== 'string' || rawControllerAs.length === 0 || !IDENT_RE.test(rawControllerAs)) {
+      throw new MalformedControllerAliasError(
+        typeof rawControllerAs === 'string' ? rawControllerAs : describeValue(rawControllerAs),
+      );
+    }
+    controllerAs = rawControllerAs;
+  }
+
+  // 3. `controller` shape (when present).
+  let controller: string | ControllerInvokable | undefined;
+  if (rawController !== undefined) {
+    if (typeof rawController === 'string') {
+      if (rawController.length === 0) {
+        throw new InvalidControllerFactoryError(directiveName, 'empty string');
+      }
+      controller = rawController;
+    } else if (typeof rawController === 'function') {
+      controller = rawController as ControllerInvokable;
+    } else if (Array.isArray(rawController)) {
+      if (rawController.length === 0) {
+        throw new InvalidControllerFactoryError(directiveName, describeValue(rawController));
+      }
+      const tail: unknown = rawController[rawController.length - 1];
+      if (typeof tail !== 'function') {
+        throw new InvalidControllerFactoryError(directiveName, describeValue(rawController));
+      }
+      controller = rawController as ControllerInvokable;
+    } else {
+      throw new InvalidControllerFactoryError(directiveName, describeValue(rawController));
+    }
+  }
+
+  const result: { controller?: string | ControllerInvokable; controllerAs?: string } = {};
+  if (controller !== undefined) {
+    result.controller = controller;
+  }
+  if (controllerAs !== undefined) {
+    result.controllerAs = controllerAs;
+  }
+  return result;
+}
+
 function normalizeDirective(name: string, factoryReturn: DirectiveFactoryReturn): Directive {
   if (typeof factoryReturn === 'function') {
     // Sugar form: `() => function postLink(scope, el, attrs) {…}`.
@@ -455,6 +558,18 @@ function normalizeDirective(name: string, factoryReturn: DirectiveFactoryReturn)
   const rawReplace = (ddo as { replace?: unknown }).replace;
   const template = normalizeTemplate(name, rawTemplate, rawTemplateUrl, rawReplace);
 
+  // Validate + normalize `controller` / `controllerAs` per spec-020
+  // Slice 4. Same `unknown`-view pattern as transclude / template — the
+  // runtime values are user-supplied. The validator throws on
+  // `controllerAs` without `controller`, on malformed `controllerAs`
+  // strings, and on shape-invalid `controller` values; all three routes
+  // bubble up through the factory-invocation try/catch in
+  // `$$buildDirectiveArrayProvider` and surface via
+  // `$exceptionHandler('$compile')`.
+  const rawController = (ddo as { controller?: unknown }).controller;
+  const rawControllerAs = (ddo as { controllerAs?: unknown }).controllerAs;
+  const { controller, controllerAs } = normalizeController(name, rawController, rawControllerAs);
+
   const priority = ddo.priority ?? 0;
   if (Number.isNaN(priority)) {
     throw new Error(`Invalid priority for directive ${name}: NaN`);
@@ -491,6 +606,12 @@ function normalizeDirective(name: string, factoryReturn: DirectiveFactoryReturn)
   }
   if (template !== undefined) {
     directive.template = template;
+  }
+  if (controller !== undefined) {
+    directive.controller = controller;
+  }
+  if (controllerAs !== undefined) {
+    directive.controllerAs = controllerAs;
   }
   return directive;
 }

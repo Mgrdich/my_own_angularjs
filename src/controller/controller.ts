@@ -67,8 +67,16 @@ const CONTROLLER_NAME_ALIAS_RE = /^(\S+?)(\s+as\s+([\w$]+))?\s*$/;
  * characters may also include digits. `\w` is `[A-Za-z0-9_]`, so the
  * first-character class is spelled out explicitly to exclude digits at
  * position 0.
+ *
+ * **Exported for `$compileProvider.directive`'s `controllerAs` shape
+ * validation** (spec 020 Slice 4). Match-or-fail consumers should use
+ * the existing helpers in this module (`parseControllerName`, the
+ * factory itself); the export exists only for the cross-module
+ * validation seam in `normalizeDirective`, so the two surfaces share
+ * a single source of truth and a relaxation in one place can't drift
+ * from the other.
  */
-const IDENT_RE = /^[A-Za-z_$][\w$]*$/;
+export const IDENT_RE = /^[A-Za-z_$][\w$]*$/;
 
 /**
  * Run {@link CONTROLLER_NAME_ALIAS_RE} against `input` and return the
