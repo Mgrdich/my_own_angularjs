@@ -14,6 +14,7 @@ export default defineConfig({
       '@filter': path.resolve(__dirname, 'src/filter'),
       '@compiler': path.resolve(__dirname, 'src/compiler'),
       '@template': path.resolve(__dirname, 'src/template'),
+      '@controller': path.resolve(__dirname, 'src/controller'),
     },
   },
   test: {

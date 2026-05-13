@@ -5,45 +5,44 @@
 
 ---
 
-- [ ] **Slice 1: Foundation — Module Scaffolding + Type Surface + Error Classes (No Behavior Change)**
-  - [ ] Add `"@controller/*": ["./src/controller/*"]` to `tsconfig.json` `paths`. Mirrors every prior subpath alias (`@core`, `@parser`, `@di`, `@interpolate`, `@sce`, `@sanitize`, `@exception-handler`, `@filter`, `@compiler`, `@template`). **[Agent: rollup-build]**
-  - [ ] Add `'@controller': path.resolve(__dirname, 'src/controller')` to `vitest.config.ts` `resolve.alias` (Vitest does not read `tsconfig.json` paths; the alias must be duplicated, same precedent as `@filter` / `@compiler` / `@template`). Also add `src/controller/**` to coverage `include`. **[Agent: rollup-build]**
-  - [ ] Add `./controller` entry to `rollup.config.mjs` so the new module emits `dist/{esm,cjs,types}/controller/index.{mjs,cjs,d.ts}`. Mirror the existing `./template` entry. **[Agent: rollup-build]**
-  - [ ] Add `./controller` to `package.json` `exports` map (ESM `import`, CJS `require`, `types`). Mirror the existing exports entries. **[Agent: rollup-build]**
-  - [ ] Create `src/controller/controller-types.ts` exporting the public type surface per technical-considerations §2.4:
+- [x] **Slice 1: Foundation — Module Scaffolding + Type Surface + Error Classes (No Behavior Change)**
+  - [x] Add `"@controller/*": ["./src/controller/*"]` to `tsconfig.json` `paths`. Mirrors every prior subpath alias (`@core`, `@parser`, `@di`, `@interpolate`, `@sce`, `@sanitize`, `@exception-handler`, `@filter`, `@compiler`, `@template`). **[Agent: rollup-build]**
+  - [x] Add `'@controller': path.resolve(__dirname, 'src/controller')` to `vitest.config.ts` `resolve.alias` (Vitest does not read `tsconfig.json` paths; the alias must be duplicated, same precedent as `@filter` / `@compiler` / `@template`). Also add `src/controller/**` to coverage `include`. **[Agent: rollup-build]**
+  - [x] Add `./controller` entry to `rollup.config.mjs` so the new module emits `dist/{esm,cjs,types}/controller/index.{mjs,cjs,d.ts}`. Mirror the existing `./template` entry. **[Agent: rollup-build]**
+  - [x] Add `./controller` to `package.json` `exports` map (ESM `import`, CJS `require`, `types`). Mirror the existing exports entries. **[Agent: rollup-build]**
+  - [x] Create `src/controller/controller-types.ts` exporting the public type surface per technical-considerations §2.4:
         - `type ControllerInvokable = ControllerFn | (string | ControllerFn)[]` where `ControllerFn = (...args: unknown[]) => unknown | void`
         - `interface ControllerLocals extends Record<string, unknown> { $scope?: Scope; $element?: Element; $attrs?: Attributes; $transclude?: TranscludeFn }` (all optional — `$controller(fn, {})` is legal)
         - `type ControllerService = (nameOrFn: string | ControllerInvokable, locals?: ControllerLocals, ident?: string) => unknown`
         - `interface IControllerProvider { register(name: string, fn: ControllerInvokable): IControllerProvider; register(map: Record<string, ControllerInvokable>): IControllerProvider; has(name: string): boolean }`
         - `interface CreateControllerArgs { injector: Injector; registry: ReadonlyMap<string, ControllerInvokable> }` (internal — re-exported for tests, NOT in the root barrel). **[Agent: typescript-framework]**
-  - [ ] Create `src/controller/controller-errors.ts` with the six error classes per technical-considerations §2.6, mirroring the existing `src/compiler/compile-error.ts` pattern (extends `Error`, `readonly name = '<ClassName>' as const`, deterministic single-string message):
+  - [x] Create `src/controller/controller-errors.ts` with the six error classes per technical-considerations §2.6, mirroring the existing `src/compiler/compile-error.ts` pattern (extends `Error`, `readonly name = '<ClassName>' as const`, deterministic single-string message):
         - `ControllerRegistrationOutOfPhaseError(method: string)` → `$controllerProvider.<method> is only callable during the config phase; calling it after the run phase begins is not supported`
         - `InvalidControllerNameError(received: string)` → `Invalid controller name: <received> (must be a non-empty string with no whitespace; "hasOwnProperty" is reserved)`
         - `InvalidControllerFactoryError(name: string, description: string)` → `Invalid controller factory for "<name>": <description>` — also reused by `$controller(badInput, ...)` direct-call path
         - `UnknownControllerError(name: string)` → `Unknown controller: <name>`
         - `MalformedControllerAliasError(received: string)` → `Malformed controller alias: "<received>" — expected "Name as alias" where alias is a valid identifier`
         - `ControllerAsWithoutControllerError(directiveName: string)` → `Directive "<directiveName>" declares controllerAs without a controller; both must be present together`. **[Agent: typescript-framework]**
-  - [ ] Create `src/controller/index.ts` (initial barrel — populated in subsequent slices). For Slice 1, re-export only the types from `./controller-types` and the six error classes from `./controller-errors`. The factory + provider ship in Slices 2 and 3. **[Agent: typescript-framework]**
-  - [ ] Update `src/index.ts` (root barrel) to re-export the six error classes + the four public types (`ControllerService`, `ControllerInvokable`, `ControllerLocals`, `IControllerProvider`) from `./controller`. `CreateControllerArgs` is INTERNAL — not re-exported from the public root barrel. **[Agent: typescript-framework]**
-  - [ ] Create `src/controller/__tests__/controller-errors-foundation.test.ts` covering all six error classes — instantiate each, assert message format, `name` discriminator, and `instanceof Error`. Mirror the spec-018 `transclude-errors-foundation.test.ts` pattern. **[Agent: vitest-testing]**
-  - [ ] Run `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm build`. All prior tests (specs 002–019) pass unchanged. The new build emits `dist/types/controller/index.d.ts` containing the four public types + six error classes. No public ngModule surface change yet; no `EXCEPTION_HANDLER_CAUSES` change. **[Agent: rollup-build]**
+  - [x] Create `src/controller/index.ts` (initial barrel — populated in subsequent slices). For Slice 1, re-export only the types from `./controller-types` and the six error classes from `./controller-errors`. The factory + provider ship in Slices 2 and 3. **[Agent: typescript-framework]**
+  - [x] Update `src/index.ts` (root barrel) to re-export the six error classes + the four public types (`ControllerService`, `ControllerInvokable`, `ControllerLocals`, `IControllerProvider`) from `./controller`. `CreateControllerArgs` is INTERNAL — not re-exported from the public root barrel. **[Agent: typescript-framework]**
+  - [x] Create `src/controller/__tests__/controller-errors-foundation.test.ts` covering all six error classes — instantiate each, assert message format, `name` discriminator, and `instanceof Error`. Mirror the spec-018 `transclude-errors-foundation.test.ts` pattern. **[Agent: vitest-testing]**
+  - [x] Run `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm build`. All prior tests (specs 002–019) pass unchanged. The new build emits `dist/types/controller/index.d.ts` containing the four public types + six error classes. No public ngModule surface change yet; no `EXCEPTION_HANDLER_CAUSES` change. **[Agent: rollup-build]**
 
-- [ ] **Slice 2: `createController` ESM-First Factory + Name Parser**
-  - [ ] Create `src/controller/controller.ts` exporting `createController(args: CreateControllerArgs): ControllerService` per technical-considerations §2.4. Internal helpers (private, not exported):
+- [x] **Slice 2: `createController` ESM-First Factory + Name Parser**
+  - [x] Create `src/controller/controller.ts` exporting `createController(args: CreateControllerArgs): ControllerService` per technical-considerations §2.4. Internal helpers (private, not exported):
         - `CONTROLLER_NAME_ALIAS_RE = /^(\S+?)(\s+as\s+([\w$]+))?\s*$/` — splits `"Name as alias"` into `{ name, ident? }`
-        - `IDENT_RE = /^[\w$][\w$\d]*$/` — validates `controllerAs` value + explicit `ident` argument
+        - `IDENT_RE = /^[A-Za-z_$][\w$]*$/` — validates `controllerAs` value + explicit `ident` argument (note: spelled-out first-char class so digits are excluded at position 0; the original `[\w$]` first char accepted `'1bad'` which would defeat the parser)
         - `parseControllerName(input: string): { name: string; ident?: string }` — runs the regex, throws `MalformedControllerAliasError` on no-match or invalid alias
         - `instantiate(injector, fn, locals): unknown` — `Object.create(constructor.prototype)` + `injector.invoke(fn, instance, locals)` + return-value-replacement (return value wins if it's a non-null object; otherwise the prototype-instance wins) per AngularJS `$injector.instantiate` semantics
         - `bindAlias(scope, alias, instance): void` — silent skip when scope absent; no-op when alias absent. **[Agent: typescript-framework]**
-  - [ ] In `controller.ts`, the returned `ControllerService` function follows §2.4 resolution order:
-        1. `typeof nameOrFn === 'string'` → `parseControllerName` → registry lookup → throw `UnknownControllerError` if missing → `instantiate` → `bindAlias(locals?.$scope, parsed.ident, instance)` → return
+  - [x] In `controller.ts`, the returned `ControllerService` function follows §2.4 resolution order:
+        1. `typeof nameOrFn === 'string'` → `parseControllerName` → defensive `'hasOwnProperty'` rejection (throws `InvalidControllerNameError`) → registry lookup → throw `UnknownControllerError` if missing → `instantiate` → `bindAlias(locals?.$scope, parsed.ident, instance)` (explicit `ident` arg supersedes the suffix when present) → return
         2. `typeof nameOrFn === 'function' || Array.isArray(nameOrFn)` → `instantiate` → if `ident` arg supplied, validate against `IDENT_RE` (throw `MalformedControllerAliasError` on fail) → `bindAlias(locals?.$scope, ident, instance)` → return
         3. Otherwise → throw `InvalidControllerFactoryError(name='<inline>', describe(nameOrFn))`. **[Agent: typescript-framework]**
-  - [ ] Also export from `controller.ts`:
-        - A default `controller = createController({ injector: defaultInjector, registry: new Map() })` binding for ESM-first standalone use. Follow the `interpolate` / `sce` precedent — the default binding is a thin convenience wrapper that closes over a fresh empty registry; tests that need a populated registry call `createController(...)` directly. (If this introduces a chicken-and-egg with the default `injector` symbol from `@di`, fall back to omitting the default binding from this slice and revisit in Slice 5; document the choice in the task close-out note.) **[Agent: typescript-framework]**
-  - [ ] Update `src/controller/index.ts` to re-export `createController` (and the default `controller` binding if it survived the previous bullet's check). **[Agent: typescript-framework]**
-  - [ ] Update `src/index.ts` to re-export `createController` (and the default `controller` binding if applicable) from `./controller`. **[Agent: typescript-framework]**
-  - [ ] Create `src/controller/__tests__/controller.test.ts` covering FS §2.2 + §2.3 against a **fake injector** (a small handcrafted `{ invoke, get, has, annotate }` object) and a **fake registry** (a real `Map`):
+  - [x] Default `controller` binding OMITTED in this slice. `@di` does NOT export a default `injector` symbol (`createInjector` is a factory, not a singleton), and fabricating an empty `createInjector([])` to default against would introduce hidden coupling. Decision documented at the top of `src/controller/controller.ts`; revisited in Slice 5. **[Agent: typescript-framework]**
+  - [x] Update `src/controller/index.ts` to re-export `createController`. (Default binding omitted per the previous bullet.) **[Agent: typescript-framework]**
+  - [x] Update `src/index.ts` to re-export `createController` from `./controller`. (Default binding omitted per the previous bullet.) **[Agent: typescript-framework]**
+  - [x] Create `src/controller/__tests__/controller.test.ts` covering FS §2.2 + §2.3 against a **fake injector** (a small handcrafted `{ invoke, get, has, annotate }` object) and a **fake registry** (a real `Map`):
         - String name → registered fn lookup → instance returned
         - Inline function → instantiation works
         - Array-style annotation → last element invoked, deps resolved
@@ -52,11 +51,11 @@
         - `InvalidControllerFactoryError` shape on `null` / `undefined` / `42` / `{}` / empty array
         - Locals override: when locals + injector both have the same key, locals win
         - `'Name as vm'` parses correctly; `bindAlias` runs when `$scope` present; silent skip when absent
-        - Explicit `ident` argument honored for inline-function path; `MalformedControllerAliasError` when ident isn't a valid identifier
+        - Explicit `ident` argument honored for inline-function path; explicit ident supersedes alias suffix on the string path; `MalformedControllerAliasError` when ident isn't a valid identifier
         - `MalformedControllerAliasError` for: empty alias (`'Name as '`), alias-only (`' as vm'`), non-identifier alias (`'Name as 123'`), leading whitespace before `as`
         - Constructor-returns-object replaces the prototype-instance; constructor returns `undefined` / primitive → prototype-instance returned
         - `'hasOwnProperty'` is rejected at lookup if it ever reaches the registry path — defensive (registration-time rejection lives in Slice 3 but the lookup-time fallback is asserted here too). **[Agent: vitest-testing]**
-  - [ ] Run `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm build`. All prior tests pass unchanged. New `createController` is reachable from the root barrel. `injector.get(...)` is NOT yet wired (that's Slice 3). **[Agent: rollup-build]**
+  - [x] Run `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm build`. All prior tests pass unchanged (baseline 2538 → 2566; +28 new tests). New `createController` is reachable from the root barrel and surfaces as `declare function createController(args: CreateControllerArgs): ControllerService` in `dist/types/controller/index.d.ts`. `injector.get(...)` is NOT yet wired (that's Slice 3). **[Agent: rollup-build]**
 
 - [ ] **Slice 3: `$ControllerProvider` + `ngModule` Registration**
   - [ ] Create `src/controller/controller-provider.ts` exporting `$ControllerProvider` (class) per technical-considerations §2.3. Constructor takes `['$provide', $provide]` (mirrors `$FilterProvider`); the provider closes over `$$registry: Map<string, ControllerInvokable>`. **[Agent: typescript-framework]**

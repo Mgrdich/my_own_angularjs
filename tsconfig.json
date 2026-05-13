@@ -21,7 +21,8 @@
       "@exception-handler/*": ["./src/exception-handler/*"],
       "@filter/*": ["./src/filter/*"],
       "@compiler/*": ["./src/compiler/*"],
-      "@template/*": ["./src/template/*"]
+      "@template/*": ["./src/template/*"],
+      "@controller/*": ["./src/controller/*"]
     }
   },
   "include": ["src"],
