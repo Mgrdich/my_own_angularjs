@@ -28,81 +28,31 @@
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { $CompileProvider } from '@compiler/compile-provider';
 import { RequiredTranscludeSlotUnfilledError, UndeclaredTranscludeSlotError } from '@compiler/compile-error';
-import type { CompileService, DirectiveFactory, DirectiveFactoryReturn, TranscludeFn } from '@compiler/directive-types';
+import type { DirectiveFactory, DirectiveFactoryReturn, TranscludeFn } from '@compiler/directive-types';
 import type { BoundTranscludeFn } from '@compiler/transclude-types';
 import { Scope } from '@core/index';
-import { createInjector } from '@di/injector';
-import { createModule, resetRegistry } from '@di/module';
-import { $FilterProvider } from '@filter/filter-provider';
-import { $InterpolateProvider } from '@interpolate/interpolate-provider';
-import { $SceDelegateProvider } from '@sce/sce-delegate-provider';
-import { $SceProvider } from '@sce/sce-provider';
-import { createTemplateCache } from '@template/template-cache';
-import { createTemplateRequest } from '@template/template-request';
-import type { TemplateCacheService, TemplateRequestFn } from '@template/template-types';
+
+import { bootstrapNgModule, compileWith } from './test-helpers';
 
 type SpyHandler = ReturnType<typeof vi.fn<(...args: unknown[]) => void>>;
 
 interface SpyHarness {
   handler: SpyHandler;
-  build: (register: ($cp: $CompileProvider) => void) => CompileService;
+  build: typeof compileWith;
 }
 
+/**
+ * Wires the canonical `ng` module with a `vi.fn()` spy in the
+ * `$exceptionHandler` slot and returns both the spy and a
+ * `compileWith`-equivalent `build` reference. Tests use the spy to
+ * assert that routed errors carry the `'$compile'` cause token without
+ * the digest aborting.
+ */
 function bootstrapSpy(): SpyHarness {
   const handler = vi.fn<(...args: unknown[]) => void>();
-  resetRegistry();
-  createModule('ng', [])
-    .factory('$exceptionHandler', [() => handler])
-    .provider('$sceDelegate', $SceDelegateProvider)
-    .provider('$sce', $SceProvider)
-    .provider('$interpolate', $InterpolateProvider)
-    .provider('$filter', ['$provide', $FilterProvider])
-    .factory('$templateCache', [() => createTemplateCache()])
-    .factory('$templateRequest', [
-      '$templateCache',
-      (cache: TemplateCacheService): TemplateRequestFn => createTemplateRequest({ cache }),
-    ])
-    .provider('$compile', ['$provide', $CompileProvider]);
-  return {
-    handler,
-    build(register) {
-      const appModule = createModule('app', ['ng']).config([
-        '$compileProvider',
-        ($cp: $CompileProvider) => {
-          register($cp);
-        },
-      ]);
-      return createInjector([appModule]).get('$compile');
-    },
-  };
-}
-
-function bootstrapNoopNgModule(): void {
-  resetRegistry();
-  createModule('ng', [])
-    .factory('$exceptionHandler', [() => () => undefined])
-    .provider('$sceDelegate', $SceDelegateProvider)
-    .provider('$sce', $SceProvider)
-    .provider('$interpolate', $InterpolateProvider)
-    .provider('$filter', ['$provide', $FilterProvider])
-    .factory('$templateCache', [() => createTemplateCache()])
-    .factory('$templateRequest', [
-      '$templateCache',
-      (cache: TemplateCacheService): TemplateRequestFn => createTemplateRequest({ cache }),
-    ])
-    .provider('$compile', ['$provide', $CompileProvider]);
-}
-
-function compileWith(register: ($cp: $CompileProvider) => void): CompileService {
-  const appModule = createModule('app', ['ng']).config([
-    '$compileProvider',
-    ($cp: $CompileProvider) => {
-      register($cp);
-    },
-  ]);
-  return createInjector([appModule]).get('$compile');
+  bootstrapNgModule({ exceptionHandler: handler });
+  return { handler, build: compileWith };
 }
 
 function ddoFactory(returnValue: DirectiveFactoryReturn): DirectiveFactory {
@@ -111,7 +61,7 @@ function ddoFactory(returnValue: DirectiveFactoryReturn): DirectiveFactory {
 
 describe('multi-slot routing — tag-name selector match (FS §2.3)', () => {
   beforeEach(() => {
-    bootstrapNoopNgModule();
+    bootstrapNgModule();
   });
 
   it('captures each declared slot into its own bucket', () => {
@@ -344,7 +294,7 @@ describe('multi-slot routing — undeclared slot name (FS §2.9)', () => {
 
 describe('multi-slot routing — default slot for unmatched children (FS §2.3)', () => {
   beforeEach(() => {
-    bootstrapNoopNgModule();
+    bootstrapNgModule();
   });
 
   it('loose text, unmatched element tags, and comments all go to the default slot in document order', () => {
@@ -449,7 +399,7 @@ describe('multi-slot routing — default slot for unmatched children (FS §2.3)'
 
 describe('multi-slot routing — multi-clone of named slots (FS §2.7)', () => {
   beforeEach(() => {
-    bootstrapNoopNgModule();
+    bootstrapNgModule();
   });
 
   it('two sequential $transclude(...) calls on the same named slot produce independent clones + scopes', () => {
@@ -497,7 +447,7 @@ describe('multi-slot routing — multi-clone of named slots (FS §2.7)', () => {
 
 describe('multi-slot routing — $$ngBoundTransclude stash (FS §2.6 prep)', () => {
   beforeEach(() => {
-    bootstrapNoopNgModule();
+    bootstrapNgModule();
   });
 
   it('multi-slot host stashes { kind: "slots", declaredSlots: <slot-map> }', () => {

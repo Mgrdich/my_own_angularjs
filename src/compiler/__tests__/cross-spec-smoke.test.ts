@@ -19,33 +19,13 @@ import { $CompileProvider } from '@compiler/compile-provider';
 import { Scope } from '@core/index';
 import { ngModule } from '@core/ng-module';
 import { createInjector } from '@di/injector';
-import { createModule, resetRegistry } from '@di/module';
-import { $FilterProvider } from '@filter/filter-provider';
-import { $InterpolateProvider } from '@interpolate/interpolate-provider';
+import { createModule } from '@di/module';
 import { parse } from '@parser/index';
 import { sanitize } from '@sanitize/sanitize';
 import { sce } from '@sce/sce';
-import { $SceDelegateProvider } from '@sce/sce-delegate-provider';
-import { $SceProvider } from '@sce/sce-provider';
-import { createTemplateCache } from '@template/template-cache';
-import { createTemplateRequest } from '@template/template-request';
-import type { TemplateCacheService, TemplateRequestFn } from '@template/template-types';
+import type { TemplateCacheService } from '@template/template-types';
 
-function bootstrapNgModule(): void {
-  resetRegistry();
-  createModule('ng', [])
-    .factory('$exceptionHandler', [() => () => undefined])
-    .provider('$sceDelegate', $SceDelegateProvider)
-    .provider('$sce', $SceProvider)
-    .provider('$interpolate', $InterpolateProvider)
-    .provider('$filter', ['$provide', $FilterProvider])
-    .factory('$templateCache', [() => createTemplateCache()])
-    .factory('$templateRequest', [
-      '$templateCache',
-      (cache: TemplateCacheService): TemplateRequestFn => createTemplateRequest({ cache }),
-    ])
-    .provider('$compile', ['$provide', $CompileProvider]);
-}
+import { bootstrapNgModule } from './test-helpers';
 
 describe('cross-spec smoke (Slice 12 final verification)', () => {
   it('Scope.create() (spec 002) — digest runs without error', () => {
@@ -130,19 +110,7 @@ describe('cross-spec smoke (Slice 12 final verification)', () => {
     // through `<div ng-transclude>` so an `{{outer.title}}`
     // interpolation in the projected DOM resolves against the OUTER
     // scope.
-    resetRegistry();
-    createModule('ng', [])
-      .factory('$exceptionHandler', [() => () => undefined])
-      .provider('$sceDelegate', $SceDelegateProvider)
-      .provider('$sce', $SceProvider)
-      .provider('$interpolate', $InterpolateProvider)
-      .provider('$filter', ['$provide', $FilterProvider])
-      .factory('$templateCache', [() => createTemplateCache()])
-      .factory('$templateRequest', [
-        '$templateCache',
-        (cache: TemplateCacheService): TemplateRequestFn => createTemplateRequest({ cache }),
-      ])
-      .provider('$compile', ['$provide', $CompileProvider]);
+    bootstrapNgModule();
 
     const appModule = createModule('app', ['ng']).config([
       '$compileProvider',

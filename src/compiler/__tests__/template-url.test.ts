@@ -46,13 +46,9 @@ import { destroyElementScope } from '@compiler/cleanup';
 import { Scope } from '@core/index';
 import { createInjector } from '@di/injector';
 import { createModule, resetRegistry } from '@di/module';
-import { $FilterProvider } from '@filter/filter-provider';
-import { $InterpolateProvider } from '@interpolate/interpolate-provider';
-import { $SceDelegateProvider } from '@sce/sce-delegate-provider';
-import { $SceProvider } from '@sce/sce-provider';
-import { createTemplateCache } from '@template/template-cache';
-import { createTemplateRequest } from '@template/template-request';
-import type { TemplateCacheService, TemplateFetcher, TemplateRequestFn } from '@template/template-types';
+import type { TemplateCacheService, TemplateFetcher } from '@template/template-types';
+
+import { bootstrapNgModule } from './test-helpers';
 
 /**
  * Flush microtasks until the deferred-template-queue chain (drain
@@ -64,28 +60,6 @@ async function flushMicrotasks(): Promise<void> {
   await Promise.resolve();
   await Promise.resolve();
   await Promise.resolve();
-}
-
-/**
- * Build a fresh `ng` module with the template-cache + template-request
- * factories. Tests that need a mock fetcher override `$templateRequest`
- * via a follow-up `.factory` call before injecting.
- */
-function bootstrapNgModule(opts?: { fetcher?: TemplateFetcher; exceptionHandler?: (...args: unknown[]) => void }) {
-  resetRegistry();
-  const handler = opts?.exceptionHandler ?? ((): void => undefined);
-  createModule('ng', [])
-    .factory('$exceptionHandler', [() => handler])
-    .provider('$sceDelegate', $SceDelegateProvider)
-    .provider('$sce', $SceProvider)
-    .provider('$interpolate', $InterpolateProvider)
-    .provider('$filter', ['$provide', $FilterProvider])
-    .factory('$templateCache', [() => createTemplateCache()])
-    .factory('$templateRequest', [
-      '$templateCache',
-      (cache: TemplateCacheService): TemplateRequestFn => createTemplateRequest({ cache, fetcher: opts?.fetcher }),
-    ])
-    .provider('$compile', ['$provide', $CompileProvider]);
 }
 
 function compileWith(register: ($cp: $CompileProvider) => void): {

@@ -42,39 +42,8 @@ import { Scope } from '@core/index';
 import { ngModule } from '@core/ng-module';
 import { createInjector } from '@di/injector';
 import { createModule, resetRegistry } from '@di/module';
-import { $FilterProvider } from '@filter/filter-provider';
-import { $InterpolateProvider } from '@interpolate/interpolate-provider';
-import { $SceDelegateProvider } from '@sce/sce-delegate-provider';
-import { $SceProvider } from '@sce/sce-provider';
-import { createTemplateCache } from '@template/template-cache';
-import { createTemplateRequest } from '@template/template-request';
-import type { TemplateCacheService, TemplateRequestFn } from '@template/template-types';
 
-function bootstrapNgModule(): void {
-  resetRegistry();
-  createModule('ng', [])
-    .factory('$exceptionHandler', [() => () => undefined])
-    .provider('$sceDelegate', $SceDelegateProvider)
-    .provider('$sce', $SceProvider)
-    .provider('$interpolate', $InterpolateProvider)
-    .provider('$filter', ['$provide', $FilterProvider])
-    .factory('$templateCache', [() => createTemplateCache()])
-    .factory('$templateRequest', [
-      '$templateCache',
-      (cache: TemplateCacheService): TemplateRequestFn => createTemplateRequest({ cache }),
-    ])
-    .provider('$compile', ['$provide', $CompileProvider]);
-}
-
-function compileWith(register: ($cp: $CompileProvider) => void): CompileService {
-  const appModule = createModule('app', ['ng']).config([
-    '$compileProvider',
-    ($cp: $CompileProvider) => {
-      register($cp);
-    },
-  ]);
-  return createInjector([appModule]).get('$compile');
-}
+import { bootstrapNgModule, compileWith } from './test-helpers';
 
 function ddoFactory(returnValue: DirectiveFactoryReturn): DirectiveFactory {
   return [() => returnValue] as DirectiveFactory;
@@ -90,19 +59,7 @@ interface SpyHarness {
 
 function buildSpyHarness(): SpyHarness {
   const handler = vi.fn<(...args: unknown[]) => void>();
-  resetRegistry();
-  createModule('ng', [])
-    .factory('$exceptionHandler', [() => handler])
-    .provider('$sceDelegate', $SceDelegateProvider)
-    .provider('$sce', $SceProvider)
-    .provider('$interpolate', $InterpolateProvider)
-    .provider('$filter', ['$provide', $FilterProvider])
-    .factory('$templateCache', [() => createTemplateCache()])
-    .factory('$templateRequest', [
-      '$templateCache',
-      (cache: TemplateCacheService): TemplateRequestFn => createTemplateRequest({ cache }),
-    ])
-    .provider('$compile', ['$provide', $CompileProvider]);
+  bootstrapNgModule({ exceptionHandler: handler });
 
   let registered: (($cp: $CompileProvider) => void) | null = null;
   return {
@@ -444,19 +401,7 @@ describe('inline template install — transclude wrapper pattern (FS §2.9)', ()
     // the structural integration only: the template installs, the
     // wrapper structure is present, and the consumer's `<p>` is
     // projected into the `<div ng-transclude>` marker.
-    resetRegistry();
-    createModule('ng', [])
-      .factory('$exceptionHandler', [() => () => undefined])
-      .provider('$sceDelegate', $SceDelegateProvider)
-      .provider('$sce', $SceProvider)
-      .provider('$interpolate', $InterpolateProvider)
-      .provider('$filter', ['$provide', $FilterProvider])
-      .factory('$templateCache', [() => createTemplateCache()])
-      .factory('$templateRequest', [
-        '$templateCache',
-        (cache: TemplateCacheService): TemplateRequestFn => createTemplateRequest({ cache }),
-      ])
-      .provider('$compile', ['$provide', $CompileProvider]);
+    bootstrapNgModule();
 
     const appModule = createModule('app', ['ng']).config([
       '$compileProvider',
@@ -503,19 +448,7 @@ describe('inline template install — transclude wrapper pattern (FS §2.9)', ()
     // against the OUTER scope — so a value set on the outer scope (NOT
     // on the directive's `scope: true` child) is what surfaces in the
     // attribute observer.
-    resetRegistry();
-    createModule('ng', [])
-      .factory('$exceptionHandler', [() => () => undefined])
-      .provider('$sceDelegate', $SceDelegateProvider)
-      .provider('$sce', $SceProvider)
-      .provider('$interpolate', $InterpolateProvider)
-      .provider('$filter', ['$provide', $FilterProvider])
-      .factory('$templateCache', [() => createTemplateCache()])
-      .factory('$templateRequest', [
-        '$templateCache',
-        (cache: TemplateCacheService): TemplateRequestFn => createTemplateRequest({ cache }),
-      ])
-      .provider('$compile', ['$provide', $CompileProvider]);
+    bootstrapNgModule();
 
     let observed: string | undefined;
     const appModule = createModule('app', ['ng']).config([

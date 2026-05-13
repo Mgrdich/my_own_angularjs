@@ -23,50 +23,13 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import { $CompileProvider } from '@compiler/compile-provider';
-import type {
-  CompileFn,
-  CompileService,
-  DirectiveFactory,
-  DirectiveFactoryReturn,
-  LinkFn,
-} from '@compiler/directive-types';
+import type { CompileFn, DirectiveFactory, DirectiveFactoryReturn, LinkFn } from '@compiler/directive-types';
 import { Scope } from '@core/index';
 import { createInjector } from '@di/injector';
-import { createModule, resetRegistry } from '@di/module';
+import { createModule } from '@di/module';
 import { EXCEPTION_HANDLER_CAUSES, type ExceptionHandlerCause } from '@exception-handler/index';
-import { $FilterProvider } from '@filter/filter-provider';
-import { $InterpolateProvider } from '@interpolate/interpolate-provider';
-import { $SceDelegateProvider } from '@sce/sce-delegate-provider';
-import { $SceProvider } from '@sce/sce-provider';
-import { createTemplateCache } from '@template/template-cache';
-import { createTemplateRequest } from '@template/template-request';
-import type { TemplateCacheService, TemplateRequestFn } from '@template/template-types';
 
-function bootstrapNgModule(handler?: (...args: unknown[]) => void): void {
-  resetRegistry();
-  createModule('ng', [])
-    .factory('$exceptionHandler', [() => handler ?? (() => undefined)])
-    .provider('$sceDelegate', $SceDelegateProvider)
-    .provider('$sce', $SceProvider)
-    .provider('$interpolate', $InterpolateProvider)
-    .provider('$filter', ['$provide', $FilterProvider])
-    .factory('$templateCache', [() => createTemplateCache()])
-    .factory('$templateRequest', [
-      '$templateCache',
-      (cache: TemplateCacheService): TemplateRequestFn => createTemplateRequest({ cache }),
-    ])
-    .provider('$compile', ['$provide', $CompileProvider]);
-}
-
-function compileWith(register: ($cp: $CompileProvider) => void): CompileService {
-  const appModule = createModule('app', ['ng']).config([
-    '$compileProvider',
-    ($cp: $CompileProvider) => {
-      register($cp);
-    },
-  ]);
-  return createInjector([appModule]).get('$compile');
-}
+import { bootstrapNgModule, compileWith } from './test-helpers';
 
 function ddoFactory(returnValue: DirectiveFactoryReturn): DirectiveFactory {
   return [() => returnValue] as DirectiveFactory;
@@ -76,7 +39,7 @@ describe("$compile error routing — '$compile' cause token (FS §2.16)", () => 
   describe('factory invocation', () => {
     it('a throwing directive factory routes via $exceptionHandler with cause $compile and is silently dropped', () => {
       const handler = vi.fn<(...args: unknown[]) => void>();
-      bootstrapNgModule(handler);
+      bootstrapNgModule({ exceptionHandler: handler });
       const $compile = compileWith(($cp) => {
         // Bare-array factory: the inner function throws on invoke.
         $cp.directive('boomDir', [
@@ -111,7 +74,7 @@ describe("$compile error routing — '$compile' cause token (FS §2.16)", () => 
   describe('compile function', () => {
     it('a throwing compile fn routes via $exceptionHandler with cause $compile and skips the directive', () => {
       const handler = vi.fn<(...args: unknown[]) => void>();
-      bootstrapNgModule(handler);
+      bootstrapNgModule({ exceptionHandler: handler });
       const goodLink = vi.fn<LinkFn>();
       const $compile = compileWith(($cp) => {
         const badCompile: CompileFn = () => {
@@ -136,7 +99,7 @@ describe("$compile error routing — '$compile' cause token (FS §2.16)", () => 
 
     it('the walker still produces a linker after compile errors so other directives link normally', () => {
       const handler = vi.fn<(...args: unknown[]) => void>();
-      bootstrapNgModule(handler);
+      bootstrapNgModule({ exceptionHandler: handler });
       const goodLink = vi.fn<LinkFn>();
       const $compile = compileWith(($cp) => {
         $cp.directive(
@@ -165,7 +128,7 @@ describe("$compile error routing — '$compile' cause token (FS §2.16)", () => 
   describe('pre-link function', () => {
     it('a throwing pre-link fn routes via $exceptionHandler; subsequent pre-links and child traversal still run', () => {
       const handler = vi.fn<(...args: unknown[]) => void>();
-      bootstrapNgModule(handler);
+      bootstrapNgModule({ exceptionHandler: handler });
       const goodPre = vi.fn<LinkFn>();
       const childPost = vi.fn<LinkFn>();
       const $compile = compileWith(($cp) => {
@@ -209,7 +172,7 @@ describe("$compile error routing — '$compile' cause token (FS §2.16)", () => 
   describe('post-link function', () => {
     it('a throwing post-link fn routes via $exceptionHandler; subsequent post-links still run', () => {
       const handler = vi.fn<(...args: unknown[]) => void>();
-      bootstrapNgModule(handler);
+      bootstrapNgModule({ exceptionHandler: handler });
       const goodPost = vi.fn<LinkFn>();
       const $compile = compileWith(($cp) => {
         $cp.directive(
@@ -241,7 +204,7 @@ describe("$compile error routing — '$compile' cause token (FS §2.16)", () => 
 
     it('a throwing CHILD post-link does not abort the parent post-link', () => {
       const handler = vi.fn<(...args: unknown[]) => void>();
-      bootstrapNgModule(handler);
+      bootstrapNgModule({ exceptionHandler: handler });
       const parentPost = vi.fn<LinkFn>();
       const $compile = compileWith(($cp) => {
         $cp.directive('parentDir', ddoFactory({ link: parentPost }));
@@ -270,7 +233,7 @@ describe("$compile error routing — '$compile' cause token (FS §2.16)", () => 
 
     it('a throwing post-link on one node does not prevent sibling-node post-links', () => {
       const handler = vi.fn<(...args: unknown[]) => void>();
-      bootstrapNgModule(handler);
+      bootstrapNgModule({ exceptionHandler: handler });
       const siblingPost = vi.fn<LinkFn>();
       const $compile = compileWith(($cp) => {
         $cp.directive(
@@ -307,7 +270,7 @@ describe("$compile error routing — '$compile' cause token (FS §2.16)", () => 
       // observer iteration runs synchronously and is wrapped in
       // try/catch routing through invokeExceptionHandler('$compile').
       const handler = vi.fn<(...args: unknown[]) => void>();
-      bootstrapNgModule(handler);
+      bootstrapNgModule({ exceptionHandler: handler });
       const goodObserver = vi.fn<(value: string | undefined) => void>();
       const $compile = compileWith(($cp) => {
         $cp.directive(
@@ -350,8 +313,10 @@ describe("$compile error routing — '$compile' cause token (FS §2.16)", () => 
       // error is logged via console.error rather than propagating.
       const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
       try {
-        bootstrapNgModule(() => {
-          throw new Error('handler boom');
+        bootstrapNgModule({
+          exceptionHandler: () => {
+            throw new Error('handler boom');
+          },
         });
         const $compile = compileWith(($cp) => {
           $cp.directive(

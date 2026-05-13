@@ -24,45 +24,11 @@
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { $CompileProvider } from '@compiler/compile-provider';
 import { addElementCleanup, destroyElementScope, getElementScope, setElementScope } from '@compiler/cleanup';
-import type { CompileService, DirectiveFactory, DirectiveFactoryReturn } from '@compiler/directive-types';
+import type { DirectiveFactory, DirectiveFactoryReturn } from '@compiler/directive-types';
 import { Scope } from '@core/index';
-import { createInjector } from '@di/injector';
-import { createModule, resetRegistry } from '@di/module';
-import { $FilterProvider } from '@filter/filter-provider';
-import { $InterpolateProvider } from '@interpolate/interpolate-provider';
-import { $SceDelegateProvider } from '@sce/sce-delegate-provider';
-import { $SceProvider } from '@sce/sce-provider';
-import { createTemplateCache } from '@template/template-cache';
-import { createTemplateRequest } from '@template/template-request';
-import type { TemplateCacheService, TemplateRequestFn } from '@template/template-types';
 
-function bootstrapNgModule(): void {
-  resetRegistry();
-  createModule('ng', [])
-    .factory('$exceptionHandler', [() => () => undefined])
-    .provider('$sceDelegate', $SceDelegateProvider)
-    .provider('$sce', $SceProvider)
-    .provider('$interpolate', $InterpolateProvider)
-    .provider('$filter', ['$provide', $FilterProvider])
-    .factory('$templateCache', [() => createTemplateCache()])
-    .factory('$templateRequest', [
-      '$templateCache',
-      (cache: TemplateCacheService): TemplateRequestFn => createTemplateRequest({ cache }),
-    ])
-    .provider('$compile', ['$provide', $CompileProvider]);
-}
-
-function compileWith(register: ($cp: $CompileProvider) => void): CompileService {
-  const appModule = createModule('app', ['ng']).config([
-    '$compileProvider',
-    ($cp: $CompileProvider) => {
-      register($cp);
-    },
-  ]);
-  return createInjector([appModule]).get('$compile');
-}
+import { bootstrapNgModule, compileWith } from './test-helpers';
 
 function ddoFactory(returnValue: DirectiveFactoryReturn): DirectiveFactory {
   return [() => returnValue] as DirectiveFactory;
@@ -318,35 +284,18 @@ describe('scope: true — child-scope creation (FS §2.12)', () => {
     // The Slice 12 README documents this as the AngularJS-canonical
     // "log and continue" contract for compile-time errors.
     const handlerSpy = vi.fn<(...args: unknown[]) => void>();
-    resetRegistry();
-    createModule('ng', [])
-      .factory('$exceptionHandler', [() => handlerSpy])
-      .provider('$sceDelegate', $SceDelegateProvider)
-      .provider('$sce', $SceProvider)
-      .provider('$interpolate', $InterpolateProvider)
-      .provider('$filter', ['$provide', $FilterProvider])
-      .factory('$templateCache', [() => createTemplateCache()])
-      .factory('$templateRequest', [
-        '$templateCache',
-        (cache: TemplateCacheService): TemplateRequestFn => createTemplateRequest({ cache }),
-      ])
-      .provider('$compile', ['$provide', $CompileProvider]);
-
-    const appModule = createModule('app', ['ng']).config([
-      '$compileProvider',
-      ($cp: $CompileProvider) => {
-        $cp.directive(
-          'isolateDir',
-          ddoFactory({
-            scope: { foo: '=' } as unknown as Record<string, string>,
-            link: () => {
-              /* noop */
-            },
-          }),
-        );
-      },
-    ]);
-    const $compile = createInjector([appModule]).get('$compile');
+    bootstrapNgModule({ exceptionHandler: handlerSpy });
+    const $compile = compileWith(($cp) => {
+      $cp.directive(
+        'isolateDir',
+        ddoFactory({
+          scope: { foo: '=' } as unknown as Record<string, string>,
+          link: () => {
+            /* noop */
+          },
+        }),
+      );
+    });
 
     const node = document.createElement('div');
     node.setAttribute('isolate-dir', '');
