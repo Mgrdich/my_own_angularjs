@@ -242,6 +242,77 @@ $compileProvider.directive('myCard', () => ({
 alias resolves through the same `IDENT_RE` shape rule as the
 `'Name as alias'` suffix.
 
+### Who creates the scope — the compiler, not `$controller`
+
+A common mental-model slip is to think the controller "owns" a scope it
+creates and keeps. The direction is the opposite: **the compiler creates
+the scope and hands it *into* `$controller`.** `$controller` never calls
+`Scope.create` or `parent.$new()` — it only ever *receives* a scope
+through `locals.$scope`.
+
+What triggers scope creation is the `scope` field on a directive's DDO,
+read by the compiler during its tree walk:
+
+| DDO `scope` value | What the compiler does |
+| --- | --- |
+| `false` (default) | No new scope — the element keeps the scope it was linked against. |
+| `true` | One child scope per element via `parent.$new()` — prototypally inherits from the parent. |
+| `{ … }` (object) | **Rejected** with `IsolateScopeNotSupportedError` (isolate scope lands in a later spec). |
+
+The full per-element flow, from DDO declaration to constructed instance:
+
+```
+<div my-directive>          DDO: { scope: true, controller: 'Foo', controllerAs: 'vm' }
+       │
+       ▼
+  $compile walks the element
+       │
+       ├─ sees  scope: true ───────────►  parent.$new()        ◄── THE NEW SCOPE
+       │                                       │                   IS BORN HERE
+       │                            stashed on element.$$ngScope
+       │                                       │
+       ├─ runControllerSeam ───────────►  $controller('Foo', {
+       │   (after $transclude setup,            $scope:     <that child scope>,
+       │    before this directive's             $element,   $attrs,  $transclude
+       │    own pre-link)                     })
+       │                                       │
+       │                            Object.create(proto) + injector.invoke + return-replace
+       │                                       │
+       │                            controller body runs  ── EXACTLY ONCE ──
+       │                                       │
+       │                            controllerAs ⇒  scope['vm'] = instance
+       ▼
+  pre-link / post-link        (the controller instance already exists)
+```
+
+Ownership and lifetime run the other way round from the slip above —
+**the scope outlives the controller instance**, not vice-versa:
+
+```
+  COMPILER ──creates──►  child scope  ──persists──►  digest after digest …
+                              │
+                              │  passed in once as locals.$scope
+                              ▼
+                         $controller  ──invokes once──►  controller instance
+                              │                                │
+              never creates a scope                attached to the scope
+              (only receives one)                  via controllerAs, then idle
+```
+
+The controller body is a constructor: it runs **once**, at instantiation,
+and is never re-invoked on digest. The scope it was handed keeps running
+digests long after. Cleanup is manual — a structural directive that
+removes the element MUST call `destroyElementScope(element)` (see the
+`@compiler` cleanup contract), or the child scope leaks: it stays wired
+into the parent's watcher tree forever.
+
+There is no `ng-controller` built-in directive yet (see
+[Intentionally-deferred items](#intentionally-deferred-items)). When it
+lands it will be a *thin* directive — `{ restrict: 'A', scope: true,
+controller: '@' }` — and the **compiler's existing machinery above** does
+all the real work. The directive is a declaration; the compiler is the
+engine.
+
 ### `controllerAs` without `controller` is REJECTED AT REGISTRATION
 
 The pair must always travel together. A directive that declares
