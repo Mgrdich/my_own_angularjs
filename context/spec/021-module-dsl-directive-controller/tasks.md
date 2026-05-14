@@ -1,7 +1,7 @@
 # Tasks: Module DSL — `.directive` and `.controller`
 
 - **Specification:** `context/spec/021-module-dsl-directive-controller/`
-- **Status:** Draft
+- **Status:** Completed
 
 ---
 
@@ -22,12 +22,12 @@
   - [x] Add an integration test for registration ordering: `.directive` / `.controller` calls interleaved with explicit `.config(...)` blocks on the same module execute in source order (the `$$configBlocks` push order). **[Agent: vitest-testing]**
   - [x] Run `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm build`. All prior tests pass unchanged. **[Agent: rollup-build]**
 
-- [ ] **Slice 3: Documentation, AngularJS Parity Port, Final Regression Check**
-  - [ ] Port relevant cases from `angular/angular.js/test/loaderSpec.js` (the `angular.module` DSL suite) into a parity test file under `src/di/__tests__/` covering `.directive` and `.controller` registration. Skip `.component` (deferred to the "Components & isolate scope" roadmap item) and `.animation` (Phase 4) with documented `it.skip(...)` calls naming the deferring roadmap item. **[Agent: vitest-testing]**
-  - [ ] Update `CLAUDE.md`: note the two new module-DSL methods (`.directive`, `.controller`) alongside the existing `.filter` mention; add a "Non-obvious invariants" bullet covering the config-block-forwarding mechanism, the `import type`-only module-boundary preservation, and the `.directive` single-name widening vs. `.controller`/bulk-map non-widening asymmetry. **[Agent: typedoc-docs]**
-  - [ ] Update `context/product/architecture.md`: in the "Module DSL Growth & Shared Registries" table, update the "Lands in" cells for the `.controller` and `.directive` rows to cite spec 021. **[Agent: typedoc-docs]**
-  - [ ] TSDoc audit on the two new methods (`Module.directive` / `Module.controller` runtime methods + the `TypedModule` overloads) — each carries at least one runnable `@example`, matching the `.filter` JSDoc depth. **[Agent: typedoc-docs]**
-  - [ ] Final regression check: `pnpm lint`, `pnpm format:check`, `pnpm typecheck`, `pnpm test`, `pnpm build`. All five gates pass. The full prior-spec test suite (002–020) passes unchanged. New observable: `createModule(...).directive(...)` and `.controller(...)` are chainable and register through their providers. **[Agent: rollup-build]**
+- [x] **Slice 3: Documentation, AngularJS Parity Port, Final Regression Check**
+  - [x] Port relevant cases from `angular/angular.js/test/loaderSpec.js` (the `angular.module` DSL suite) into a parity test file under `src/di/__tests__/` covering `.directive` and `.controller` registration. Skip `.component` (deferred to the "Components & isolate scope" roadmap item) and `.animation` (Phase 4) with documented `it.skip(...)` calls naming the deferring roadmap item. **[Agent: vitest-testing]**
+  - [x] Update `CLAUDE.md`: note the two new module-DSL methods (`.directive`, `.controller`) alongside the existing `.filter` mention; add a "Non-obvious invariants" bullet covering the config-block-forwarding mechanism, the `import type`-only module-boundary preservation, and the `.directive` single-name widening vs. `.controller`/bulk-map non-widening asymmetry. **[Agent: typedoc-docs]**
+  - [x] Update `context/product/architecture.md`: in the "Module DSL Growth & Shared Registries" table, update the "Lands in" cells for the `.controller` and `.directive` rows to cite spec 021. **[Agent: typedoc-docs]**
+  - [x] TSDoc audit on the two new methods (`Module.directive` / `Module.controller` runtime methods + the `TypedModule` overloads) — each carries at least one runnable `@example`, matching the `.filter` JSDoc depth. **[Agent: typedoc-docs]**
+  - [x] Final regression check: `pnpm lint`, `pnpm format:check`, `pnpm typecheck`, `pnpm test`, `pnpm build`. All five gates pass. The full prior-spec test suite (002–020) passes unchanged. New observable: `createModule(...).directive(...)` and `.controller(...)` are chainable and register through their providers. **[Agent: rollup-build]**
 
 ---
 

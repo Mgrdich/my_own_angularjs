@@ -1,7 +1,7 @@
 # Functional Specification: Module DSL — `.directive` and `.controller`
 
 - **Roadmap Item:** Phase 2 — Expressions, Filters & DOM > Directives & DOM Compilation (Module DSL `.directive` / `.component` / `.controller` — `.component` carved out to a later spec)
-- **Status:** Draft
+- **Status:** Completed
 - **Author:** Mgrdich
 
 ---

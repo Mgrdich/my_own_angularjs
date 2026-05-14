@@ -58,7 +58,7 @@ describe('module.directive — DSL shorthand (spec 021 Slice 1)', () => {
       expect(linked).toBe(true);
     });
 
-    it('produces the identical observable outcome to a config([\'$compileProvider\', …]) block', () => {
+    it("produces the identical observable outcome to a config(['$compileProvider', …]) block", () => {
       const order: string[] = [];
 
       // DSL path.
@@ -127,7 +127,7 @@ describe('module.directive — DSL shorthand (spec 021 Slice 1)', () => {
   });
 
   describe('accumulation parity (FS §2.1)', () => {
-    it('two .directive(\'foo\', …) registrations BOTH run on a matching element', () => {
+    it("two .directive('foo', …) registrations BOTH run on a matching element", () => {
       const order: string[] = [];
       const appModule = createModule('app', ['ng'])
         .directive(
@@ -201,7 +201,7 @@ describe('module.directive — DSL shorthand (spec 021 Slice 1)', () => {
     });
   });
 
-  describe('missing \'ng\' dependency', () => {
+  describe("missing 'ng' dependency", () => {
     it('fails at createInjector with Unknown provider: $compileProvider', () => {
       // No `requires: ['ng']` — `$compileProvider` is unreachable, so
       // the `.directive` config block cannot resolve it. Mirrors the

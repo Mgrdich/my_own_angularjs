@@ -153,7 +153,7 @@ describe('module.controller — DSL shorthand (spec 021 Slice 2)', () => {
   });
 
   describe('last-wins parity (FS §2.2)', () => {
-    it('two .controller(\'X\', …) registrations keep only the most recent', () => {
+    it("two .controller('X', …) registrations keep only the most recent", () => {
       const appModule = createModule('app', ['ng'])
         .controller('X', [
           '$scope',
@@ -299,7 +299,6 @@ describe('module.controller — DSL shorthand (spec 021 Slice 2)', () => {
       expect(earlyVisible).toBe(true);
     });
   });
-
 
   describe('TypeScript compile-time signature (type-level assertions)', () => {
     it('.controller(name, fn) returns the module type unchanged — no key added to the registry', () => {
