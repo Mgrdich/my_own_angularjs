@@ -24,11 +24,7 @@ import {
   MalformedControllerAliasError,
   UnknownControllerError,
 } from '@controller/controller-errors';
-import type {
-  ControllerInvokable,
-  ControllerLocals,
-  CreateControllerArgs,
-} from '@controller/controller-types';
+import type { ControllerInvokable, ControllerLocals, CreateControllerArgs } from '@controller/controller-types';
 
 import type { Injector, Invokable } from '@di/di-types';
 
@@ -172,10 +168,9 @@ describe('createController — inline-function path', () => {
     }
     const { $controller } = makeHarness({ services: [['$svc', svc]] });
 
-    const instance = $controller(
-      ['$scope', '$svc', MyCtrl] as ControllerInvokable,
-      { $scope: localScope as unknown as ControllerLocals['$scope'] },
-    ) as { s: unknown; svc: unknown };
+    const instance = $controller(['$scope', '$svc', MyCtrl] as ControllerInvokable, {
+      $scope: localScope as unknown as ControllerLocals['$scope'],
+    }) as { s: unknown; svc: unknown };
 
     expect(instance.s).toBe(localScope);
     expect(instance.svc).toBe(svc);
@@ -191,10 +186,9 @@ describe('createController — locals override', () => {
     }
     const { $controller } = makeHarness({ services: [['$svc', realSvc]] });
 
-    const instance = $controller(
-      ['$svc', MyCtrl] as ControllerInvokable,
-      { $svc: fakeSvc } as ControllerLocals,
-    ) as { svc: unknown };
+    const instance = $controller(['$svc', MyCtrl] as ControllerInvokable, { $svc: fakeSvc } as ControllerLocals) as {
+      svc: unknown;
+    };
 
     expect(instance.svc).toBe(fakeSvc);
     expect(instance.svc).not.toBe(realSvc);

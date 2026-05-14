@@ -233,9 +233,7 @@ describe('$ControllerProvider — invalid factory', () => {
   const provider = new $ControllerProvider(makeFakeProvide(configPhase));
 
   it('throws InvalidControllerFactoryError when factory is null', () => {
-    expect(() => provider.register('X', null as unknown as ControllerInvokable)).toThrow(
-      InvalidControllerFactoryError,
-    );
+    expect(() => provider.register('X', null as unknown as ControllerInvokable)).toThrow(InvalidControllerFactoryError);
   });
 
   it('throws InvalidControllerFactoryError when factory is undefined (missing arg)', () => {
@@ -244,9 +242,7 @@ describe('$ControllerProvider — invalid factory', () => {
   });
 
   it('throws InvalidControllerFactoryError when factory is a number', () => {
-    expect(() => provider.register('X', 42 as unknown as ControllerInvokable)).toThrow(
-      InvalidControllerFactoryError,
-    );
+    expect(() => provider.register('X', 42 as unknown as ControllerInvokable)).toThrow(InvalidControllerFactoryError);
   });
 
   it('throws InvalidControllerFactoryError when factory is an empty array', () => {
@@ -260,14 +256,14 @@ describe('$ControllerProvider — invalid factory', () => {
   });
 
   it('throws InvalidControllerFactoryError when array trailing element is a number', () => {
-    expect(() =>
-      provider.register('X', ['$scope', 42] as unknown as ControllerInvokable),
-    ).toThrow(InvalidControllerFactoryError);
+    expect(() => provider.register('X', ['$scope', 42] as unknown as ControllerInvokable)).toThrow(
+      InvalidControllerFactoryError,
+    );
   });
 });
 
 describe('$ControllerProvider — $get factory shape', () => {
-  it('exposes a `[\'$injector\', fn]` invokable', () => {
+  it("exposes a `['$injector', fn]` invokable", () => {
     const provider = new $ControllerProvider(makeFakeProvide(configPhase));
 
     expect(Array.isArray(provider.$get)).toBe(true);

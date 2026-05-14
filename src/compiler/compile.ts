@@ -202,13 +202,7 @@ function isScopeDestroyed(scope: Scope | undefined): boolean {
  * ```
  */
 export function createCompile(options: CompileOptions): CompileService {
-  const {
-    getDirectivesByName,
-    controller: $controller,
-    interpolate,
-    exceptionHandler,
-    templateRequest,
-  } = options;
+  const { getDirectivesByName, controller: $controller, interpolate, exceptionHandler, templateRequest } = options;
 
   /**
    * Per-element controller seam (spec 020 Slice 4). Runs ONCE per

@@ -44,10 +44,7 @@ import type {
   LinkFn,
   TranscludeFn,
 } from '@compiler/directive-types';
-import {
-  ControllerAsWithoutControllerError,
-  UnknownControllerError,
-} from '@controller/controller-errors';
+import { ControllerAsWithoutControllerError, UnknownControllerError } from '@controller/controller-errors';
 import type { $ControllerProvider } from '@controller/controller-provider';
 import type { ControllerInvokable } from '@controller/controller-types';
 import { Scope } from '@core/index';
@@ -121,9 +118,7 @@ describe('controller seam — registered controller fires once per matched eleme
     // Each call should run against an `Object.create(ctor.prototype)`
     // instance, so the `this` value's prototype is the ctor's prototype.
     const thisArg = ctorFn.mock.contexts[0];
-    expect(Object.getPrototypeOf(thisArg as object)).toBe(
-      (ctorFn as unknown as { prototype: object }).prototype,
-    );
+    expect(Object.getPrototypeOf(thisArg as object)).toBe((ctorFn as unknown as { prototype: object }).prototype);
   });
 });
 
@@ -339,14 +334,8 @@ describe('controller seam — two directives on same element (FS §2.4 #5)', () 
     node.setAttribute('dir-b', '');
 
     const { $compile } = buildHarness((cp) => {
-      cp.directive(
-        'dirA',
-        ddoFactory({ restrict: 'A', controller: [ctorA] as unknown as ControllerInvokable }),
-      );
-      cp.directive(
-        'dirB',
-        ddoFactory({ restrict: 'A', controller: [ctorB] as unknown as ControllerInvokable }),
-      );
+      cp.directive('dirA', ddoFactory({ restrict: 'A', controller: [ctorA] as unknown as ControllerInvokable }));
+      cp.directive('dirB', ddoFactory({ restrict: 'A', controller: [ctorB] as unknown as ControllerInvokable }));
     });
 
     $compile(node)(Scope.create());
@@ -572,9 +561,7 @@ describe('controller seam — constructor returning an object replaces the proto
     const vm = (scope as unknown as Record<string, unknown>).vm;
     expect(vm).toBe(replacement);
     // The returned object's prototype is NOT the constructor's prototype.
-    expect(Object.getPrototypeOf(vm as object)).not.toBe(
-      (Ctor as unknown as { prototype: object }).prototype,
-    );
+    expect(Object.getPrototypeOf(vm as object)).not.toBe((Ctor as unknown as { prototype: object }).prototype);
   });
 });
 

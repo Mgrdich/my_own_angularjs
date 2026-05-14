@@ -1,7 +1,7 @@
 # Functional Specification: Controllers and the `$controller` Service
 
 - **Roadmap Item:** Phase 2 — Expressions, Filters & DOM > Directives & DOM Compilation (Controllers `$controller`)
-- **Status:** Draft
+- **Status:** Completed
 - **Author:** Mgrdich
 
 ---
@@ -39,63 +39,63 @@ module.config(['$controllerProvider', $cp =>
 
 - **As a developer**, I want to register a named controller during the configuration phase so I can refer to it by name later.
   - **Acceptance Criteria:**
-    - [ ] Calling `$controllerProvider.register('MyCtrl', function () {})` inside a `config(...)` block succeeds.
-    - [ ] Calling `$controllerProvider.register('MyCtrl', ['$scope', function ($scope) {}])` accepts the array-style annotation.
-    - [ ] Calling `$controllerProvider.register({ FooCtrl: fnA, BarCtrl: fnB })` registers both controllers in a single call.
-    - [ ] Calling `$controllerProvider.register(...)` after the configuration phase has ended throws a clear, human-readable error explaining that controller registration is configuration-phase-only — mirroring the `$provide` family's wording.
-    - [ ] Registering two controllers under the same name keeps only the most recently registered one (last-wins, matching how services / filters behave).
+    - [x] Calling `$controllerProvider.register('MyCtrl', function () {})` inside a `config(...)` block succeeds.
+    - [x] Calling `$controllerProvider.register('MyCtrl', ['$scope', function ($scope) {}])` accepts the array-style annotation.
+    - [x] Calling `$controllerProvider.register({ FooCtrl: fnA, BarCtrl: fnB })` registers both controllers in a single call.
+    - [x] Calling `$controllerProvider.register(...)` after the configuration phase has ended throws a clear, human-readable error explaining that controller registration is configuration-phase-only — mirroring the `$provide` family's wording.
+    - [x] Registering two controllers under the same name keeps only the most recently registered one (last-wins, matching how services / filters behave).
 
 - **As a developer**, I want to ask whether a controller name is registered.
   - **Acceptance Criteria:**
-    - [ ] `$controllerProvider.has('MyCtrl')` returns `true` after registration and `false` otherwise.
+    - [x] `$controllerProvider.has('MyCtrl')` returns `true` after registration and `false` otherwise.
 
 ### 2.2 Controller instantiation
 
 - **As a developer**, I want to ask the framework to instantiate a registered controller by name and receive a fully wired instance.
   - **Acceptance Criteria:**
-    - [ ] `$controller('MyCtrl', { $scope: someScope })` returns a new instance produced by invoking the registered constructor with the scope plus any other declared dependencies.
-    - [ ] Each call to `$controller('MyCtrl', ...)` returns a distinct, independent instance.
-    - [ ] Asking for an unregistered name throws a clear, human-readable error that names the missing controller.
+    - [x] `$controller('MyCtrl', { $scope: someScope })` returns a new instance produced by invoking the registered constructor with the scope plus any other declared dependencies.
+    - [x] Each call to `$controller('MyCtrl', ...)` returns a distinct, independent instance.
+    - [x] Asking for an unregistered name throws a clear, human-readable error that names the missing controller.
 
 - **As a developer**, I want to pass an inline function in place of a name when I have no need for a registration step.
   - **Acceptance Criteria:**
-    - [ ] `$controller(function ($scope) {}, { $scope: someScope })` returns an instance produced from that function.
-    - [ ] `$controller(['$scope', function ($scope) {}], { $scope: someScope })` accepts the array-style annotation.
+    - [x] `$controller(function ($scope) {}, { $scope: someScope })` returns an instance produced from that function.
+    - [x] `$controller(['$scope', function ($scope) {}], { $scope: someScope })` accepts the array-style annotation.
 
 - **As a developer**, I want services my controller declares to be injected from the framework, and the values I pass as locals to override matching service names.
   - **Acceptance Criteria:**
-    - [ ] A controller that lists `'$scope'` and another registered service receives both — the scope from the locals I supplied and the service from the framework's registry.
-    - [ ] If a local has the same name as a registered service, the local value wins inside that controller's constructor.
+    - [x] A controller that lists `'$scope'` and another registered service receives both — the scope from the locals I supplied and the service from the framework's registry.
+    - [x] If a local has the same name as a registered service, the local value wins inside that controller's constructor.
 
 ### 2.3 "Controller as alias" syntax
 
 - **As a developer**, I want to expose the controller instance on its scope under a chosen alias so templates can read `vm.greeting` instead of polluting the scope with bare names.
   - **Acceptance Criteria:**
-    - [ ] `$controller('MyCtrl as vm', { $scope: someScope })` assigns the new instance to `someScope.vm` and returns the same instance.
-    - [ ] If no `$scope` is supplied in locals, the alias is silently ignored (no error), and the instance is still returned.
-    - [ ] A malformed alias suffix (empty alias, missing identifier after `as`, or an alias that is not a valid identifier) throws a clear, human-readable error explaining the expected `Name as alias` format.
-    - [ ] The alias suffix works equally with a registered name (`'MyCtrl as vm'`) and is supported via the directive's `controllerAs` field for inline-function controllers.
+    - [x] `$controller('MyCtrl as vm', { $scope: someScope })` assigns the new instance to `someScope.vm` and returns the same instance.
+    - [x] If no `$scope` is supplied in locals, the alias is silently ignored (no error), and the instance is still returned.
+    - [x] A malformed alias suffix (empty alias, missing identifier after `as`, or an alias that is not a valid identifier) throws a clear, human-readable error explaining the expected `Name as alias` format.
+    - [x] The alias suffix works equally with a registered name (`'MyCtrl as vm'`) and is supported via the directive's `controllerAs` field for inline-function controllers.
 
 ### 2.4 Directive integration
 
 - **As a directive author**, I want my directive's definition to declare a controller and have the framework instantiate that controller once per matched element, so I can put the directive's behavior in a dedicated place.
   - **Acceptance Criteria:**
-    - [ ] A directive whose definition includes `controller: 'MyCtrl'` causes `$controller('MyCtrl', ...)` to run once for every element the directive matches.
-    - [ ] A directive whose definition includes `controller: function ($scope, $element, $attrs) {}` receives those three values from the matched element's compile context.
-    - [ ] The controller for an element runs **before** any pre-link function on that element, and therefore before any post-link function.
-    - [ ] A directive whose definition includes both `controller` and `controllerAs: 'vm'` exposes the new instance on the controller's scope under the alias `vm`.
-    - [ ] If two directives on the same element both declare a `controller`, each runs independently against the same compile context (`$scope`, `$element`, `$attrs`); the controllers do not see one another in this slice.
-    - [ ] A directive declaring `controllerAs` without a `controller` is treated as an error with a clear, human-readable message.
+    - [x] A directive whose definition includes `controller: 'MyCtrl'` causes `$controller('MyCtrl', ...)` to run once for every element the directive matches.
+    - [x] A directive whose definition includes `controller: function ($scope, $element, $attrs) {}` receives those three values from the matched element's compile context.
+    - [x] The controller for an element runs **before** any pre-link function on that element, and therefore before any post-link function.
+    - [x] A directive whose definition includes both `controller` and `controllerAs: 'vm'` exposes the new instance on the controller's scope under the alias `vm`.
+    - [x] If two directives on the same element both declare a `controller`, each runs independently against the same compile context (`$scope`, `$element`, `$attrs`); the controllers do not see one another in this slice.
+    - [x] A directive declaring `controllerAs` without a `controller` is treated as an error with a clear, human-readable message.
 
 ### 2.5 Lifecycle and error guarantees
 
 - **As a developer**, I want predictable, framework-consistent error messages when I misuse the registration or lookup APIs.
   - **Acceptance Criteria:**
-    - [ ] `$controllerProvider.register` is reachable only during the configuration phase, mirroring the `$provide` family.
-    - [ ] `$controller` is reachable only during the run phase, after the injector finishes configuration.
-    - [ ] An unregistered-controller lookup, a malformed alias, and a `controllerAs`-without-`controller` directive each produce distinct, human-readable error messages.
-    - [ ] An exception thrown inside a controller's constructor when invoked **through the compiler** is routed through `$exceptionHandler` and the surrounding compile / link pass continues, consistent with how the compiler handles other directive-author errors today.
-    - [ ] An exception thrown inside a controller's constructor when invoked **directly** via `$controller(...)` propagates to the caller (no `$exceptionHandler` interception).
+    - [x] `$controllerProvider.register` is reachable only during the configuration phase, mirroring the `$provide` family.
+    - [x] `$controller` is reachable only during the run phase, after the injector finishes configuration.
+    - [x] An unregistered-controller lookup, a malformed alias, and a `controllerAs`-without-`controller` directive each produce distinct, human-readable error messages.
+    - [x] An exception thrown inside a controller's constructor when invoked **through the compiler** is routed through `$exceptionHandler` and the surrounding compile / link pass continues, consistent with how the compiler handles other directive-author errors today.
+    - [x] An exception thrown inside a controller's constructor when invoked **directly** via `$controller(...)` propagates to the caller (no `$exceptionHandler` interception).
 
 ---
 

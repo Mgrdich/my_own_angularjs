@@ -1,7 +1,7 @@
 # Tasks: Controllers and the `$controller` Service
 
 - **Specification:** `context/spec/020-controllers-and-controller-service/`
-- **Status:** Draft
+- **Status:** Completed
 
 ---
 
@@ -116,8 +116,8 @@
         - Existing spec-017/018/019 directive tests still pass — directives without `controller`/`controllerAs` remain unaffected. Inline-function controllers in the test suite use array-style annotation (`[fn] as ControllerInvokable`) because the project's `injector.invoke` rejects bare functions without an `$inject` property — array-style is the canonical minification-safe form used everywhere else in the suite. **[Agent: vitest-testing]**
   - [x] Run `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm build`. `EXCEPTION_HANDLER_CAUSES.length === 10` regression holds (no new cause token). Spec-017/018/019 directive tests pass unchanged — controller integration is additive. **[Agent: rollup-build]**
 
-- [ ] **Slice 5: Documentation, AngularJS Parity Port, Final Regression Check**
-  - [ ] Create `src/controller/README.md` per technical-considerations §2.1. Cover:
+- [x] **Slice 5: Documentation, AngularJS Parity Port, Final Regression Check**
+  - [x] Create `src/controller/README.md` per technical-considerations §2.1. Cover:
         - The dual surface: `createController` ESM-first vs. `$controller` DI-shim, with a worked example for each
         - The `'Name as alias'` parser + the `ident` argument precedence
         - The `Object.create(prototype)` + invoke + return-value-replacement instantiation pattern, with an ES-class footnote (classes throw if invoked without `new` — wrap in a factory function)
@@ -126,19 +126,19 @@
         - Direct-call vs. compile-time exception asymmetry (FS §2.5 acceptance #4 vs. #5) — direct callers own their try/catch
         - Intentionally-deferred items: `require:`, `$onInit` / `$onChanges` / `$onDestroy`, `bindToController`, `allowGlobals`, `.controller(name, fn)` module DSL — each linked to its roadmap spec where relevant
         - The `'hasOwnProperty'` registration block + the `controllerAs: 'vm'` silent-overwrite footgun. **[Agent: typedoc-docs]**
-  - [ ] Update `CLAUDE.md` per technical-considerations §2.10:
+  - [x] Update `CLAUDE.md` per technical-considerations §2.10:
         - Add `./controller` row to the "Modules (public surface via `package.json` exports)" table with key exports
         - Add the new "Non-obvious invariants" bullet covering: alias-parser regex + `ident` precedence; `$controllerProvider.register` config-phase + captured-reference safety; `$controller` run-phase only; controller seam runs once per directive declaring `controller`, after `$transclude` setup and before pre-link; `'$compile'` cause reused (no new `EXCEPTION_HANDLER_CAUSES` entry, tuple stays at 10); `controllerAs`-without-`controller` rejected at directive registration; `Object.create(prototype)` + invoke + return-value-replacement pattern; last-wins on duplicate `register`; direct-call path does NOT route exceptions through `$exceptionHandler` (asymmetry with compile-time path)
         - Add the new "Where to look when…" row: *How does `$controller` find a registered controller? → `src/controller/controller-provider.ts` ($$registry Map) + `src/controller/controller.ts` (parse + lookup + instantiate)*. **[Agent: typedoc-docs]**
-  - [ ] TSDoc audit on every new public export — `createController`, `controller` (default binding, if it shipped), `$ControllerProvider`, the four public types, and the six error classes. Each carries at least one runnable example. The `DirectiveDefinition.controller` and `DirectiveDefinition.controllerAs` TSDoc carry the worked `controller` + `controllerAs: 'vm'` example from the README. **[Agent: typedoc-docs]**
-  - [ ] Port relevant cases from `angular/angular.js/test/ng/controllerSpec.js` into `src/controller/__tests__/controller-parity.test.ts` per technical-considerations §4 "Reference parity":
+  - [x] TSDoc audit on every new public export — `createController`, `controller` (default binding, if it shipped), `$ControllerProvider`, the four public types, and the six error classes. Each carries at least one runnable example. The `DirectiveDefinition.controller` and `DirectiveDefinition.controllerAs` TSDoc carry the worked `controller` + `controllerAs: 'vm'` example from the README. **[Agent: typedoc-docs]**
+  - [x] Port relevant cases from `angular/angular.js/test/ng/controllerSpec.js` into `src/controller/__tests__/controller-parity.test.ts` per technical-considerations §4 "Reference parity":
         - The `'as'` syntax test cases (registered name + inline function + explicit `ident`)
         - The `register(map)` object-form variant
         - The locals-override test (controller asks for a service, locals provide a substitute)
         - The "controller returns object" semantic
         - The `$controllerProvider.has(name)` introspection test
         - **Skipped** with documented `it.skip(...)` calls (so future spec audits show what's deferred): `allowGlobals` cases, `require:`-related cases, `bindToController` cases, `$onInit` lifecycle cases. Each `.skip` has a comment naming the deferring roadmap item. **[Agent: vitest-testing]**
-  - [ ] Final regression check: `pnpm lint`, `pnpm format:check`, `pnpm typecheck`, `pnpm test`, `pnpm build`. All five gates pass. `dist/{esm,cjs,types}/controller/index.{mjs,cjs,d.ts}` outputs include the public surface. The full prior-spec test suite (002–019) passes unchanged. New observable: `injector.has('$controller') === true`. `EXCEPTION_HANDLER_CAUSES.length === 10` regression holds. **[Agent: rollup-build]**
+  - [x] Final regression check: `pnpm lint`, `pnpm format:check`, `pnpm typecheck`, `pnpm test`, `pnpm build`. All five gates pass. `dist/{esm,cjs,types}/controller/index.{mjs,cjs,d.ts}` outputs include the public surface. The full prior-spec test suite (002–019) passes unchanged. New observable: `injector.has('$controller') === true`. `EXCEPTION_HANDLER_CAUSES.length === 10` regression holds. **[Agent: rollup-build]**
 
 ---
 
