@@ -33,6 +33,7 @@
  * revisited in Slice 5 once the broader public-surface picture is in view.
  */
 
+import type { Scope } from '@core/index';
 import type { Injector, Invokable } from '@di/di-types';
 
 import {
@@ -245,9 +246,9 @@ function bindAlias(scope: ControllerLocals['$scope'], alias: string | undefined,
  */
 export function createController(args: CreateControllerArgs): ControllerService {
   const { injector, registry } = args;
-  return function $controller(
+  return function $controller<TScope extends Scope = Scope>(
     nameOrFn: string | ControllerInvokable,
-    locals?: ControllerLocals,
+    locals?: ControllerLocals<TScope>,
     ident?: string,
   ): unknown {
     if (typeof nameOrFn === 'string') {

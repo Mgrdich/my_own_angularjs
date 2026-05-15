@@ -37,10 +37,11 @@ import type { Injector } from '@di/di-types';
  *
  * @example
  * ```ts
- * // Plain-function controller — the framework injects $scope by name.
- * const Greeter: ControllerFn = function ($scope) {
- *   ($scope as { greeting: string }).greeting = 'hi';
- * };
+ * // Plain-function controller — annotate $scope inline so TS knows its shape;
+ * // the framework still injects it by name at runtime.
+ * function Greeter($scope: Scope & { greeting: string }) {
+ *   $scope.greeting = 'hi';
+ * }
  * ```
  */
 export type ControllerFn = (...args: unknown[]) => unknown;
@@ -74,21 +75,29 @@ export type ControllerInvokable = ControllerFn | (string | ControllerFn)[];
  * win, matching AngularJS's `$injector.invoke(fn, self, locals)`
  * contract).
  *
+ * Generic over `TScope` so consumers can narrow `$scope` to a
+ * project-specific shape (`ControllerLocals<MyScope>`) and avoid casts
+ * at call sites that read `locals.$scope.someProp`. Defaults to the
+ * untyped {@link Scope} for back-compat with all existing call sites.
+ *
  * @example
  * ```ts
- * $controller('MyCtrl', {
- *   $scope: rootScope.$new(),
+ * type MyScope = Scope & { greeting: string };
+ * const locals: ControllerLocals<MyScope> = {
+ *   $scope: rootScope.$new() as MyScope,
  *   $element: document.createElement('div'),
  *   // Override the registered `$location` with a fake for testing:
  *   $location: fakeLocation,
- * });
+ * };
+ * $controller('MyCtrl', locals);
  * ```
  */
-export interface ControllerLocals extends Record<string, unknown> {
-  $scope?: Scope;
+export interface ControllerLocals<TScope extends Scope = Scope> {
+  $scope?: TScope;
   $element?: Element;
   $attrs?: Attributes;
   $transclude?: TranscludeFn;
+  [key: string]: unknown;
 }
 
 /**
@@ -112,6 +121,17 @@ export interface ControllerLocals extends Record<string, unknown> {
  *    constructor; instantiated directly.
  * 4. **Anything else** — throws `InvalidControllerFactoryError`.
  *
+ * The return type is `unknown` by design — there is no static link from
+ * the string name to the registered constructor, so callers narrow with
+ * an explicit assertion at the call site (e.g. `$controller(...) as Greeter`).
+ * A generic-return parameter would be a disguised assertion: it provides
+ * no real type checking, just renames the cast.
+ *
+ * The `TScope` parameter, by contrast, narrows `locals.$scope` — useful
+ * because `$scope` is in an input position and the consumer's typed
+ * property access flows through it. Defaults to {@link Scope} so today's
+ * call sites are unchanged.
+ *
  * @example
  * ```ts
  * // Registered name + alias suffix — alias resolves to $scope.vm:
@@ -119,13 +139,20 @@ export interface ControllerLocals extends Record<string, unknown> {
  *
  * // Inline function — alias comes from the explicit ident argument:
  * $controller(function ($scope) {}, { $scope: rootScope }, 'vm');
+ *
+ * // Typed-scope locals — locals.$scope.greeting is `string`, not unknown:
+ * type MyScope = Scope & { greeting: string };
+ * const locals: ControllerLocals<MyScope> = { $scope: typedScope };
+ * $controller('Greeter', locals);
  * ```
  */
-export type ControllerService = (
-  nameOrFn: string | ControllerInvokable,
-  locals?: ControllerLocals,
-  ident?: string,
-) => unknown;
+export interface ControllerService {
+  <TScope extends Scope = Scope>(
+    nameOrFn: string | ControllerInvokable,
+    locals?: ControllerLocals<TScope>,
+    ident?: string,
+  ): unknown;
+}
 
 /**
  * Public surface of `$controllerProvider`.
