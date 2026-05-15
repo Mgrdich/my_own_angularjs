@@ -87,7 +87,7 @@ export const IDENT_RE = /^[A-Za-z_$][\w$]*$/;
  * defense-in-depth check keeps the error consistent if the regex is ever
  * relaxed).
  */
-function parseControllerName(input: string): { name: string; ident?: string } {
+function parseControllerName(input: string) {
   const match = CONTROLLER_NAME_ALIAS_RE.exec(input);
   if (match === null) {
     throw new MalformedControllerAliasError(input);
@@ -114,7 +114,7 @@ function parseControllerName(input: string): { name: string; ident?: string } {
  * error messages human-readable without leaking the full content of the
  * offending value.
  */
-function describe(value: unknown): string {
+function describe(value: unknown) {
   if (value === null) return 'null';
   if (Array.isArray(value)) {
     return value.length === 0 ? 'empty array' : `array(length ${String(value.length)})`;
@@ -137,7 +137,7 @@ function describe(value: unknown): string {
  * for `Object.create(constructor.prototype)`. Throws
  * {@link InvalidControllerFactoryError} on failure.
  */
-function resolveConstructor(name: string, fn: unknown): (...args: unknown[]) => unknown {
+function resolveConstructor(name: string, fn: unknown) {
   if (typeof fn === 'function') {
     return fn as (...args: unknown[]) => unknown;
   }
@@ -170,7 +170,7 @@ function resolveConstructor(name: string, fn: unknown): (...args: unknown[]) => 
  *    the `$injector.instantiate` semantics of classic AngularJS and the
  *    well-known `new` operator behavior in plain JavaScript.
  */
-function instantiate(injector: Injector, fn: ControllerInvokable, locals: ControllerLocals | undefined): unknown {
+function instantiate(injector: Injector, fn: ControllerInvokable, locals: ControllerLocals | undefined) {
   const ctor = Array.isArray(fn)
     ? (fn[fn.length - 1] as (...args: unknown[]) => unknown)
     : (fn as (...args: unknown[]) => unknown);
@@ -201,7 +201,7 @@ function instantiate(injector: Injector, fn: ControllerInvokable, locals: Contro
  * write goes through a narrow `Record<string, unknown>` cast — narrower
  * than `any`, justifying the absence of an eslint-disable.
  */
-function bindAlias(scope: ControllerLocals['$scope'], alias: string | undefined, instance: unknown): void {
+function bindAlias(scope: ControllerLocals['$scope'], alias: string | undefined, instance: unknown) {
   if (scope === undefined) return;
   if (alias === undefined) return;
   (scope as unknown as Record<string, unknown>)[alias] = instance;

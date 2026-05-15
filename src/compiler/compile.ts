@@ -224,7 +224,7 @@ export function createCompile(options: CompileOptions): CompileService {
     element: Element,
     attrs: Attributes,
     $transclude: TranscludeFn | undefined,
-  ): void {
+  ) {
     for (const directive of directives) {
       if (directive.controller === undefined) {
         continue;

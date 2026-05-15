@@ -62,7 +62,7 @@ const VALID_CONTROLLER_NAME = /^\S+$/;
  * inline here rather than imported across files because cross-file helper
  * imports for a four-line function add more noise than they save.
  */
-function describeValue(value: unknown): string {
+function describeValue(value: unknown) {
   if (value === null) return 'null';
   if (Array.isArray(value)) {
     return value.length === 0 ? 'empty array' : `array(length ${String(value.length)})`;
@@ -247,7 +247,7 @@ export class $ControllerProvider implements IControllerProvider {
    * `$controllerProvider` reference saved during config and invoked from
    * `run()` still trips the guard.
    */
-  private $$guard(method: string): void {
+  private $$guard(method: string) {
     if (this.$$getPhase() !== 'config') {
       throw new ControllerRegistrationOutOfPhaseError(method);
     }
@@ -260,7 +260,7 @@ export class $ControllerProvider implements IControllerProvider {
    * (via a `as unknown as string` cast at the call site) surfaces a
    * useful diagnostic rather than a cryptic `[object Object]`.
    */
-  private $$validateName(name: unknown): void {
+  private $$validateName(name: unknown) {
     if (typeof name !== 'string') {
       throw new InvalidControllerNameError(String(name));
     }
@@ -278,7 +278,7 @@ export class $ControllerProvider implements IControllerProvider {
    * validation in `createController` at lookup time so registration-time
    * misuse is caught immediately rather than deferred to first instantiation.
    */
-  private $$validateFactory(name: string, fn: unknown): void {
+  private $$validateFactory(name: string, fn: unknown) {
     if (typeof fn === 'function') return;
     if (Array.isArray(fn)) {
       const arr = fn as unknown[];
