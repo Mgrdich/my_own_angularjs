@@ -86,7 +86,7 @@ const UTC_ACCESSORS: DateAccessors = {
   offsetMinutes: 0,
 };
 
-function pad(value: number, width: number): string {
+function pad(value: number, width: number) {
   return String(value).padStart(width, '0');
 }
 
@@ -96,7 +96,7 @@ function pad(value: number, width: number): string {
  * format. The caller treats `undefined` as the "non-parseable" branch
  * and returns the original input unchanged (FS §2.16).
  */
-function parseDateString(input: string): Date | undefined {
+function parseDateString(input: string) {
   // ISO-8601 component parse first — AngularJS does this so that strings
   // like `'2026-05-07'` (date-only) and `'2026-05-07T14:30:45Z'` produce
   // consistent UTC values regardless of the runtime's `Date.parse`
@@ -136,7 +136,7 @@ function parseDateString(input: string): Date | undefined {
  * by the local offset (so UTC accessors see local-time fields) and then
  * pushed by the requested offset.
  */
-function resolveTimezone(date: Date, timezone: string | undefined): { accessors: DateAccessors; date: Date } {
+function resolveTimezone(date: Date, timezone: string | undefined) {
   if (timezone === undefined) {
     return {
       accessors: { ...LOCAL_ACCESSORS, offsetMinutes: date.getTimezoneOffset() },
@@ -178,7 +178,7 @@ function resolveTimezone(date: Date, timezone: string | undefined): { accessors:
  * through Thursdays so it sidesteps the off-by-one issues most ad-hoc
  * formulas have at year boundaries.
  */
-function isoWeek(date: Date, accessors: DateAccessors): number {
+function isoWeek(date: Date, accessors: DateAccessors) {
   // Build a UTC-equivalent Date of the SAME calendar fields the
   // accessors see, so we can use the standard ISO-week algorithm
   // independent of the runtime's local timezone. This is the trick
@@ -198,7 +198,7 @@ function isoWeek(date: Date, accessors: DateAccessors): number {
  * 8601 extended). Uses the `offsetMinutes` resolved via
  * {@link resolveTimezone} so the output matches the active zone.
  */
-function formatOffset(offsetMinutes: number, withColon: boolean): string {
+function formatOffset(offsetMinutes: number, withColon: boolean) {
   // `offsetMinutes` is positive WEST of UTC (PDT → 420). The output
   // sign is the inverse: `'-0700'`. UTC → `'+0000'`.
   const sign = offsetMinutes <= 0 ? '+' : '-';
@@ -266,7 +266,7 @@ const TOKEN_TABLE: ReadonlyArray<readonly [string, TokenFn]> = [
  * Resolve the eight named formats to their underlying token strings,
  * once. Non-named formats pass through unchanged.
  */
-function resolveNamedFormat(format: string, datetimeFormats: DatetimeFormats): string {
+function resolveNamedFormat(format: string, datetimeFormats: DatetimeFormats) {
   switch (format) {
     case 'medium':
       return datetimeFormats.medium;
@@ -293,7 +293,7 @@ function resolveNamedFormat(format: string, datetimeFormats: DatetimeFormats): s
  * Scan the format string and produce the substituted output. Handles
  * single-quote-escaped literal runs and longest-first token matching.
  */
-function scanFormat(format: string, date: Date, accessors: DateAccessors, datetimeFormats: DatetimeFormats): string {
+function scanFormat(format: string, date: Date, accessors: DateAccessors, datetimeFormats: DatetimeFormats) {
   let out = '';
   let i = 0;
   while (i < format.length) {

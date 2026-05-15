@@ -155,7 +155,7 @@ export function collectDirectives(
  * `collectDirectives`. Keeps the priority + terminal contract
  * uniform regardless of how the directives were matched.
  */
-function applySortAndTerminalCutoff(matched: readonly Directive[]): Directive[] {
+function applySortAndTerminalCutoff(matched: readonly Directive[]) {
   const sorted = matched.slice().sort((a, b) => {
     if (a.priority !== b.priority) {
       return b.priority - a.priority;

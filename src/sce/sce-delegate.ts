@@ -40,7 +40,7 @@ import {
  * name used in the `getTrusted` mismatch error message. Inlined to keep the
  * hot path free of table lookups; five entries is not worth a helper.
  */
-function trustAsShortcutFor(ctx: SceContext): string {
+function trustAsShortcutFor(ctx: SceContext) {
   switch (ctx) {
     case SCE_CONTEXTS.HTML:
       return 'trustAsHtml';
@@ -70,7 +70,7 @@ export function createSceDelegate(options?: SceDelegateOptions): SceDelegateServ
   const allowMatchers: readonly CompiledMatcher[] = compileMatchers(options?.trustedResourceUrlList ?? ['self']);
   const blockMatchers: readonly CompiledMatcher[] = compileMatchers(options?.bannedResourceUrlList ?? []);
 
-  function trustAs(ctx: SceContext, value: unknown): unknown {
+  function trustAs(ctx: SceContext, value: unknown) {
     if (value === null) return null;
     if (value === undefined) return undefined;
 
@@ -105,12 +105,12 @@ export function createSceDelegate(options?: SceDelegateOptions): SceDelegateServ
     }
   }
 
-  function valueOf(value: unknown): unknown {
+  function valueOf(value: unknown) {
     if (isTrustedValue(value)) return value.$$unwrapTrustedValue;
     return value;
   }
 
-  function getTrusted(ctx: SceContext, value: unknown): unknown {
+  function getTrusted(ctx: SceContext, value: unknown) {
     if (value === null) return null;
     if (value === undefined) return undefined;
 

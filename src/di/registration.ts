@@ -162,7 +162,7 @@ export function applyRegistrationRecord(
  * Throws with a clear error if the source is none of these forms or if
  * the resulting instance has no `$get` method.
  */
-function registerProvider(name: string, providerSource: unknown, deps: RegistrationDeps): void {
+function registerProvider(name: string, providerSource: unknown, deps: RegistrationDeps) {
   let providerInstance: { $get: Invokable };
 
   if (isArray(providerSource)) {

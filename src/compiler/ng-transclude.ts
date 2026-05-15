@@ -65,7 +65,7 @@ interface NgBoundElement extends Element {
   $$ngBoundTransclude?: BoundTranscludeFn;
 }
 
-function findBoundTransclude(element: Element): { host: Element; bound: BoundTranscludeFn } | null {
+function findBoundTransclude(element: Element) {
   let cursor: Element | null = element.parentElement;
   while (cursor !== null) {
     const bound = (cursor as NgBoundElement).$$ngBoundTransclude;
@@ -77,7 +77,7 @@ function findBoundTransclude(element: Element): { host: Element; bound: BoundTra
   return null;
 }
 
-function resolveSlotName(attrs: Attributes): string | null {
+function resolveSlotName(attrs: Attributes) {
   const raw = attrs['ngTransclude'];
   if (typeof raw !== 'string' || raw === '') {
     return null;

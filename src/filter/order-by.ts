@@ -138,7 +138,7 @@ function normalizePredicates(expression: unknown): ResolvedPredicate[] {
  * the value unchanged — the default comparator falls back to the
  * original input index for object values.
  */
-function objectValue(value: object): unknown {
+function objectValue(value: object) {
   // Custom valueOf — invoke and accept its primitive result.
   const valueOf = (value as { valueOf?: unknown }).valueOf;
   if (typeof valueOf === 'function') {
@@ -160,7 +160,7 @@ function objectValue(value: object): unknown {
 }
 
 // eslint-disable-next-line @typescript-eslint/no-unsafe-function-type -- comparing function references for identity, not invoking
-function hasCustomToString(value: object, ownToString: Function): boolean {
+function hasCustomToString(value: object, ownToString: Function) {
   const proto = Object.getPrototypeOf(value) as object | null;
   if (proto === null) {
     // No prototype — any function-typed `toString` is by definition
@@ -183,7 +183,7 @@ function isPrimitive(value: unknown): value is number | string | boolean {
 }
 
 /** True when the predicate-value type tag is `'null'` or `'undefined'`. */
-function isNullishType(type: string): boolean {
+function isNullishType(type: string) {
   return type === 'null' || type === 'undefined';
 }
 
@@ -193,7 +193,7 @@ function isNullishType(type: string): boolean {
  * predicate results are coerced via `objectValue` so a custom
  * `valueOf` / `toString` participates in the comparison.
  */
-function getPredicateValue(value: unknown, index: number): ComparisonValue {
+function getPredicateValue(value: unknown, index: number) {
   let type: string = typeof value;
   let coerced = value;
   if (value === null) {

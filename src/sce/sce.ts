@@ -66,11 +66,11 @@ export function createSce(options?: SceOptions): SceService {
   const enabled = options?.enabled ?? true;
   const sanitize = options?.sanitize;
 
-  function isEnabled(): boolean {
+  function isEnabled() {
     return enabled;
   }
 
-  function trustAs(ctx: SceContext, value: unknown): unknown {
+  function trustAs(ctx: SceContext, value: unknown) {
     if (!enabled) return value;
     if (!isValidSceContext(ctx)) {
       throw new Error(`$sce.trustAs: unknown context '${String(ctx)}'`);
@@ -78,7 +78,7 @@ export function createSce(options?: SceOptions): SceService {
     return delegate.trustAs(ctx, value);
   }
 
-  function getTrusted(ctx: SceContext, value: unknown): unknown {
+  function getTrusted(ctx: SceContext, value: unknown) {
     if (!enabled) return delegate.valueOf(value);
     if (!isValidSceContext(ctx)) {
       throw new Error(`$sce.getTrusted: unknown context '${String(ctx)}'`);
@@ -95,7 +95,7 @@ export function createSce(options?: SceOptions): SceService {
     return delegate.getTrusted(ctx, value);
   }
 
-  function parseAs(ctx: SceContext, expression: string): SceParsedFn {
+  function parseAs(ctx: SceContext, expression: string) {
     // Validate ctx BEFORE parsing so a bogus context short-circuits
     // without paying the lex/parse cost.
     if (!isValidSceContext(ctx)) {
@@ -119,7 +119,7 @@ export function createSce(options?: SceOptions): SceService {
     return wrapper as SceParsedFn;
   }
 
-  function valueOf(value: unknown): unknown {
+  function valueOf(value: unknown) {
     return delegate.valueOf(value);
   }
 

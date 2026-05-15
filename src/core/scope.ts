@@ -37,7 +37,7 @@ import { isArray, isEqual } from './utils';
  * defaultCause encodes the call-site origin (e.g. `'watchFn'`,
  * `'$evalAsync'`) for every other thrown value.
  */
-function causeFor(err: unknown, defaultCause: ExceptionHandlerCause): ExceptionHandlerCause {
+function causeFor(err: unknown, defaultCause: ExceptionHandlerCause) {
   return err instanceof FilterLookupError ? '$filter' : defaultCause;
 }
 
@@ -803,10 +803,10 @@ export class Scope {
       targetScope: this,
       currentScope: this,
       defaultPrevented: false,
-      stopPropagation(): void {
+      stopPropagation() {
         state.propagationStopped = true;
       },
-      preventDefault(): void {
+      preventDefault() {
         this.defaultPrevented = true;
       },
     };
@@ -839,10 +839,10 @@ export class Scope {
       targetScope: this,
       currentScope: this,
       defaultPrevented: false,
-      stopPropagation(): void {
+      stopPropagation() {
         // No-op for broadcast — traversal cannot be stopped
       },
-      preventDefault(): void {
+      preventDefault() {
         this.defaultPrevented = true;
       },
     };

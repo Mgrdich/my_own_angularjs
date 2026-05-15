@@ -157,7 +157,7 @@ export class $CompileProvider {
     return this;
   }
 
-  private $$registerSingle(name: string, factory: unknown): void {
+  private $$registerSingle(name: string, factory: unknown) {
     if (!VALID_DIRECTIVE_NAME.test(name)) {
       throw new InvalidDirectiveNameError(name);
     }
@@ -215,9 +215,7 @@ export class $CompileProvider {
    * — those are programmer errors and are not routed through
    * `$exceptionHandler`.
    */
-  private $$buildDirectiveArrayProvider(
-    name: string,
-  ): ($injector: Injector, $exceptionHandler: ExceptionHandler) => Directive[] {
+  private $$buildDirectiveArrayProvider(name: string) {
     return ($injector: Injector, $exceptionHandler: ExceptionHandler): Directive[] => {
       const factories = this.$$factoryMap.get(name) ?? [];
       const directives: Directive[] = [];
@@ -449,11 +447,7 @@ function normalizeTemplate(
  * {@link $CompileProvider.$$buildDirectiveArrayProvider} and routed
  * through `$exceptionHandler('$compile')`.
  */
-function normalizeController(
-  directiveName: string,
-  rawController: unknown,
-  rawControllerAs: unknown,
-): { controller?: string | ControllerInvokable; controllerAs?: string } {
+function normalizeController(directiveName: string, rawController: unknown, rawControllerAs: unknown) {
   // 1. `controllerAs` without `controller` — registration-time error.
   if (rawControllerAs !== undefined && rawController === undefined) {
     throw new ControllerAsWithoutControllerError(directiveName);
@@ -507,7 +501,7 @@ function normalizeController(
   return result;
 }
 
-function normalizeDirective(name: string, factoryReturn: DirectiveFactoryReturn): Directive {
+function normalizeDirective(name: string, factoryReturn: DirectiveFactoryReturn) {
   if (typeof factoryReturn === 'function') {
     // Sugar form: `() => function postLink(scope, el, attrs) {…}`.
     const linkFn: LinkFn = factoryReturn;

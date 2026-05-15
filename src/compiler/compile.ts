@@ -179,7 +179,7 @@ interface ScopeWatchersSlot {
   $$watchers: unknown[] | null;
 }
 
-function isScopeDestroyed(scope: Scope | undefined): boolean {
+function isScopeDestroyed(scope: Scope | undefined) {
   if (scope === undefined) {
     return false;
   }
@@ -245,7 +245,7 @@ export function createCompile(options: CompileOptions): CompileService {
     }
   }
 
-  function compileNode(node: Node, queue: DeferredTemplateEntry[]): NodeLinker {
+  function compileNode(node: Node, queue: DeferredTemplateEntry[]) {
     if (isElement(node)) {
       return compileElementOrComment(node, /* hasChildren */ true, queue);
     }
@@ -285,7 +285,7 @@ export function createCompile(options: CompileOptions): CompileService {
    * cloned-counterpart `templateUrl` resolution flows through the
    * runtime walker just like the master pass did.
    */
-  function makeInternalLinker(nodes: readonly Node[]): Linker {
+  function makeInternalLinker(nodes: readonly Node[]) {
     const localQueue: DeferredTemplateEntry[] = [];
     const linker = compileNodes(nodes, localQueue);
     return ((scope: Scope, cloneMap?: Map<Node, Node>) => {
@@ -802,7 +802,7 @@ export function createCompile(options: CompileOptions): CompileService {
    * the host page. The returned promise is awaited internally only —
    * the public `Linker` has already returned synchronously.
    */
-  function drainDeferredTemplateQueue(entries: DeferredTemplateEntry[]): void {
+  function drainDeferredTemplateQueue(entries: DeferredTemplateEntry[]) {
     if (entries.length === 0) {
       return;
     }
@@ -1034,7 +1034,7 @@ export function createCompile(options: CompileOptions): CompileService {
  * children participate in the per-node linkers, so only those are
  * paired (Text nodes carry no directive matches and are skipped).
  */
-function pairChildren(masters: readonly Node[], cloneParent: Element, parentMap: Map<Node, Node>): Map<Node, Node> {
+function pairChildren(masters: readonly Node[], cloneParent: Element, parentMap: Map<Node, Node>) {
   const cloneChildren: Node[] = [];
   for (let i = 0; i < cloneParent.childNodes.length; i++) {
     const child = cloneParent.childNodes.item(i);

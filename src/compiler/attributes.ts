@@ -268,7 +268,7 @@ function bindToScope(
  *                    `Comment` nodes have no attributes — the
  *                    DOM-write step is skipped silently.
  */
-function $set(this: AttributesImpl, name: string, value: string | null, writeAttr: boolean = true): void {
+function $set(this: AttributesImpl, name: string, value: string | null, writeAttr: boolean = true) {
   // Step 1: update the indexed property.
   if (value === null) {
     // `delete` on a class instance with an index signature requires
@@ -416,7 +416,7 @@ function notifyObservers(
  * dereg();
  * ```
  */
-function $observe(this: AttributesImpl, name: string, fn: ObserverFn): () => void {
+function $observe(this: AttributesImpl, name: string, fn: ObserverFn) {
   const internals = this as unknown as AttributesInternals;
 
   // Step 1: append the observer to the per-name list.

@@ -47,17 +47,17 @@ export function createTemplateCache(): TemplateCacheService {
   const map = new Map<string, string>();
 
   return {
-    put(key: string, content: string): string {
+    put(key: string, content: string) {
       map.set(key, content);
       return content;
     },
-    get(key: string): string | undefined {
+    get(key: string) {
       return map.get(key);
     },
-    remove(key: string): void {
+    remove(key: string) {
       map.delete(key);
     },
-    removeAll(): void {
+    removeAll() {
       map.clear();
     },
     info(): TemplateCacheInfo {
