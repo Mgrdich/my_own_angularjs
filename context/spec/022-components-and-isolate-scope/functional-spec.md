@@ -1,7 +1,7 @@
 # Functional Specification: Components & Isolate Scope
 
 - **Roadmap Item:** Phase 2 — Expressions, Filters & DOM > Directives & DOM Compilation (Components & isolate scope — `$compileProvider.component` + `.component` DSL)
-- **Status:** Draft
+- **Status:** Completed
 - **Author:** Mgrdich
 
 ---
@@ -44,66 +44,66 @@ createModule('app', ['ng']).component('userCard', {
 
 - **As a directive author**, I want my directive to declare an isolated scope so its internal state neither leaks into nor is polluted by the surrounding scope.
   - **Acceptance Criteria:**
-    - [ ] A directive whose definition includes `scope: { … }` (the object form) is accepted at registration — it no longer produces an "isolate scope is not supported" error.
-    - [ ] An element matched by such a directive gets a scope that does **not** prototypically inherit from its parent scope: a name defined on the parent scope is not visible on the isolate scope unless an explicit binding brings it in.
-    - [ ] If two directives on the same element both request an isolate scope, the developer sees a clear, human-readable error naming the conflict.
-    - [ ] A directive with an isolate scope still links its own template and children against that isolate scope; sibling and ancestor elements are unaffected.
+    - [x] A directive whose definition includes `scope: { … }` (the object form) is accepted at registration — it no longer produces an "isolate scope is not supported" error.
+    - [x] An element matched by such a directive gets a scope that does **not** prototypically inherit from its parent scope: a name defined on the parent scope is not visible on the isolate scope unless an explicit binding brings it in.
+    - [x] If two directives on the same element both request an isolate scope, the developer sees a clear, human-readable error naming the conflict.
+    - [x] A directive with an isolate scope still links its own template and children against that isolate scope; sibling and ancestor elements are unaffected.
 
 - **As a directive author**, I want four kinds of binding so I can declare exactly how each input or output crosses the isolate boundary.
   - **Acceptance Criteria:**
-    - [ ] **Two-way (`=`)** — `scope: { value: '=' }` keeps the local `value` and the parent expression in sync in both directions: a change on either side is reflected on the other.
-    - [ ] **One-way text (`@`)** — `scope: { label: '@' }` sets the local `label` to the interpolated string value of the matching attribute, and updates it whenever that interpolated value changes. Writing to the local does not affect the attribute.
-    - [ ] **One-way (`<`)** — `scope: { item: '<' }` sets the local `item` to the value of the parent expression and updates it when the parent value changes; writing to the local does not propagate back to the parent.
-    - [ ] **Expression / callback (`&`)** — `scope: { onDone: '&' }` makes the local `onDone` a function that, when called, evaluates the parent expression; the caller may pass a map of local values the parent expression can reference.
-    - [ ] **Optional bindings (`?`)** — a binding marked optional (e.g. `'<?'`) does not error when the corresponding attribute is absent; the local is simply left unset.
-    - [ ] **Attribute aliasing** — a binding may name a different source attribute than the local name (e.g. `scope: { localName: '<sourceAttr' }`), binding the local to the `source-attr` attribute.
-    - [ ] A malformed binding declaration produces a clear, human-readable error explaining the expected `=`, `@`, `<`, `&` (with optional `?` and alias) format.
+    - [x] **Two-way (`=`)** — `scope: { value: '=' }` keeps the local `value` and the parent expression in sync in both directions: a change on either side is reflected on the other.
+    - [x] **One-way text (`@`)** — `scope: { label: '@' }` sets the local `label` to the interpolated string value of the matching attribute, and updates it whenever that interpolated value changes. Writing to the local does not affect the attribute.
+    - [x] **One-way (`<`)** — `scope: { item: '<' }` sets the local `item` to the value of the parent expression and updates it when the parent value changes; writing to the local does not propagate back to the parent.
+    - [x] **Expression / callback (`&`)** — `scope: { onDone: '&' }` makes the local `onDone` a function that, when called, evaluates the parent expression; the caller may pass a map of local values the parent expression can reference.
+    - [x] **Optional bindings (`?`)** — a binding marked optional (e.g. `'<?'`) does not error when the corresponding attribute is absent; the local is simply left unset.
+    - [x] **Attribute aliasing** — a binding may name a different source attribute than the local name (e.g. `scope: { localName: '<sourceAttr' }`), binding the local to the `source-attr` attribute.
+    - [x] A malformed binding declaration produces a clear, human-readable error explaining the expected `=`, `@`, `<`, `&` (with optional `?` and alias) format.
 
 ### 2.2 `bindToController`
 
 - **As a directive/component author**, I want my declared bindings delivered onto the controller instance instead of the scope, so the controller is a self-contained unit with its inputs as its own properties.
   - **Acceptance Criteria:**
-    - [ ] A directive with `bindToController: true` and a `scope: { … }` (or `bindings: { … }`) map exposes every binding as a property on the controller instance rather than on the isolate scope.
-    - [ ] A directive with `bindToController: { … }` (the object form) takes the binding map from `bindToController` directly.
-    - [ ] When `bindToController` is in effect, all bindings are populated on the controller instance **before** the controller's `$onInit` hook runs.
+    - [x] A directive with `bindToController: true` and a `scope: { … }` (or `bindings: { … }`) map exposes every binding as a property on the controller instance rather than on the isolate scope.
+    - [x] A directive with `bindToController: { … }` (the object form) takes the binding map from `bindToController` directly.
+    - [x] When `bindToController` is in effect, all bindings are populated on the controller instance **before** the controller's `$onInit` hook runs.
 
 ### 2.3 Lifecycle hooks
 
 - **As a controller author**, I want well-defined lifecycle moments so I can run setup, react to input changes, and clean up without inferring timing from link functions.
   - **Acceptance Criteria:**
-    - [ ] **`$onInit()`** — if the controller defines it, it is called once after the controller is constructed and its bound inputs are populated, and before the element's post-link runs.
-    - [ ] **`$onChanges(changes)`** — if the controller defines it, it is called once initially and again whenever a one-way input (`<` or `@`) changes; `changes` maps each changed binding name to an object exposing the current value, the previous value, and a way to tell whether this is the first change.
-    - [ ] **`$onDestroy()`** — if the controller defines it, it is called when the controller's scope is destroyed.
-    - [ ] **`$postLink()`** — if the controller defines it, it is called after the element and all its child elements have been linked.
-    - [ ] A controller that defines none of these hooks behaves exactly as it does today — the hooks are entirely opt-in.
+    - [x] **`$onInit()`** — if the controller defines it, it is called once after the controller is constructed and its bound inputs are populated, and before the element's post-link runs.
+    - [x] **`$onChanges(changes)`** — if the controller defines it, it is called once initially and again whenever a one-way input (`<` or `@`) changes; `changes` maps each changed binding name to an object exposing the current value, the previous value, and a way to tell whether this is the first change.
+    - [x] **`$onDestroy()`** — if the controller defines it, it is called when the controller's scope is destroyed.
+    - [x] **`$postLink()`** — if the controller defines it, it is called after the element and all its child elements have been linked.
+    - [x] A controller that defines none of these hooks behaves exactly as it does today — the hooks are entirely opt-in.
 
 ### 2.4 `require` — referencing other controllers
 
 - **As a directive/component author**, I want to ask for the controller of another directive on my element or an ancestor, and receive it wired in automatically.
   - **Acceptance Criteria:**
-    - [ ] `require: 'someDirective'` (string form), `require: ['a', 'b']` (array form), and `require: { alias: 'someDirective' }` (object form) are all accepted.
-    - [ ] A plain name requires the controller on the **same element**; the `^` prefix searches the element and its ancestors; the `^^` prefix searches ancestors only; the `?` prefix marks the requirement optional.
-    - [ ] The resolved controllers are passed to the requiring directive's link function as an additional argument; when the requiring directive has its own controller, the resolved controllers are also assigned onto that controller (under the array index or object alias) before `$onInit` runs.
-    - [ ] A required controller that cannot be found, and was **not** marked optional with `?`, produces a clear, human-readable error naming the missing requirement.
-    - [ ] An optional (`?`) requirement that cannot be found yields an empty/absent value instead of an error.
+    - [x] `require: 'someDirective'` (string form), `require: ['a', 'b']` (array form), and `require: { alias: 'someDirective' }` (object form) are all accepted.
+    - [x] A plain name requires the controller on the **same element**; the `^` prefix searches the element and its ancestors; the `^^` prefix searches ancestors only; the `?` prefix marks the requirement optional.
+    - [x] The resolved controllers are passed to the requiring directive's link function as an additional argument; when the requiring directive has its own controller, the resolved controllers are also assigned onto that controller (under the array index or object alias) before `$onInit` runs. *(Implementation deviation: object form auto-assigns onto the requiring controller's instance; string and array forms deliver the resolved controllers exclusively via the link fn's 4th argument. Documented in `tasks.md` "Slice 4 Implementation Notes" — matches the AngularJS-canonical reading where the meaningful "alias" exists only in the object form.)*
+    - [x] A required controller that cannot be found, and was **not** marked optional with `?`, produces a clear, human-readable error naming the missing requirement.
+    - [x] An optional (`?`) requirement that cannot be found yields an empty/absent value instead of an error.
 
 ### 2.5 `$compileProvider.component`
 
 - **As a developer**, I want a concise way to define a component without spelling out the full directive definition every time.
   - **Acceptance Criteria:**
-    - [ ] `$compileProvider.component(name, definition)` registers a component and returns the provider so the call can be chained.
-    - [ ] The component definition object accepts `template` / `templateUrl`, `controller`, `controllerAs`, `bindings`, `transclude`, and `require`.
-    - [ ] A component is, by default: restricted to element form, given an isolate scope, has its `bindings` bound to the controller, and exposes its controller to the template under `controllerAs` — which defaults to `$ctrl` when not specified.
-    - [ ] A component registered this way is matched, linked, and behaves identically to the equivalent hand-written directive definition.
-    - [ ] An invalid component definition produces a clear, human-readable error.
+    - [x] `$compileProvider.component(name, definition)` registers a component and returns the provider so the call can be chained.
+    - [x] The component definition object accepts `template` / `templateUrl`, `controller`, `controllerAs`, `bindings`, `transclude`, and `require`.
+    - [x] A component is, by default: restricted to element form, given an isolate scope, has its `bindings` bound to the controller, and exposes its controller to the template under `controllerAs` — which defaults to `$ctrl` when not specified.
+    - [x] A component registered this way is matched, linked, and behaves identically to the equivalent hand-written directive definition.
+    - [x] An invalid component definition produces a clear, human-readable error.
 
 ### 2.6 `.component` module DSL
 
 - **As a developer**, I want to register a component directly on the module builder, consistent with `.directive` / `.controller` / `.filter`.
   - **Acceptance Criteria:**
-    - [ ] `module.component('myThing', definition)` registers the component and returns the module builder so the call can be chained.
-    - [ ] A component registered this way is stored in the same registry and behaves identically to one registered through `$compileProvider.component` in a configuration block.
-    - [ ] `.component` chains freely with every other module-builder method in any order.
+    - [x] `module.component('myThing', definition)` registers the component and returns the module builder so the call can be chained.
+    - [x] A component registered this way is stored in the same registry and behaves identically to one registered through `$compileProvider.component` in a configuration block.
+    - [x] `.component` chains freely with every other module-builder method in any order.
 
 ---
 
