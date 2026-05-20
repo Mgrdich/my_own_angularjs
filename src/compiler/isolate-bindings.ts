@@ -56,6 +56,17 @@ import type { Attributes } from './directive-types';
 /**
  * The four binding-kind discriminants. The order matches the
  * `[=@<&]` character class in the binding-spec regex.
+ *
+ * - `=` two-way   — parent ↔ local
+ * - `@` text      — interpolated string from PARENT scope
+ * - `<` one-way   — parent → local
+ * - `&` callback  — local is `(locals?) => parentScope.$eval(...)`
+ *
+ * @example
+ * ```ts
+ * const spec = parseBindingSpec('myDir', 'value', '=');
+ * const mode: BindingMode = spec.mode; // '='
+ * ```
  */
 export type BindingMode = '=' | '@' | '<' | '&';
 
@@ -66,6 +77,12 @@ export type BindingMode = '=' | '@' | '<' | '&';
  * {@link Attributes} instance (`attrs[attrName]`); it defaults to a
  * kebab→camel transform of the local name and is overridden by the
  * binding spec's alias suffix.
+ *
+ * @example
+ * ```ts
+ * parseBindingSpec('myDir', 'label', '@?title');
+ * // → { mode: '@', optional: true, attrName: 'title' } satisfies NormalizedBindingSpec
+ * ```
  */
 export interface NormalizedBindingSpec {
   readonly mode: BindingMode;
@@ -76,6 +93,15 @@ export interface NormalizedBindingSpec {
 /**
  * Post-parse representation of an isolate-scope `scope: { … }` map —
  * each declared local name maps to its parsed binding spec.
+ *
+ * @example
+ * ```ts
+ * const bindings: NormalizedBindingMap = parseIsolateBindings('myDir', {
+ *   value: '=',
+ *   title: '@',
+ * });
+ * // bindings.value.mode === '='; bindings.title.mode === '@'
+ * ```
  */
 export type NormalizedBindingMap = Readonly<Record<string, NormalizedBindingSpec>>;
 
@@ -264,6 +290,17 @@ function writeAssignable(root: Record<string, unknown>, node: Identifier | Membe
  * `=` and `&` bindings DO NOT call `onChange` — `$onChanges` is
  * intentionally limited to one-way data flow inputs per AngularJS 1.5+
  * canonical semantics.
+ *
+ * @example
+ * ```ts
+ * const onChange: IsolateBindingChangeCallback = (name, curr, prev, isFirst) => {
+ *   if (isFirst) {
+ *     // initial fire — prev is UNINITIALIZED_VALUE
+ *   } else {
+ *     queue.record(ctrl, name, curr, prev, false);
+ *   }
+ * };
+ * ```
  */
 export type IsolateBindingChangeCallback = (
   localName: string,

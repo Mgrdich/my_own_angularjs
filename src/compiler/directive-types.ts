@@ -547,6 +547,100 @@ export interface DirectiveDefinition {
 export type DirectiveFactoryReturn = LinkFn | DirectiveDefinition;
 
 /**
+ * Component Definition Object — the concise shape consumed by
+ * `$compileProvider.component(name, definition)` (spec 022 Slice 5 /
+ * FS §2.5 / technical-considerations §2.5).
+ *
+ * A component is, internally, a directive registration. The provider
+ * translates this object into a directive factory returning a DDO
+ * with the AngularJS 1.5+ canonical defaults:
+ *
+ *  - `restrict: 'E'`
+ *  - `scope: definition.bindings ?? {}` — always object-form (isolate
+ *    scope), empty when no bindings are declared
+ *  - `bindToController: true`
+ *  - `controller: definition.controller ?? function NoopController() {}`
+ *  - `controllerAs: definition.controllerAs ?? '$ctrl'`
+ *  - Pass-through: `template`, `templateUrl`, `transclude`, `require`
+ *
+ * Every field is optional — a component with no fields is the canonical
+ * empty isolate-scoped wrapper element with a noop controller exposed
+ * as `$ctrl`.
+ *
+ * @example
+ * ```ts
+ * $compileProvider.component('userCard', {
+ *   bindings: { user: '<', onSelect: '&' },
+ *   controller: ['$element', function () {
+ *     this.$onInit = () => { void this.user; };
+ *     this.pick = () => this.onSelect({ id: this.user.id });
+ *   }],
+ *   template: '<div class="card">{{ $ctrl.user.name }}</div>',
+ * });
+ * // Consumer markup:
+ * //   <user-card user="someExpr" on-select="handler(id)"></user-card>
+ * ```
+ *
+ * @see InvalidComponentDefinitionError — Registration-time errors.
+ */
+export interface ComponentDefinition {
+  /**
+   * Inline template (string) or function-form template returning a
+   * string. Same semantics as {@link DirectiveDefinition.template}.
+   * Mutually exclusive with {@link templateUrl} — declaring both is
+   * rejected at directive-registration time.
+   */
+  template?: string | TemplateFn;
+  /**
+   * Async template URL or function-form URL. Same semantics as
+   * {@link DirectiveDefinition.templateUrl}. Mutually exclusive with
+   * {@link template}.
+   */
+  templateUrl?: string | TemplateUrlFn;
+  /**
+   * Controller declaration. Same shapes as
+   * {@link DirectiveDefinition.controller}: a registered controller
+   * name string OR a {@link ControllerInvokable} (bare function or
+   * array-style annotation). Defaults to an empty noop constructor
+   * when omitted (named `NoopController` for stack-trace clarity).
+   */
+  controller?: ControllerInvokable | string;
+  /**
+   * Template-side alias for the controller instance. Defaults to
+   * `'$ctrl'` when omitted (the AngularJS 1.5+ component canonical).
+   */
+  controllerAs?: string;
+  /**
+   * Isolate-scope bindings. Translates 1:1 to the underlying directive's
+   * `scope: { … }` declaration. Each value is a binding-spec string of
+   * the form `[=@<&][?][alias]?` parsed by `parseBindingSpec`. When
+   * omitted, an empty object is used — the component still gets an
+   * isolate scope (canonical AngularJS 1.5+ behavior), there are simply
+   * no declared bindings crossing the boundary.
+   *
+   * Because `bindToController: true` is applied by default, bindings
+   * land on the controller instance (`this.user`, `this.onSelect`) and
+   * NOT on the isolate scope.
+   */
+  bindings?: Record<string, string>;
+  /**
+   * Transclusion declaration. Passed through verbatim to the underlying
+   * directive's `transclude`. Same shapes accepted as
+   * {@link DirectiveDefinition.transclude}: `true` for content
+   * transclusion, or a multi-slot `Record<string, string>` map.
+   * `'element'` form is not supported by the underlying directive.
+   */
+  transclude?: boolean | Record<string, string>;
+  /**
+   * Controller-require declaration. Passed through verbatim to the
+   * underlying directive's `require`. Same shapes accepted as
+   * {@link DirectiveDefinition.require}: string / array / object form,
+   * with the `^` / `^^` / `?` flags.
+   */
+  require?: string | string[] | Record<string, string>;
+}
+
+/**
  * The DI-invokable shape of a directive factory.
  *
  * Reuses the project's standard {@link Invokable} so directive

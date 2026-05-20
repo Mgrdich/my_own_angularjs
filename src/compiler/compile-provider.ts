@@ -43,6 +43,7 @@ import {
   ElementTranscludeNotSupportedError,
   EmptyTemplateError,
   EmptyTemplateUrlError,
+  InvalidComponentDefinitionError,
   InvalidDirectiveFactoryError,
   InvalidDirectiveNameError,
   InvalidTemplateUrlValueError,
@@ -59,6 +60,7 @@ import { directiveNormalize } from './directive-normalize';
 import type {
   CompileFn,
   CompileService,
+  ComponentDefinition,
   Directive,
   DirectiveDefinition,
   DirectiveFactory,
@@ -156,6 +158,140 @@ export class $CompileProvider {
     for (const [key, value] of Object.entries(nameOrMap)) {
       this.$$registerSingle(key, value);
     }
+    return this;
+  }
+
+  /**
+   * Register a component under `name` (spec 022 Slice 5 / FS §2.5 /
+   * technical-considerations §2.5).
+   *
+   * A component is, internally, a directive registration. This method
+   * translates the {@link ComponentDefinition} into a directive factory
+   * returning a DDO with the AngularJS 1.5+ canonical defaults:
+   *
+   *  - `restrict: 'E'`
+   *  - `scope: definition.bindings ?? {}` — always object-form
+   *    (isolate scope), empty when no bindings declared
+   *  - `bindToController: true`
+   *  - `controller: definition.controller ?? function NoopController() {}`
+   *  - `controllerAs: definition.controllerAs ?? '$ctrl'`
+   *  - Pass-through: `template`, `templateUrl`, `transclude`, `require`
+   *
+   * Then delegates to `this.directive(name, factory)`. The existing
+   * directive registration rules apply — accumulation (two components
+   * registered under the same name BOTH match), priority/terminal
+   * sorting, name validation, and registration timing are all inherited
+   * from `.directive`.
+   *
+   * Registration-time validation routes
+   * {@link InvalidComponentDefinitionError} directly to the caller
+   * (synchronous), matching how `.directive`'s name / factory validation
+   * surfaces today. The downstream directive-normalize errors
+   * (`InvalidIsolateBindingError`, `InvalidControllerFactoryError`, …)
+   * still route lazily via `$exceptionHandler('$compile')` at provider
+   * `$get` time through the existing factory `try/catch` —
+   * `EXCEPTION_HANDLER_CAUSES` stays at 10.
+   *
+   * Returns `this` for chaining.
+   *
+   * @example
+   * ```ts
+   * $compileProvider.component('userCard', {
+   *   bindings: { user: '<', onSelect: '&' },
+   *   controller: ['$element', function () {
+   *     this.$onInit = () => { void this.user; };
+   *     this.pick = () => this.onSelect({ id: this.user.id });
+   *   }],
+   *   template: '<div class="card">{{ $ctrl.user.name }}</div>',
+   * });
+   * // Consumer markup:
+   * //   <user-card user="someExpr" on-select="handler(id)"></user-card>
+   * // After link, the element gets:
+   * //   - an isolate scope ({ user: '<', onSelect: '&' })
+   * //   - the controller instance exposed as `$ctrl` on that scope
+   * //   - bindings landed on `$ctrl.user` / `$ctrl.onSelect` BEFORE
+   * //     `$onInit` runs
+   * ```
+   *
+   * @see InvalidComponentDefinitionError — Registration-time errors.
+   */
+  component(name: string, definition: ComponentDefinition): this {
+    // Validate `name` defensively — even though the typed signature
+    // declares `name: string`, calls from JS / untyped TS may pass
+    // non-string values, so the runtime check stays. The `as unknown`
+    // view sidesteps the `no-unnecessary-condition` lint rule that
+    // would otherwise complain about checking a typed `string` value.
+    const rawName = name as unknown;
+    if (typeof rawName !== 'string' || !VALID_DIRECTIVE_NAME.test(rawName)) {
+      throw new InvalidComponentDefinitionError(
+        typeof rawName === 'string' ? rawName : describeValue(rawName),
+        'name must be a non-empty camelCase identifier',
+      );
+    }
+    // Same defensive read pattern for `definition` — must be a plain
+    // object at the runtime boundary, but the typed signature
+    // `ComponentDefinition` would mark the null / array / primitive
+    // checks as unreachable. The `as unknown` view restores the
+    // narrowing.
+    const rawDefinition = definition as unknown;
+    if (
+      rawDefinition === null ||
+      rawDefinition === undefined ||
+      typeof rawDefinition !== 'object' ||
+      Array.isArray(rawDefinition)
+    ) {
+      throw new InvalidComponentDefinitionError(name, 'definition must be a plain object');
+    }
+
+    // The default controller is a named function (not an arrow) so it
+    // shows up in stack traces with a useful label. Matches the
+    // AngularJS 1.x `function noop() {}` precedent. Wrapped in the
+    // array-style annotation so it satisfies the project's strict
+    // `annotate` rule (bare functions without `$inject` are rejected).
+    // Every component without an explicit controller gets a fresh
+    // `NoopController` invokable.
+    const userController = definition.controller;
+    const controller: ControllerInvokable | string =
+      userController === undefined ? [function NoopController() {}] : userController;
+    const controllerAs = definition.controllerAs ?? '$ctrl';
+    const bindings = definition.bindings ?? {};
+
+    // Translate the CDO into a directive factory returning the DDO.
+    // The factory is wrapped in the array-style annotation `[fn]` (no
+    // deps + trailing function) — the project's `$injector.invoke`
+    // rejects bare functions without `$inject`, so the array form is
+    // the canonical zero-dep spelling used everywhere else. The
+    // directive normalizer will validate
+    // `controller`/`controllerAs`/`scope`/`transclude`/`template`
+    // lazily at provider `$get` time, with throws routed via
+    // `$exceptionHandler('$compile')` through the existing factory
+    // try/catch in `$$buildDirectiveArrayProvider`.
+    const factory: DirectiveFactory = [
+      () => {
+        const ddo: DirectiveDefinition = {
+          restrict: 'E',
+          scope: bindings,
+          bindToController: true,
+          controller,
+          controllerAs,
+        };
+        if (definition.template !== undefined) {
+          ddo.template = definition.template;
+        }
+        if (definition.templateUrl !== undefined) {
+          ddo.templateUrl = definition.templateUrl;
+        }
+        if (definition.transclude !== undefined) {
+          ddo.transclude = definition.transclude;
+        }
+        if (definition.require !== undefined) {
+          ddo.require = definition.require;
+        }
+        return ddo;
+      },
+    ] as DirectiveFactory;
+
+    this.directive(name, factory);
     return this;
   }
 

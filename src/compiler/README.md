@@ -544,6 +544,177 @@ exception to that rule: it fires lazily at first directive lookup
 registration), so it routes through `$exceptionHandler('$compile')` like
 any other compile-time error.
 
+## Isolate scope & components (spec 022)
+
+Spec 022 lights up the second half of "Directives & DOM Compilation":
+isolate scope with declarative bindings, controller-instance binding
+routing, the four lifecycle hooks, controller `require`, and the
+`$compileProvider.component(name, definition)` shorthand.
+
+### The four binding kinds
+
+| Symbol | Name | Wiring strategy | Feeds `$onChanges`? |
+| --- | --- | --- | --- |
+| `=` | Two-way | `parent → local` watch + reverse `local → parent` watch with last-digest-value reconciliation; non-assignable parent expressions silently degrade to one-way | no |
+| `@` | One-way text | `$interpolate(attrValue, true)` evaluated against the PARENT scope, watch installed on the isolate scope | yes |
+| `<` | One-way | Single `parentScope.$watch` writes to the target; initial seed at link time | yes |
+| `&` | Expression / callback | Target receives `(locals?) => parentScope.$eval(expr, locals)` | no |
+
+Modifiers — `?` makes a missing attribute leave the local undefined
+(no error); a trailing identifier (`'<sourceAttr'`) aliases the source
+attribute against `attrs['sourceAttr']`. Malformed binding-spec strings
+throw `InvalidIsolateBindingError` at directive registration. Two
+object-form-scope directives on the same element trip
+`MultipleIsolateScopeError` at link time — both routed via
+`$exceptionHandler('$compile')`.
+
+`@` binding interpolates against the PARENT scope (not the isolate)
+so consumer markup like `<my-dir title="{{outerName}}">` resolves
+`outerName` in the outer namespace. This is the AngularJS-canonical
+behaviour — a naive `attrs.$observe` against the isolate scope would
+leave `outerName` undefined.
+
+### `bindToController`
+
+`bindToController: true` reuses the binding map declared via
+`scope: { … }` but writes the bindings onto the controller INSTANCE
+instead of onto the isolate scope. The `controllerAs` alias is published
+on the isolate scope AFTER bindings populate, so the template's
+`$ctrl.foo` reads land on the post-binding instance.
+
+`bindToController: { … }` takes its binding map directly from the
+field — no `scope: { … }` declaration is needed. UNLIKE the
+`scope: { … }` declaration, this form does NOT request creation of an
+isolate scope on its own — the directive consumes whatever scope the
+element already has. As a consequence, a `bindToController:{}`-only
+directive does NOT trigger `MultipleIsolateScopeError` when it shares
+an element with a `scope: { … }` directive.
+
+### Lifecycle hooks
+
+A controller may implement any of `$onInit`, `$onChanges(changes)`,
+`$onDestroy()`, `$postLink()`. Each hook is an opt-in
+`typeof ctrl.$onX === 'function'` check — a hookless controller is
+identical to spec 020's behaviour.
+
+The canonical per-element ordering (pinned by a shared-spy ordering
+test):
+
+```
+construct → stash in $$ngControllers → resolve require → wire bindings →
+publish alias → $onInit → preLink → child link → postLink →
+$postLink → $onDestroy
+```
+
+`$onChanges` fires for `<` and `@` bindings only — never `=` or `&`.
+The initial synchronous call at link time delivers all `<`/`@`
+bindings as first-change records; subsequent changes batch through a
+per-digest `$$postDigest` flush. `previousValue` on the initial fire
+is the frozen `UNINITIALIZED_VALUE` sentinel; consumers gate on
+`isFirstChange()` instead of reading `previousValue`.
+
+### `require`
+
+```ts
+$cp.directive('child', () => ({
+  require: '^parent',                       // string form
+  link: (_s, _e, _a, parentCtrl) => { /*…*/ },
+}));
+
+$cp.directive('child', () => ({
+  require: ['parent', '^^outer'],           // array form
+  link: (_s, _e, _a, [pCtrl, oCtrl]) => { /*…*/ },
+}));
+
+$cp.component('childCmp', {
+  require: { parent: '^parentCmp' },        // object form auto-assigns
+  controller: [function () {
+    this.$onInit = function () {
+      // `this.parent` is populated BEFORE $onInit runs.
+    };
+  }],
+});
+```
+
+Flag semantics (order-tolerant):
+
+- *no prefix* — own element only.
+- `^` — own element, then walk `parentElement` chain.
+- `^^` — `parentElement` chain only (skip own element).
+- `?` — optional. A miss yields `null` instead of throwing
+  `MissingRequiredControllerError`.
+
+Resolution reads from a per-element non-enumerable
+`$$ngControllers: Map<string, unknown>` planted by the controller seam
+— no `MutationObserver` or DOM query. Object-form `require` is the ONLY
+shape that auto-assigns onto the requiring controller's instance
+before `$onInit`; string and array forms deliver controllers exclusively
+via the link fn's 4th argument.
+
+### `$compileProvider.component(name, definition)`
+
+A component is a directive with a fixed shape. The provider translates
+the {@link ComponentDefinition} into a directive factory returning a
+DDO with the AngularJS 1.5+ canonical defaults:
+
+| Default | Value |
+| --- | --- |
+| `restrict` | `'E'` (element only) |
+| `scope` | `definition.bindings ?? {}` (always object-form → isolate scope, possibly empty) |
+| `bindToController` | `true` |
+| `controller` | `definition.controller ?? [function NoopController() {}]` (array-wrapped to satisfy strict `annotate`) |
+| `controllerAs` | `definition.controllerAs ?? '$ctrl'` |
+| `template` / `templateUrl` / `transclude` / `require` | pass-through |
+
+The empty `NoopController` keeps stack traces clean; the array wrap is
+the canonical zero-dep shape used everywhere else in the suite.
+`.component` is single-name only — no bulk-map form. Name and
+plain-object validation runs SYNCHRONOUSLY at registration via
+`InvalidComponentDefinitionError` (matches `.directive`'s precedent);
+downstream directive-normalize errors (`InvalidIsolateBindingError`,
+…) still route lazily via `$exceptionHandler('$compile')` at provider
+`$get` time.
+
+### Worked example — `userCard`
+
+```ts
+import { createModule, createInjector } from 'my-own-angularjs/di';
+import { ngModule, Scope } from 'my-own-angularjs/core';
+
+const app = createModule('app', ['ng']).component('userCard', {
+  bindings: { user: '<', onSelect: '&' },
+  controller: ['$element', function ($element) {
+    this.$onInit = () => {
+      // `this.user` is populated BEFORE $onInit runs (bindToController + `<`).
+      $element.setAttribute('aria-label', `Card for ${this.user.name}`);
+    };
+    this.pick = () => this.onSelect({ id: this.user.id });
+  }],
+  // Note: ng-click is deferred to the "Built-in Directives" spec.
+  // Today we install the listener manually inside the controller.
+  template: '<div class="card">{{ $ctrl.user.name }}</div>',
+});
+
+const injector = createInjector([ngModule, app]);
+const $compile = injector.get('$compile');
+const scope = Scope.create<{ pickedId?: string; me?: { id: string; name: string } }>();
+scope.me = { id: 'u-1', name: 'Alice' };
+
+const root = document.createElement('user-card');
+root.setAttribute('user', 'me');
+root.setAttribute('on-select', 'pickedId = id');
+
+$compile(root)(scope);
+scope.$digest();
+// root.innerHTML === '<div class="card">Alice</div>'
+// Calling root.querySelector('div')! and invoking $ctrl.pick() from the
+// controller assigns scope.pickedId = 'u-1'.
+```
+
+For the full surface (deferred upstream cases, parity with
+`componentSpec.js`, etc.) see
+`src/compiler/__tests__/spec022-parity.test.ts`.
+
 ## Deferred items
 
 Spec 017 deliberately stops at the compiler core. The following are
@@ -552,9 +723,9 @@ explicit roadmap items that future specs will deliver — they are
 do not produce observable behavior in this spec:
 
 - **Isolate scope** (`scope: { foo: '=' }`, `scope: { bar: '<' }`,
-  `'@'`, `'&'`) — REJECTED at lookup time with
-  `IsolateScopeNotSupportedError`. Substantial complexity warranting its
-  own spec.
+  `'@'`, `'&'`) — shipped with spec 022 (see "Isolate scope &
+  components" above). The historic `IsolateScopeNotSupportedError`
+  class is kept exported as `@deprecated` for one-release grace.
 - **Transclusion** (`transclude: true`, multi-slot, `$transclude`,
   `<ng-transclude>`) shipped with spec 018 — see the
   [Transclusion](#transclusion) section above. `transclude: 'element'`
@@ -569,9 +740,10 @@ do not produce observable behavior in this spec:
   `ReplaceTrueNotSupportedError` (deprecated in AngularJS 1.x; will
   not ship). `<script type="text/ng-template">` lands with the
   Built-in Directives roadmap bullet.
-- **Controllers** (`controller`, `controllerAs`, `bindToController`,
-  `require`, `$controller` service, `$controllerProvider`) — separate
-  roadmap bullet.
+- **Controllers** (`controller`, `controllerAs`) shipped with spec 020.
+  **`bindToController` + `require` + lifecycle hooks +
+  `$compileProvider.component`** shipped with spec 022 — see "Isolate
+  scope & components" above.
 - **Built-in directives** — `ng-if`, `ng-repeat`, `ng-class`, `ng-show`,
   `ng-hide`, `ng-bind`, `ng-bind-html`, `ng-click`, `ng-model`, `ng-href`,
   `ng-src`, `ng-srcset`, and the rest. None ship with spec 017; user

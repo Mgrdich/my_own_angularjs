@@ -39,6 +39,14 @@ import { invokeExceptionHandler } from '@exception-handler/index';
 /**
  * The four lifecycle hook names. A typed union so the
  * {@link hasHook} guard returns the right discriminant.
+ *
+ * @example
+ * ```ts
+ * const hooks: LifecycleHookName[] = ['$onInit', '$onChanges', '$onDestroy', '$postLink'];
+ * for (const name of hooks) {
+ *   if (hasHook(ctrl, name)) invokeHook(ctrl, name, handler);
+ * }
+ * ```
  */
 export type LifecycleHookName = '$onInit' | '$onChanges' | '$onDestroy' | '$postLink';
 
@@ -47,6 +55,13 @@ export type LifecycleHookName = '$onInit' | '$onChanges' | '$onDestroy' | '$post
  * callable. The check is intentionally structural (`typeof === 'function'`)
  * so consumers can attach hooks dynamically inside the controller body
  * (the canonical AngularJS pattern: `this.$onInit = () => { … }`).
+ *
+ * @example
+ * ```ts
+ * if (hasHook(ctrl, '$onInit')) {
+ *   invokeHook(ctrl, '$onInit', $exceptionHandler);
+ * }
+ * ```
  */
 export function hasHook(ctrl: unknown, hookName: LifecycleHookName): boolean {
   if (typeof ctrl !== 'object' || ctrl === null) {
@@ -70,6 +85,15 @@ export function hasHook(ctrl: unknown, hookName: LifecycleHookName): boolean {
  * @param hookName One of `$onInit` / `$onChanges` / `$onDestroy` / `$postLink`.
  * @param handler The configured `$exceptionHandler`.
  * @param args Hook arguments (only `$onChanges` carries one).
+ *
+ * @example
+ * ```ts
+ * // $onInit — no args.
+ * invokeHook(ctrl, '$onInit', $exceptionHandler);
+ *
+ * // $onChanges — pass the change record set.
+ * invokeHook(ctrl, '$onChanges', $exceptionHandler, batch);
+ * ```
  */
 export function invokeHook(
   ctrl: unknown,
@@ -102,9 +126,20 @@ export function invokeHook(
  * `previousValue` — the sentinel exists to keep the value-shape
  * homogeneous.
  *
- * Non-enumerable so it does not appear in `for..in` traversals of any
- * containing change record, and frozen so consumers cannot accidentally
- * mutate the shared sentinel.
+ * Frozen so consumers cannot accidentally mutate the shared sentinel.
+ *
+ * @example
+ * ```ts
+ * controller.$onChanges = (changes) => {
+ *   const u = changes.user;
+ *   if (u.isFirstChange()) {
+ *     // u.previousValue === UNINITIALIZED_VALUE
+ *     console.log('initial', u.currentValue);
+ *   } else {
+ *     console.log('changed from', u.previousValue, 'to', u.currentValue);
+ *   }
+ * };
+ * ```
  */
 export const UNINITIALIZED_VALUE: Readonly<Record<string, never>> = Object.freeze(
   Object.create(null) as Record<string, never>,
@@ -146,6 +181,16 @@ export class SimpleChange {
 /**
  * The shape of a single controller's pending changes batch — keyed by
  * local binding name, valued by {@link SimpleChange}.
+ *
+ * @example
+ * ```ts
+ * controller.$onChanges = (changes: ChangeRecord) => {
+ *   for (const localName of Object.keys(changes)) {
+ *     const c = changes[localName];
+ *     // c is a SimpleChange
+ *   }
+ * };
+ * ```
  */
 export type ChangeRecord = Record<string, SimpleChange>;
 
@@ -159,6 +204,15 @@ export type ChangeRecord = Record<string, SimpleChange>;
  * triggering a flush via `scope.$$postDigest(...)` when the queue
  * transitions from empty to non-empty. See `compile.ts` for the
  * scheduling site.
+ *
+ * @example
+ * ```ts
+ * const queue = new ChangesQueue();
+ * const wasEmpty = queue.record(ctrl, 'user', next, prev, false);
+ * if (wasEmpty) {
+ *   scope.$$postDigest(() => flushChangesQueue(queue, $exceptionHandler));
+ * }
+ * ```
  */
 export class ChangesQueue {
   private pending = new Map<object, ChangeRecord>();
@@ -238,6 +292,11 @@ export class ChangesQueue {
  * additional changes record during flush (e.g. a `$onChanges` writes
  * back to a `<` binding), they accumulate into a fresh batch and the
  * compiler's next digest cycle will schedule another flush.
+ *
+ * @example
+ * ```ts
+ * scope.$$postDigest(() => flushChangesQueue(queue, $exceptionHandler));
+ * ```
  */
 export function flushChangesQueue(queue: ChangesQueue, handler: ExceptionHandler): void {
   // Snapshot keys so a hook that mutates the queue (e.g. by destroying

@@ -117,6 +117,16 @@ export interface ControllerLocals<TScope extends Scope = Scope> {
  * The `later: true` path does NOT publish the alias on the scope itself
  * — the legacy 1–3 arg call sites still run `bindAlias` internally, so
  * the deferred shape is opt-in.
+ *
+ * @example
+ * ```ts
+ * const { instance, identifier }: DeferredControllerResult =
+ *   $controller('Greeter as vm', { $scope }, undefined, true);
+ * // …populate bindToController bindings onto `instance`…
+ * if (identifier !== undefined) {
+ *   ($scope as Record<string, unknown>)[identifier] = instance;
+ * }
+ * ```
  */
 export interface DeferredControllerResult {
   readonly instance: unknown;

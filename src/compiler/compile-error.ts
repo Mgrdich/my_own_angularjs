@@ -681,3 +681,48 @@ export class MissingRequiredControllerError extends Error {
     super(`Controller "${requiredName}" required by directive "${requiringDirective}" was not found in ${scope}`);
   }
 }
+
+/**
+ * Thrown by `$compileProvider.component(name, definition)` (spec 022
+ * Slice 5) when registration arguments are not well-formed. Two
+ * categories of misuse surface this error:
+ *
+ *  1. **Invalid component name** — the same camelCase identifier rule
+ *     `$compileProvider.directive` enforces. An empty string, a
+ *     hyphenated tag-name, or a name starting with a digit trips
+ *     `InvalidComponentDefinitionError(name, 'name must be a non-empty camelCase identifier')`.
+ *  2. **Invalid definition object** — the second argument must be a
+ *     plain object (not `null`, not an array, not a primitive). A
+ *     primitive or array trips
+ *     `InvalidComponentDefinitionError(name, 'definition must be a plain object')`.
+ *     Misshapen individual fields (`controller`, `bindings`, etc.) are
+ *     caught downstream by the directive normalizer because
+ *     `.component(...)` forwards to `this.directive(name, factory)` —
+ *     the directive's existing validation runs at provider `$get` time
+ *     and routes via the same `'$compile'` cause.
+ *
+ * Because `.component` runs synchronously inside the caller's frame
+ * (registration time), this class is thrown **directly** to the caller.
+ * The exception-handler routing happens only when the underlying
+ * `.directive` registration's factory invocation runs later — those
+ * surface as `InvalidDirectiveFactoryError`-shaped errors with cause
+ * `'$compile'`. No new `EXCEPTION_HANDLER_CAUSES` token is introduced.
+ *
+ * @example
+ * ```ts
+ * try {
+ *   $compileProvider.component('1bad', { template: '' });
+ * } catch (err) {
+ *   if (err instanceof InvalidComponentDefinitionError) {
+ *     console.warn('Fix the component:', err.message);
+ *   }
+ * }
+ * ```
+ */
+export class InvalidComponentDefinitionError extends Error {
+  readonly name = 'InvalidComponentDefinitionError' as const;
+
+  constructor(componentName: string, reason: string) {
+    super(`Invalid component definition for "${componentName}": ${reason}`);
+  }
+}
