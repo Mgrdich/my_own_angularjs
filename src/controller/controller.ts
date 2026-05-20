@@ -47,6 +47,7 @@ import type {
   ControllerLocals,
   ControllerService,
   CreateControllerArgs,
+  DeferredControllerResult,
 } from './controller-types';
 
 /**
@@ -226,6 +227,27 @@ function bindAlias(scope: ControllerLocals['$scope'], alias: string | undefined,
  * 3. **Anything else** — throws {@link InvalidControllerFactoryError}
  *    with the sentinel name `"<inline>"`.
  *
+ * **Spec 022 Slice 2 — `later: true`.** A fourth optional positional
+ * argument enables the deferred-alias call shape. When `later === true`,
+ * the function returns a {@link DeferredControllerResult}
+ * `{ instance, identifier }` and SKIPS the {@link bindAlias} call —
+ * the caller assumes responsibility for assigning
+ * `scope[identifier] = instance` after it has populated bindings (for
+ * `bindToController` directives, the compiler does this AFTER
+ * `wireIsolateBindings` has flowed bindings onto the instance). The
+ * identifier resolution mirrors the eager path: an explicit `ident`
+ * argument supersedes the `'Name as alias'` suffix, both validated
+ * against {@link IDENT_RE}. When `ident` is omitted AND the input is a
+ * function/array (no parsed-name path), `identifier` is `undefined`.
+ *
+ * The legacy 1–3 arg call shape (or `later: false` / omitted) is
+ * byte-for-byte equivalent to spec 020 — the alias is bound internally
+ * via {@link bindAlias} and the instance is returned directly. The
+ * function-body return type is `unknown` here; the public
+ * {@link ControllerService} type's overload pair narrows the call-site
+ * return type via a single discriminating cast at the factory's return
+ * site.
+ *
  * @example
  * ```ts
  * // Registered name, no alias:
@@ -242,14 +264,28 @@ function bindAlias(scope: ControllerLocals['$scope'], alias: string | undefined,
  *
  * // Inline array-style annotation:
  * $controller(['$scope', '$svc', function ($scope, $svc) {}], { $scope: scope });
+ *
+ * // Spec 022 Slice 2 — deferred alias publish:
+ * const { instance, identifier } = $controller('Greeter as vm', { $scope }, undefined, true);
+ * // scope.vm is NOT yet set; caller publishes after wiring bindToController.
+ * if (identifier !== undefined) {
+ *   (scope as Record<string, unknown>)[identifier] = instance;
+ * }
  * ```
  */
 export function createController(args: CreateControllerArgs): ControllerService {
   const { injector, registry } = args;
-  return function $controller<TScope extends Scope = Scope>(
+  function $controller<TScope extends Scope = Scope>(
     nameOrFn: string | ControllerInvokable,
     locals?: ControllerLocals<TScope>,
     ident?: string,
+    later?: boolean,
+    // `later === true` returns a `DeferredControllerResult`; otherwise an
+    // instance. The body's return type is `unknown` because it covers
+    // both cases — `DeferredControllerResult` is assignable to `unknown`.
+    // The public overloads in `ControllerService` (controller-types.ts)
+    // narrow at the call site via a single cast at the factory's return
+    // site below.
   ): unknown {
     if (typeof nameOrFn === 'string') {
       const parsed = parseControllerName(nameOrFn);
@@ -279,20 +315,33 @@ export function createController(args: CreateControllerArgs): ControllerService 
       } else {
         alias = parsed.ident;
       }
+      if (later === true) {
+        const deferred: DeferredControllerResult = { instance, identifier: alias };
+        return deferred;
+      }
       bindAlias(locals?.$scope, alias, instance);
       return instance;
     }
     if (typeof nameOrFn === 'function' || Array.isArray(nameOrFn)) {
       resolveConstructor('<inline>', nameOrFn);
       const instance = instantiate(injector, nameOrFn, locals);
+      let alias: string | undefined;
       if (ident !== undefined) {
         if (!IDENT_RE.test(ident)) {
           throw new MalformedControllerAliasError(ident);
         }
-        bindAlias(locals?.$scope, ident, instance);
+        alias = ident;
+      }
+      if (later === true) {
+        const deferred: DeferredControllerResult = { instance, identifier: alias };
+        return deferred;
+      }
+      if (alias !== undefined) {
+        bindAlias(locals?.$scope, alias, instance);
       }
       return instance;
     }
     throw new InvalidControllerFactoryError('<inline>', describe(nameOrFn));
-  };
+  }
+  return $controller as unknown as ControllerService;
 }

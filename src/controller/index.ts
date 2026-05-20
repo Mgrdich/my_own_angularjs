@@ -19,6 +19,7 @@ export type {
   ControllerInvokable,
   ControllerLocals,
   ControllerService,
+  DeferredControllerResult,
   IControllerProvider,
   CreateControllerArgs,
 } from './controller-types';

@@ -75,15 +75,21 @@ export {
   EmptyTemplateUrlError,
   InvalidDirectiveFactoryError,
   InvalidDirectiveNameError,
+  InvalidIsolateBindingError,
   InvalidTemplateUrlValueError,
   InvalidTemplateValueError,
   InvalidTranscludeSelectorError,
   InvalidTranscludeSlotNameError,
   InvalidTranscludeValueError,
+  // eslint-disable-next-line @typescript-eslint/no-deprecated -- IsolateScopeNotSupportedError is intentionally re-exported (spec 022 Slice 1) for the one-release deprecation grace period. See @compiler/index.ts for context.
   IsolateScopeNotSupportedError,
+  MissingRequiredControllerError,
+  MultipleIsolateScopeError,
   MultipleTemplateDirectivesError,
   MultipleTranscludeDirectivesError,
   NgTranscludeMisuseError,
+  parseBindingSpec,
+  parseIsolateBindings,
   ReplaceTrueNotSupportedError,
   RequiredTranscludeSlotUnfilledError,
   TemplateAndTemplateUrlCombinedError,
@@ -91,9 +97,11 @@ export {
   TemplateFunctionReturnedNonStringError,
   TemplateUrlFunctionReturnedNonStringError,
   UndeclaredTranscludeSlotError,
+  wireIsolateBindings,
 } from './compiler/index';
 export type {
   Attributes,
+  BindingMode,
   CloneAttachFn,
   CompileFn,
   CompileOptions,
@@ -104,6 +112,8 @@ export type {
   DirectiveFactoryReturn,
   Linker,
   LinkFn,
+  NormalizedBindingMap,
+  NormalizedBindingSpec,
   TemplateFn,
   TemplateUrlFn,
   TranscludeFn,
@@ -137,4 +147,10 @@ export {
   MalformedControllerAliasError,
   UnknownControllerError,
 } from './controller/index';
-export type { ControllerInvokable, ControllerLocals, ControllerService, IControllerProvider } from './controller/index';
+export type {
+  ControllerInvokable,
+  ControllerLocals,
+  ControllerService,
+  DeferredControllerResult,
+  IControllerProvider,
+} from './controller/index';

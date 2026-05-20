@@ -276,22 +276,21 @@ describe('scope: true — child-scope creation (FS §2.12)', () => {
     expect(parentScope.foo).toBeUndefined();
   });
 
-  it('rejects isolate scope { ... } lazily and routes through $exceptionHandler with cause $compile', () => {
-    // Slice 11 wraps the factory invocation in try/catch routing
-    // through $exceptionHandler('$compile'). $compile(node)(scope) no
-    // longer throws — the bad directive is silently dropped from the
-    // matched-directive array and the error surfaces via the handler.
-    // The Slice 12 README documents this as the AngularJS-canonical
-    // "log and continue" contract for compile-time errors.
+  it('accepts isolate scope { ... } and links the directive against a non-inheriting isolate scope (spec 022 Slice 1)', () => {
+    // Spec 022 Slice 1 LIFTED the spec-017 rejection of the object-form
+    // `scope: { … }` declaration. An isolate-scope directive now links
+    // normally; its link function receives a scope that does NOT
+    // prototypically inherit from the parent.
     const handlerSpy = vi.fn<(...args: unknown[]) => void>();
     bootstrapNgModule({ exceptionHandler: handlerSpy });
+    let captured: Scope | null = null;
     const $compile = compileWith(($cp) => {
       $cp.directive(
         'isolateDir',
         ddoFactory({
           scope: { foo: '=' } as unknown as Record<string, string>,
-          link: () => {
-            /* noop */
+          link: (scope) => {
+            captured = scope;
           },
         }),
       );
@@ -299,19 +298,20 @@ describe('scope: true — child-scope creation (FS §2.12)', () => {
 
     const node = document.createElement('div');
     node.setAttribute('isolate-dir', '');
+    const parentScope = Scope.create<{ name?: string }>();
+    parentScope.name = 'parent';
 
-    // No throw — the lookup returns an empty directive array (the bad
-    // factory was skipped) and the linker runs against zero directives
-    // for this node.
-    expect(() => $compile(node)(Scope.create())).not.toThrow();
-
-    // The handler saw the IsolateScopeNotSupportedError with the
-    // spec-canonical cause and the directive name in the message.
-    expect(handlerSpy).toHaveBeenCalled();
-    const [err, cause] = handlerSpy.mock.calls[0] ?? [];
-    expect(cause).toBe('$compile');
-    expect((err as Error).message).toMatch(/Isolate scope is not yet supported/);
-    expect((err as Error).message).toContain('isolateDir');
+    expect(() => $compile(node)(parentScope)).not.toThrow();
+    // No errors routed — the isolate scope is now a supported feature.
+    expect(handlerSpy).not.toHaveBeenCalled();
+    // The link fn ran and received a scope that does NOT inherit from
+    // the parent (structural proof: the parent's `name` is invisible
+    // from the isolate scope, and `Object.getPrototypeOf` is not the
+    // parent scope).
+    expect(captured).not.toBeNull();
+    expect(captured).not.toBe(parentScope);
+    expect((captured as unknown as { name?: string }).name).toBeUndefined();
+    expect(Object.getPrototypeOf(captured)).not.toBe(parentScope);
   });
 });
 

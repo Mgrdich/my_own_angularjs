@@ -18,6 +18,7 @@ import type { ExceptionHandler } from '@exception-handler/index';
 import type { InterpolateService } from '@interpolate/interpolate-types';
 import type { NormalizedTemplate, TemplateFn, TemplateRequestFn, TemplateUrlFn } from '@template/template-types';
 
+import type { NormalizedBindingMap } from './isolate-bindings';
 import type { CloneAttachFn, NormalizedTransclude, TranscludeFn, TranscludeSlotName } from './transclude-types';
 
 // Re-export the public transclusion types so directive authors can
@@ -96,22 +97,31 @@ export interface Attributes {
  * Receives the bound scope, the raw DOM `Element` (or `Comment` for
  * an M-restricted match in a future slice), the shared
  * {@link Attributes} for the element, an OPTIONAL `controllers`
- * placeholder reserved for the controllers spec, and an OPTIONAL
- * `$transclude` callable (spec 018) made available only when the
- * directive declares `transclude: true | { … }`. Returns nothing.
+ * argument (spec 022 Slice 4 — resolved `require` controllers), and
+ * an OPTIONAL `$transclude` callable (spec 018) made available only
+ * when the directive declares `transclude: true | { … }`. Returns
+ * nothing.
  *
- * **`controllers` is a stable placeholder.** Spec 018 defers the
- * controllers DDO; directives MUST NOT introspect this argument as
- * `undefined` until the controllers spec ships. The slot is preserved
- * so the future addition can fill it in without breaking the
- * signature. The TypeScript type is narrowed to `undefined` exactly
- * so accidental `controllers as ControllerInstance` casts surface at
- * compile time.
+ * **`controllers` shape (spec 022 Slice 4).** The argument carries the
+ * resolved `require` controllers for THIS directive — its runtime
+ * shape matches the directive's `require` declaration:
+ *
+ *  - String `require: '^parent'` → single resolved controller (or
+ *    `null` for an optional miss).
+ *  - Array `require: ['parent', '^^outer']` → an array of resolved
+ *    controllers (1:1 with the input array; `null` for optional
+ *    misses).
+ *  - Object `require: { p: 'parent', o: '^^outer' }` → a record
+ *    keyed by the declared aliases.
+ *  - No `require` declaration → `undefined`.
+ *
+ * Directives without `require` should treat the slot as `undefined`.
+ * TypeScript function-parameter subtyping keeps the spec-017-canonical
+ * 3-arg `(scope, element, attrs)` callers assignable to this widened
+ * type without source changes.
  *
  * **`$transclude` is `undefined` unless the directive's DDO declared
- * `transclude`.** TypeScript function-parameter subtyping keeps the
- * spec-017-canonical 3-arg `(scope, element, attrs)` callers
- * assignable to this widened type without source changes.
+ * `transclude`.** Same subtyping rule as above.
  *
  * Errors thrown from a link function are routed through
  * `$exceptionHandler` with cause `'$compile'` (spec 017 Slice 11).
@@ -120,7 +130,7 @@ export type LinkFn = (
   scope: Scope,
   element: Element,
   attrs: Attributes,
-  controllers?: undefined,
+  controllers?: unknown,
   $transclude?: TranscludeFn,
 ) => void;
 
@@ -159,6 +169,40 @@ export interface DirectiveDefinition {
   terminal?: boolean;
   link?: LinkFn | { pre?: LinkFn; post?: LinkFn };
   compile?: CompileFn;
+  /**
+   * Scope declaration. Three shapes are accepted:
+   *
+   * - `false` (default) — the directive shares its parent scope; no new
+   *   scope is created.
+   * - `true` — the directive gets a child scope created via
+   *   `parent.$new()`. The child inherits prototypically.
+   * - `Record<string, string>` — the directive gets an ISOLATE scope
+   *   (spec 022 Slice 1). The map declares one binding per local name;
+   *   each value is a binding-spec string of the form `[=@<&][?][alias]?`
+   *   parsed by `parseBindingSpec`. The isolate scope does NOT inherit
+   *   from the parent — only the declared bindings cross the boundary.
+   *
+   * A malformed binding-spec string routes
+   * {@link import('./compile-error').InvalidIsolateBindingError} via
+   * `$exceptionHandler('$compile')` at directive registration. Two
+   * directives on the same element both declaring the object form
+   * trigger {@link import('./compile-error').MultipleIsolateScopeError}
+   * at link time.
+   *
+   * @example
+   * ```ts
+   * $compileProvider.directive('myCard', () => ({
+   *   scope: {
+   *     value: '=',        // two-way
+   *     title: '@',        // one-way text (interpolated)
+   *     item:  '<',        // one-way expression
+   *     onDone: '&',       // expression / callback
+   *     hint:  '@?',       // optional one-way text
+   *     name:  '<sourceAttr', // attribute aliasing
+   *   },
+   * }));
+   * ```
+   */
   scope?: false | true | Record<string, string>;
   name?: string;
   /**
@@ -357,6 +401,139 @@ export interface DirectiveDefinition {
    *      (e.g. `''`, `'1bad'`, `'has space'`) are rejected at registration.
    */
   controllerAs?: string;
+  /**
+   * Route isolate-scope bindings to the CONTROLLER INSTANCE rather than
+   * onto the isolate scope (spec 022 Slice 2 / technical-considerations
+   * §2.2). Two accepted shapes:
+   *
+   * - `true` — re-use the binding map declared via `scope: { … }`. The
+   *   isolate scope is still created (so the directive still requires
+   *   `scope: { … }` to be present); the bindings just write to the
+   *   controller instance instead of to the scope. The
+   *   `controllerAs` alias is published on the isolate scope AFTER
+   *   bindings have populated, so the template's `$ctrl.foo` reads land
+   *   on the post-binding instance.
+   * - `Record<string, string>` — an object-form binding map IDENTICAL
+   *   in shape to `scope: { … }`. The directive does NOT need to also
+   *   declare `scope`. UNLIKE the `scope: { … }` declaration, this form
+   *   does NOT request creation of an isolate scope on its own — the
+   *   directive consumes whatever scope the element already has (which
+   *   may be the parent scope, a `scope: true` child, or an isolate
+   *   scope created by ANOTHER directive on the same element). Bindings
+   *   target the controller instance. Malformed entries throw
+   *   {@link import('./compile-error').InvalidIsolateBindingError} at
+   *   registration, routed via `$exceptionHandler('$compile')` through
+   *   the existing factory `try/catch`. This asymmetry mirrors
+   *   AngularJS-canonical behavior: a `bindToController`-only directive
+   *   does NOT trigger {@link import('./compile-error').MultipleIsolateScopeError}
+   *   when it shares an element with a `scope: { … }` directive.
+   *
+   * When `bindToController` is set but the directive declares NO
+   * controller, the flag silently degrades — bindings land on the
+   * isolate scope as if `bindToController` were unset. This matches
+   * AngularJS-canonical no-op behavior; a controllerless directive
+   * has nowhere to put the instance bindings.
+   *
+   * The compiler invokes the controller with `later: true`
+   * (see {@link import('@controller/controller-types').ControllerService}),
+   * populates bindings onto the returned `instance`, then publishes the
+   * `controllerAs` alias on the isolate scope. The ordering matters for
+   * the eventual `$onInit` hook (spec 022 Slice 3) — bindings will be
+   * present on `this` before `$onInit` runs.
+   *
+   * @example
+   * ```ts
+   * // Form 1 — re-use the scope: { … } binding map.
+   * $compileProvider.directive('myCard', () => ({
+   *   scope: { user: '<' },
+   *   bindToController: true,
+   *   controller: function () { void this; },
+   *   controllerAs: '$ctrl',
+   * }));
+   *
+   * // Form 2 — object-form binding map (no `scope` declaration needed).
+   * $compileProvider.directive('myCard', () => ({
+   *   bindToController: { user: '<' },
+   *   controller: function () { void this; },
+   *   controllerAs: '$ctrl',
+   * }));
+   * ```
+   *
+   * @see InvalidIsolateBindingError — Malformed entries in the object
+   *      form are rejected at registration.
+   */
+  bindToController?: boolean | Record<string, string>;
+  /**
+   * Declares one or more controllers this directive requires (spec 022
+   * Slice 4 / technical-considerations §2.4). Three accepted shapes:
+   *
+   *  - `string` — a single requirement. Resolves to ONE controller (or
+   *    `null` for an optional miss).
+   *  - `string[]` — multiple requirements, 1:1 with the resolved array
+   *    passed as the link fn's 4th argument.
+   *  - `Record<string, string>` — multiple requirements keyed by alias.
+   *    The resolved object IS the link fn's 4th argument, AND when the
+   *    requiring directive declares its own `controller`, each alias is
+   *    ALSO assigned onto the controller instance BEFORE `$onInit` runs
+   *    (so `this.<alias>` is populated inside `$onInit`).
+   *
+   * Each entry string supports two prefix flags (order-tolerant):
+   *
+   *  - `?`  — optional. A missing controller resolves to `null`
+   *    instead of throwing.
+   *  - `^`  — search this element AND its ancestors (the
+   *    `parentElement` chain).
+   *  - `^^` — search ancestors ONLY (skip this element).
+   *
+   * `?` and the ancestor-walk flag are order-tolerant: `'?^name'` and
+   * `'^?name'` parse identically. `^^` is parsed before `^` so longer
+   * prefixes win.
+   *
+   * A non-optional miss throws
+   * {@link import('./compile-error').MissingRequiredControllerError},
+   * routed via `$exceptionHandler('$compile')` from the per-element
+   * link site. The directive's other behavior (link, compile,
+   * transclude) on the same element still runs; sibling elements are
+   * unaffected.
+   *
+   * Resolution reads from the per-element non-enumerable
+   * `$$ngControllers: Map<string, unknown>` stash planted by the
+   * controller seam — see `src/compiler/cleanup.ts:NgManagedElement`.
+   *
+   * @example String form (own element, optional)
+   * ```ts
+   * $compileProvider.directive('child', () => ({
+   *   require: '?parent',
+   *   link: (_s, _e, _a, parentCtrl) => {
+   *     // parentCtrl is the resolved instance or `null`
+   *   },
+   * }));
+   * ```
+   *
+   * @example Array form
+   * ```ts
+   * $compileProvider.directive('child', () => ({
+   *   require: ['parent', '^^outer'],
+   *   link: (_s, _e, _a, ctrls: unknown) => {
+   *     // ctrls === [parentCtrl, outerCtrl] (or null entries for optional misses)
+   *   },
+   * }));
+   * ```
+   *
+   * @example Object form with auto-assignment
+   * ```ts
+   * $compileProvider.directive('child', () => ({
+   *   require: { parent: '^parent' },
+   *   controller: ['$scope', function () {
+   *     this.$onInit = function () {
+   *       // `this.parent` is populated before `$onInit` runs
+   *     };
+   *   }],
+   *   controllerAs: '$ctrl',
+   * }));
+   * ```
+   */
+  require?: string | string[] | Record<string, string>;
 }
 
 /**
@@ -438,6 +615,73 @@ export interface Directive {
    * argument so the resolved instance is exposed on `scope[controllerAs]`.
    */
   controllerAs?: string;
+  /**
+   * Post-normalize isolate-scope binding map (spec 022 Slice 1). Unset
+   * when the directive declared `scope: false` / `scope: true` /
+   * omitted; populated by `normalizeDirective` from the object-form
+   * `scope: { … }` declaration. When present, the per-element linker
+   * creates an isolate scope via `parentScope.$new(true)` (instead of
+   * `parentScope.$new()` for `scope: true`) and wires every entry via
+   * {@link import('./isolate-bindings').wireIsolateBindings}.
+   *
+   * The `scope` flag remains `boolean` — its `true` value still means
+   * "create a non-default scope". The choice between "child scope" and
+   * "isolate scope" is determined by `isolateBindings != null` at link
+   * time, so existing `scope: true` code paths keep working unchanged.
+   */
+  isolateBindings?: NormalizedBindingMap;
+  /**
+   * Post-normalize `bindToController` boolean (spec 022 Slice 2).
+   * Defaults to `false`. When `true`, the per-element linker targets the
+   * controller INSTANCE (rather than the isolate scope) when wiring
+   * isolate bindings — the binding map comes from
+   * {@link bindToControllerBindings} when present, else falls back to
+   * the directive's {@link isolateBindings} (spec 022 §2.2 — "form 1").
+   *
+   * `bindToController === true` without a controller silently degrades
+   * to the isolate-scope target (the documented AngularJS no-op case).
+   * The flag stays `true` after normalization regardless of the
+   * controller's presence — the per-element linker decides at LINK time
+   * whether to honor it.
+   */
+  bindToController: boolean;
+  /**
+   * Post-normalize `bindToController` object-form binding map (spec 022
+   * Slice 2). Unset when the directive declared
+   * `bindToController: true` or omitted the field entirely. Populated by
+   * `normalizeDirective` from the object-form
+   * `bindToController: { … }` declaration via
+   * {@link import('./isolate-bindings').parseIsolateBindings}.
+   *
+   * When this field is set, the per-element linker uses THIS map as the
+   * binding map (instead of {@link isolateBindings}); bindings target
+   * the controller instance. The form-2 directive does NOT trigger
+   * isolate-scope creation on its own — that is the deliberate
+   * asymmetry vs. `scope: { … }`. The existing scope on the element
+   * (whether parent, `scope: true` child, or an isolate scope created
+   * by another directive) is reused. As a consequence two directives
+   * sharing an element where one declares `scope: { … }` and the other
+   * declares `bindToController: { … }` do NOT route
+   * {@link import('./compile-error').MultipleIsolateScopeError}.
+   *
+   * When unset AND `bindToController` is `true`, the binding map is
+   * taken from {@link isolateBindings} (the directive's `scope: { … }`
+   * declaration is reused for the instance-target form).
+   *
+   * Malformed entries throw {@link import('./compile-error').InvalidIsolateBindingError}
+   * at registration, routed via `$exceptionHandler('$compile')` through
+   * the existing factory `try/catch` in `$$buildDirectiveArrayProvider`.
+   */
+  bindToControllerBindings?: NormalizedBindingMap;
+  /**
+   * Post-normalize `require` declaration (spec 022 Slice 4). Unset when
+   * the directive declared no `require`. Carries the SAME runtime shape
+   * as {@link DirectiveDefinition.require} — flag parsing (`^` / `^^`
+   * / `?`) is deferred to the per-element link site
+   * (`require-resolver.ts:parseRequireFlags`) so the normalized
+   * directive stays cheap and the resolver owns the lazy parsing.
+   */
+  require?: string | string[] | Record<string, string>;
 }
 
 /**
