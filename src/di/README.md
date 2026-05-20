@@ -32,6 +32,34 @@ injector.get('greeter')(); // "hello"
 | `.service(name, ClassCtor)`   | service       | `new ClassCtor(...deps)` — instantiated once, cached.                      |
 | `.provider(name, providerFn)` | provider      | `providerFn.$get(...deps)` — full provider lifecycle; visible in `config`. |
 
+### `.provider` is the base recipe; the rest are specializations
+
+A single `.provider('x', …)` call registers **two** names:
+
+- **`xProvider`** — the configurable provider _instance_, injectable **only**
+  during `config` (where you tune it, e.g. `gp.prefix = '> '`).
+- **`x`** — the _service_ it produces: the return value of the provider's
+  `$get`, built lazily in the run phase and cached.
+
+Conceptually every other recipe is a `.provider` whose `$get` is written for
+you — they produce the service `x` but skip the configurable `xProvider`:
+
+| Shorthand             | Conceptually equivalent provider `$get`                         |
+| --------------------- | --------------------------------------------------------------- |
+| `.factory('x', fn)`   | `$get = fn` → `fn(...deps)`                                     |
+| `.service('x', Ctor)` | `$get` does `new Ctor(...deps)`                                 |
+| `.value('x', v)`      | `$get = () => v` (no deps, no build)                            |
+| `.constant('x', v)`   | like `value`, but also readable in `config` and override-locked |
+
+This is the same `<name>Provider` convention behind `<name>Filter`
+(`./filter`) and `<name>Directive` (`./compiler`).
+
+> **Implementation note.** For clarity, each recipe has its own backing map and
+> its own branch in `get` — they do **not** literally desugar into a `.provider`
+> registration the way AngularJS does internally. The table describes the
+> _observable_ equivalence, not the wiring; the one real difference is that only
+> `.provider` exposes a `<name>Provider` object for the config phase.
+
 ## Build & resolution flow
 
 The system has two halves: a **module builder** that only _records intent_,
