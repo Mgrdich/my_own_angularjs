@@ -45,6 +45,17 @@ import type { Scope } from '@core/index';
 interface NgManagedElement extends Element {
   $$ngScope?: Scope;
   $$ngCleanupQueue?: (() => void)[];
+  /**
+   * Per-element controller registry (spec 022 Slice 3 — written by the
+   * controller seam; spec 022 Slice 4 — READ by the `require` resolver).
+   * Keyed by directive name; each value is the constructed controller
+   * instance for that directive on this element.
+   *
+   * Non-enumerable + lazily-created. Slice 3 populates this map for every
+   * directive that declares `controller` and is used by `$postLink`
+   * dispatch + (in Slice 4) by `^` / `^^` ancestor walks.
+   */
+  $$ngControllers?: Map<string, unknown>;
 }
 
 const NG_SCOPE = '$$ngScope';

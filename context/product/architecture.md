@@ -39,7 +39,7 @@ import { createModule, getModule, createInjector } from 'my-own-angularjs/di';
 | `.config` / `.run`                                                            | module lifecycle                            | Phase 1 (already shipped — spec 008)                                                                    |
 | `.controller`                                                                 | `$controllerProvider.register`              | Phase 2 — shipped in spec 021            |
 | `.directive`                                                                  | `$compileProvider.directive`                | Phase 2 — shipped in spec 021            |
-| `.component`                                                                  | `$compileProvider.component`                | Deferred — "Components & isolate scope" roadmap item (needs isolate scope, `bindToController`, lifecycle hooks; explicitly out of scope in spec 021) |
+| `.component`                                                                  | `$compileProvider.component`                | Phase 2 — shipped in spec 022 (full component model with isolate scope, `bindToController`, lifecycle hooks, `require`) |
 | `.filter`                                                                     | `$filterProvider.register`                  | Phase 2 (with filter pipeline)           |
 | `.animation`                                                                  | `$animateProvider.register`                 | Phase 4 (with `$animate`)                |
 

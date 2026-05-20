@@ -1,5 +1,5 @@
 import type { $CompileProvider } from '@compiler/compile-provider';
-import type { Directive, DirectiveFactory } from '@compiler/directive-types';
+import type { ComponentDefinition, Directive, DirectiveFactory } from '@compiler/directive-types';
 import type { ControllerInvokable, IControllerProvider } from '@controller/controller-types';
 import type { FilterFn, IFilterProvider } from '@filter/filter-types';
 
@@ -571,6 +571,69 @@ export class Module<
 
     return this as unknown as Module<Registry, ConfigRegistry, Name, Requires>;
   }
+
+  /**
+   * Register a component under `name` (spec 022 Slice 5 / FS §2.6).
+   * Sugar for opening a config block by hand and reaching for
+   * `$compileProvider`:
+   *
+   * ```ts
+   * module.config(['$compileProvider', ($cp: $CompileProvider) => {
+   *   $cp.component(name, definition);
+   * }]);
+   * ```
+   *
+   * The method owns no state and adds no validation — it pushes ONE
+   * config block onto {@link $$configBlocks} that forwards verbatim to
+   * `$compileProvider.component(...)`. AngularJS 1.5+ component
+   * defaults (`restrict: 'E'`, isolate scope, `bindToController: true`,
+   * `controllerAs: '$ctrl'`, noop default controller), name/definition
+   * validation, and registration timing are all inherited unchanged
+   * from the provider.
+   *
+   * **Single-name only.** Unlike `.directive`, there is NO bulk-map
+   * form — AngularJS 1.x's `.component` never had one, and TypeScript
+   * widens this overload to a single string-name signature only.
+   *
+   * **No registry widening.** Components don't expose their controller
+   * through `injector.get` — there is no public `componentDirective`
+   * key to add to the typed `Registry`. The typed overload on
+   * {@link TypedModule} therefore returns the module type unchanged.
+   * Matches the {@link controller} precedent.
+   *
+   * Returns the same module instance so the call can be chained with
+   * every other module-builder method.
+   *
+   * @param name - The component name (camelCase identifier).
+   * @param definition - The {@link ComponentDefinition} object.
+   *
+   * @example
+   * ```ts
+   * createModule('app', ['ng']).component('userCard', {
+   *   bindings: { user: '<', onSelect: '&' },
+   *   controller: ['$element', function () {
+   *     this.$onInit = () => { void this.user; };
+   *     this.pick = () => this.onSelect({ id: this.user.id });
+   *   }],
+   *   template: '<div class="card">{{ $ctrl.user.name }}</div>',
+   * });
+   * // Consumer markup:
+   * //   <user-card user="someExpr" on-select="handler(id)"></user-card>
+   * ```
+   */
+  component(name: string, definition: ComponentDefinition): Module<Registry, ConfigRegistry, Name, Requires> {
+    // `.component()` is sugar over `.config(['$compileProvider', $cp =>
+    // $cp.component(name, definition)])`. Validation, the
+    // AngularJS-canonical defaults, and the underlying directive
+    // registration all live in `$cp.component` — the DSL just forwards.
+    this.$$configBlocks.push([
+      '$compileProvider',
+      ($compileProvider: $CompileProvider) => {
+        $compileProvider.component(name, definition);
+      },
+    ]);
+    return this as unknown as Module<Registry, ConfigRegistry, Name, Requires>;
+  }
 }
 
 /**
@@ -1079,6 +1142,48 @@ export interface TypedModule<
     nameOrMap: string | Record<string, ControllerInvokable>,
     fn?: ControllerInvokable,
   ): TypedModule<Registry, ConfigRegistry, Name, Requires>;
+
+  /**
+   * Register a component under `name` (spec 022 Slice 5 / FS §2.6).
+   * Sugar for a config block that forwards to
+   * `$compileProvider.component(name, definition)` — the DSL owns no
+   * state and adds no validation; the AngularJS 1.5+ defaults
+   * (`restrict: 'E'`, isolate scope, `bindToController: true`,
+   * `controllerAs: '$ctrl'`, noop default controller) and the
+   * registration-time error class
+   * (`InvalidComponentDefinitionError`) are all inherited unchanged
+   * from the provider.
+   *
+   * **Single-name only.** Unlike `.directive`, no bulk-map form is
+   * supported — AngularJS 1.x's `.component` never had one. A typed
+   * call site passing an object as the first argument is a compile
+   * error at this overload; the runtime delegates to `$cp.component`,
+   * which rejects via {@link InvalidComponentDefinitionError}.
+   *
+   * **No registry widening.** Components don't expose their controller
+   * through `injector.get` (the controller lives on `$ctrl` on the
+   * isolate scope, not in the DI registry); there is no public
+   * `componentDirective` key to add to the typed `Registry`. This
+   * overload returns the module type unchanged. Matches the
+   * {@link controller} precedent — contrast with single-name
+   * `.directive`, which widens with `${K}Directive: Directive[]`
+   * because the directive provider IS injector-resolvable.
+   *
+   * @example
+   * ```ts
+   * createModule('app', ['ng']).component('userCard', {
+   *   bindings: { user: '<', onSelect: '&' },
+   *   controller: ['$element', function () {
+   *     this.$onInit = () => { void this.user; };
+   *     this.pick = () => this.onSelect({ id: this.user.id });
+   *   }],
+   *   template: '<div class="card">{{ $ctrl.user.name }}</div>',
+   * });
+   * // The module type is unchanged — no `userCardDirective` key on the
+   * // registry, matching the non-widening contract.
+   * ```
+   */
+  component(name: string, definition: ComponentDefinition): TypedModule<Registry, ConfigRegistry, Name, Requires>;
 }
 
 /**

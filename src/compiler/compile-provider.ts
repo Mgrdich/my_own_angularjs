@@ -16,10 +16,12 @@
  * factory list lazily — subsequent registrations only mutate the
  * map and become visible on the next lookup.
  *
- * `IsolateScopeNotSupportedError` fires lazily, at provider-`$get`
- * time, NOT at `directive(...)` registration time. This matches
- * AngularJS where DDO validation runs when the directive is first
- * compiled. The error message is the spec-canonical one.
+ * Spec 022 Slice 1 LIFTED the `IsolateScopeNotSupportedError` rejection
+ * at `<name>Directive` provider `$get` time. Object-form `scope: { … }`
+ * declarations are now normalized via `parseIsolateBindings(...)` into a
+ * `NormalizedBindingMap` stashed on `Directive.isolateBindings`. Malformed
+ * binding specs throw `InvalidIsolateBindingError`, caught lazily by the
+ * same `try/catch` and routed via `$exceptionHandler('$compile')`.
  */
 
 import { IDENT_RE } from '@controller/controller';
@@ -41,6 +43,7 @@ import {
   ElementTranscludeNotSupportedError,
   EmptyTemplateError,
   EmptyTemplateUrlError,
+  InvalidComponentDefinitionError,
   InvalidDirectiveFactoryError,
   InvalidDirectiveNameError,
   InvalidTemplateUrlValueError,
@@ -48,15 +51,16 @@ import {
   InvalidTranscludeSelectorError,
   InvalidTranscludeSlotNameError,
   InvalidTranscludeValueError,
-  IsolateScopeNotSupportedError,
   ReplaceTrueNotSupportedError,
   TemplateAndTemplateUrlCombinedError,
 } from './compile-error';
+import { parseIsolateBindings, type NormalizedBindingMap } from './isolate-bindings';
 import { describeValue } from './describe-value';
 import { directiveNormalize } from './directive-normalize';
 import type {
   CompileFn,
   CompileService,
+  ComponentDefinition,
   Directive,
   DirectiveDefinition,
   DirectiveFactory,
@@ -157,6 +161,140 @@ export class $CompileProvider {
     return this;
   }
 
+  /**
+   * Register a component under `name` (spec 022 Slice 5 / FS §2.5 /
+   * technical-considerations §2.5).
+   *
+   * A component is, internally, a directive registration. This method
+   * translates the {@link ComponentDefinition} into a directive factory
+   * returning a DDO with the AngularJS 1.5+ canonical defaults:
+   *
+   *  - `restrict: 'E'`
+   *  - `scope: definition.bindings ?? {}` — always object-form
+   *    (isolate scope), empty when no bindings declared
+   *  - `bindToController: true`
+   *  - `controller: definition.controller ?? function NoopController() {}`
+   *  - `controllerAs: definition.controllerAs ?? '$ctrl'`
+   *  - Pass-through: `template`, `templateUrl`, `transclude`, `require`
+   *
+   * Then delegates to `this.directive(name, factory)`. The existing
+   * directive registration rules apply — accumulation (two components
+   * registered under the same name BOTH match), priority/terminal
+   * sorting, name validation, and registration timing are all inherited
+   * from `.directive`.
+   *
+   * Registration-time validation routes
+   * {@link InvalidComponentDefinitionError} directly to the caller
+   * (synchronous), matching how `.directive`'s name / factory validation
+   * surfaces today. The downstream directive-normalize errors
+   * (`InvalidIsolateBindingError`, `InvalidControllerFactoryError`, …)
+   * still route lazily via `$exceptionHandler('$compile')` at provider
+   * `$get` time through the existing factory `try/catch` —
+   * `EXCEPTION_HANDLER_CAUSES` stays at 10.
+   *
+   * Returns `this` for chaining.
+   *
+   * @example
+   * ```ts
+   * $compileProvider.component('userCard', {
+   *   bindings: { user: '<', onSelect: '&' },
+   *   controller: ['$element', function () {
+   *     this.$onInit = () => { void this.user; };
+   *     this.pick = () => this.onSelect({ id: this.user.id });
+   *   }],
+   *   template: '<div class="card">{{ $ctrl.user.name }}</div>',
+   * });
+   * // Consumer markup:
+   * //   <user-card user="someExpr" on-select="handler(id)"></user-card>
+   * // After link, the element gets:
+   * //   - an isolate scope ({ user: '<', onSelect: '&' })
+   * //   - the controller instance exposed as `$ctrl` on that scope
+   * //   - bindings landed on `$ctrl.user` / `$ctrl.onSelect` BEFORE
+   * //     `$onInit` runs
+   * ```
+   *
+   * @see InvalidComponentDefinitionError — Registration-time errors.
+   */
+  component(name: string, definition: ComponentDefinition): this {
+    // Validate `name` defensively — even though the typed signature
+    // declares `name: string`, calls from JS / untyped TS may pass
+    // non-string values, so the runtime check stays. The `as unknown`
+    // view sidesteps the `no-unnecessary-condition` lint rule that
+    // would otherwise complain about checking a typed `string` value.
+    const rawName = name as unknown;
+    if (typeof rawName !== 'string' || !VALID_DIRECTIVE_NAME.test(rawName)) {
+      throw new InvalidComponentDefinitionError(
+        typeof rawName === 'string' ? rawName : describeValue(rawName),
+        'name must be a non-empty camelCase identifier',
+      );
+    }
+    // Same defensive read pattern for `definition` — must be a plain
+    // object at the runtime boundary, but the typed signature
+    // `ComponentDefinition` would mark the null / array / primitive
+    // checks as unreachable. The `as unknown` view restores the
+    // narrowing.
+    const rawDefinition = definition as unknown;
+    if (
+      rawDefinition === null ||
+      rawDefinition === undefined ||
+      typeof rawDefinition !== 'object' ||
+      Array.isArray(rawDefinition)
+    ) {
+      throw new InvalidComponentDefinitionError(name, 'definition must be a plain object');
+    }
+
+    // The default controller is a named function (not an arrow) so it
+    // shows up in stack traces with a useful label. Matches the
+    // AngularJS 1.x `function noop() {}` precedent. Wrapped in the
+    // array-style annotation so it satisfies the project's strict
+    // `annotate` rule (bare functions without `$inject` are rejected).
+    // Every component without an explicit controller gets a fresh
+    // `NoopController` invokable.
+    const userController = definition.controller;
+    const controller: ControllerInvokable | string =
+      userController === undefined ? [function NoopController() {}] : userController;
+    const controllerAs = definition.controllerAs ?? '$ctrl';
+    const bindings = definition.bindings ?? {};
+
+    // Translate the CDO into a directive factory returning the DDO.
+    // The factory is wrapped in the array-style annotation `[fn]` (no
+    // deps + trailing function) — the project's `$injector.invoke`
+    // rejects bare functions without `$inject`, so the array form is
+    // the canonical zero-dep spelling used everywhere else. The
+    // directive normalizer will validate
+    // `controller`/`controllerAs`/`scope`/`transclude`/`template`
+    // lazily at provider `$get` time, with throws routed via
+    // `$exceptionHandler('$compile')` through the existing factory
+    // try/catch in `$$buildDirectiveArrayProvider`.
+    const factory: DirectiveFactory = [
+      () => {
+        const ddo: DirectiveDefinition = {
+          restrict: 'E',
+          scope: bindings,
+          bindToController: true,
+          controller,
+          controllerAs,
+        };
+        if (definition.template !== undefined) {
+          ddo.template = definition.template;
+        }
+        if (definition.templateUrl !== undefined) {
+          ddo.templateUrl = definition.templateUrl;
+        }
+        if (definition.transclude !== undefined) {
+          ddo.transclude = definition.transclude;
+        }
+        if (definition.require !== undefined) {
+          ddo.require = definition.require;
+        }
+        return ddo;
+      },
+    ] as DirectiveFactory;
+
+    this.directive(name, factory);
+    return this;
+  }
+
   private $$registerSingle(name: string, factory: unknown) {
     if (!VALID_DIRECTIVE_NAME.test(name)) {
       throw new InvalidDirectiveNameError(name);
@@ -207,9 +345,9 @@ export class $CompileProvider {
    * if it returned `undefined` (no compile, no link); other directives
    * on the same node continue."
    *
-   * The `IsolateScopeNotSupportedError` thrown by `normalizeDirective`
-   * is also caught here because that validation happens lazily at
-   * lookup time (per the Slice-2 deviation). Registration-time errors
+   * `InvalidIsolateBindingError` (spec 022 Slice 1) thrown by
+   * `parseIsolateBindings` inside `normalizeDirective` is caught here
+   * via the same path. Registration-time errors
    * (`InvalidDirectiveNameError`, `InvalidDirectiveFactoryError`)
    * still throw synchronously to the caller from `$$registerSingle`
    * — those are programmer errors and are not routed through
@@ -514,21 +652,36 @@ function normalizeDirective(name: string, factoryReturn: DirectiveFactoryReturn)
       compile: () => linkFn,
       link: linkFn,
       scope: false,
+      bindToController: false,
     };
   }
 
   const ddo: DirectiveDefinition = factoryReturn;
 
-  // Reject isolate-scope `{...}` per FS §2.4. `scope: true` and
-  // `scope: false` (or omitted) are accepted; any other object form
-  // (including arrays) is the isolate form and we reject it.
+  // Scope normalization (spec 022 Slice 1 — was: reject isolate per
+  // FS §2.4). Three accepted shapes:
+  //
+  //  - `false` / undefined → no new scope; the `scope` flag is `false`.
+  //  - `true` → child scope via `parent.$new()`; the `scope` flag is `true`.
+  //  - `Record<string, string>` (object form) → ISOLATE scope. The
+  //    `scope` flag becomes `true` (so existing "needs a non-default
+  //    scope" decision points keep working) AND `isolateBindings` is
+  //    populated. The compiler distinguishes child-vs-isolate at link
+  //    time by checking `isolateBindings != null`.
   let scope: false | true;
+  let isolateBindings: NormalizedBindingMap | undefined;
   if (ddo.scope === undefined || ddo.scope === false) {
     scope = false;
   } else if (ddo.scope === true) {
     scope = true;
   } else {
-    throw new IsolateScopeNotSupportedError(name);
+    // Object-form isolate-scope declaration — parse and normalize.
+    // Malformed entries throw `InvalidIsolateBindingError`, which is
+    // caught by the factory-invocation try/catch in
+    // `$$buildDirectiveArrayProvider` and routed via
+    // `$exceptionHandler('$compile')`.
+    isolateBindings = parseIsolateBindings(name, ddo.scope);
+    scope = true;
   }
 
   // Validate + normalize the `transclude` field per spec-018 Slice 2.
@@ -564,6 +717,99 @@ function normalizeDirective(name: string, factoryReturn: DirectiveFactoryReturn)
   const rawControllerAs = (ddo as { controllerAs?: unknown }).controllerAs;
   const { controller, controllerAs } = normalizeController(name, rawController, rawControllerAs);
 
+  // Spec 022 Slice 2 — `bindToController` normalization. Three accepted
+  // shapes:
+  //
+  //  - `true` → boolean flag set; the binding map is reused from
+  //    `isolateBindings` at link time.
+  //  - A plain object → parsed via `parseIsolateBindings(name, …)` into
+  //    a `NormalizedBindingMap` stashed on
+  //    `Directive.bindToControllerBindings`; the boolean flag is also
+  //    set to `true` so the link-time decision point (`bindToController
+  //    === true` AND a controller is present) lights up.
+  //  - `undefined` / `false` → flag stays `false`; the directive's
+  //    isolate bindings (if any) target the isolate scope as before.
+  //
+  // Malformed object-form entries throw `InvalidIsolateBindingError` —
+  // caught by the factory `try/catch` in `$$buildDirectiveArrayProvider`
+  // and routed via `$exceptionHandler('$compile')` (no new error class).
+  // The `bindToController === true` form does NOT require a controller
+  // to be declared — the per-element linker silently degrades to the
+  // isolate-scope target when no controller is present (AngularJS-
+  // canonical no-op).
+  const rawBindToController = (ddo as { bindToController?: unknown }).bindToController;
+  let bindToController: boolean = false;
+  let bindToControllerBindings: NormalizedBindingMap | undefined;
+  if (rawBindToController === true) {
+    bindToController = true;
+  } else if (
+    rawBindToController !== undefined &&
+    rawBindToController !== false &&
+    typeof rawBindToController === 'object' &&
+    !Array.isArray(rawBindToController)
+  ) {
+    bindToControllerBindings = parseIsolateBindings(name, rawBindToController as Record<string, string>);
+    bindToController = true;
+  }
+  // Any other runtime shape (string / number / array / etc.) falls
+  // through to `bindToController = false` — AngularJS silently ignores
+  // garbage here, and rejecting it would require yet another error
+  // class. The boolean flag stays the source of truth at link time.
+
+  // Spec 022 Slice 4 — `require` normalization. Three accepted shapes:
+  //
+  //  - `string`                       — single requirement.
+  //  - `string[]`                     — multiple, positional.
+  //  - `Record<string, string>` (plain object, not array, not null) —
+  //                                     multiple, keyed by alias.
+  //
+  // Flag parsing (`^` / `^^` / `?`) is DEFERRED to the per-element link
+  // site (see `require-resolver.ts:parseRequireFlags`). Registration
+  // does a shape-only sanity check; entry-string validation is the
+  // link-time resolver's job, surfaced as `MissingRequiredControllerError`
+  // (no separate "malformed entry" class — the spec brief reuses the
+  // missing-controller error as the canonical surface for both
+  // misses and unparseable names).
+  //
+  // A shape that is none of the above (e.g. `require: 42`, `null`, or
+  // a `Map`) is REJECTED at registration via the existing
+  // `InvalidDirectiveFactoryError` pattern — the message names the
+  // `require` field specifically so authors can locate the bad DDO.
+  // The throw bubbles up through the factory-invocation try/catch in
+  // `$$buildDirectiveArrayProvider` and routes via
+  // `$exceptionHandler('$compile')`. No new error class.
+  const rawRequire = (ddo as { require?: unknown }).require;
+  let require: string | string[] | Record<string, string> | undefined;
+  if (rawRequire !== undefined) {
+    if (typeof rawRequire === 'string') {
+      require = rawRequire;
+    } else if (Array.isArray(rawRequire)) {
+      // Each entry must be a string; reject mixed arrays at registration.
+      for (const entry of rawRequire) {
+        if (typeof entry !== 'string') {
+          throw new InvalidDirectiveFactoryError(`${name} (invalid require array entry: ${describeValue(entry)})`);
+        }
+      }
+      require = rawRequire as string[];
+    } else if (typeof rawRequire === 'object' && rawRequire !== null) {
+      // Each value must be a string.
+      const obj = rawRequire as Record<string, unknown>;
+      const out: Record<string, string> = {};
+      for (const key of Object.keys(obj)) {
+        const value = obj[key];
+        if (typeof value !== 'string') {
+          throw new InvalidDirectiveFactoryError(
+            `${name} (invalid require object entry "${key}": ${describeValue(value)})`,
+          );
+        }
+        out[key] = value;
+      }
+      require = out;
+    } else {
+      throw new InvalidDirectiveFactoryError(`${name} (invalid require value: ${describeValue(rawRequire)})`);
+    }
+  }
+
   const priority = ddo.priority ?? 0;
   if (Number.isNaN(priority)) {
     throw new Error(`Invalid priority for directive ${name}: NaN`);
@@ -594,6 +840,7 @@ function normalizeDirective(name: string, factoryReturn: DirectiveFactoryReturn)
     compile,
     link: ddo.link,
     scope,
+    bindToController,
   };
   if (transclude !== undefined) {
     directive.transclude = transclude;
@@ -606,6 +853,15 @@ function normalizeDirective(name: string, factoryReturn: DirectiveFactoryReturn)
   }
   if (controllerAs !== undefined) {
     directive.controllerAs = controllerAs;
+  }
+  if (isolateBindings !== undefined) {
+    directive.isolateBindings = isolateBindings;
+  }
+  if (bindToControllerBindings !== undefined) {
+    directive.bindToControllerBindings = bindToControllerBindings;
+  }
+  if (require !== undefined) {
+    directive.require = require;
   }
   return directive;
 }

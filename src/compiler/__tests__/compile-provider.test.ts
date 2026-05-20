@@ -216,14 +216,12 @@ describe('$compileProvider — config-phase registration (FS §2.2)', () => {
     });
   });
 
-  describe('IsolateScopeNotSupportedError', () => {
-    it('rejects scope: { ... } at $get / lookup time, routes through $exceptionHandler with cause $compile, and skips the bad directive', () => {
-      // After Slice 11 the factory invocation in $$buildDirectiveArrayProvider
-      // is wrapped in try/catch routing through $exceptionHandler('$compile').
-      // The bad factory is silently dropped from the array, the lookup
-      // succeeds, and the error surfaces via the configured handler. Slice 2's
-      // synchronous-throw behavior is replaced by the FS §2.16 "log and
-      // continue" contract.
+  describe('isolate scope acceptance (spec 022 Slice 1)', () => {
+    it('accepts scope: { … } at $get / lookup time — the directive resolves with isolateBindings populated', () => {
+      // Spec 022 Slice 1 LIFTED the spec-017 `IsolateScopeNotSupportedError`
+      // throw site. `scope: { foo: '=' }` is now a valid declaration; the
+      // factory resolves cleanly, no exception-handler routing fires, and
+      // the normalized directive carries the parsed `isolateBindings`.
       const handlerSpy = vi.fn<(...args: unknown[]) => void>();
       const appModule = createModule('app', ['ng'])
         .factory('$exceptionHandler', [() => handlerSpy])
@@ -235,15 +233,24 @@ describe('$compileProvider — config-phase registration (FS §2.2)', () => {
         ]);
 
       const injector = createInjector([appModule]);
-      // No throw — the lookup returns the (empty) array of survivors.
-      const result = injector.get('myDirDirective');
+      const result = injector.get<Directive[]>('myDirDirective');
       expect(Array.isArray(result)).toBe(true);
-      expect((result as Directive[]).length).toBe(0);
-      // The error reached the handler with the spec-canonical cause.
-      expect(handlerSpy).toHaveBeenCalledTimes(1);
-      const [err, cause] = handlerSpy.mock.calls[0] ?? [];
-      expect(err).toBeInstanceOf(IsolateScopeNotSupportedError);
-      expect(cause).toBe('$compile');
+      expect(result.length).toBe(1);
+      expect(result[0]?.isolateBindings).toEqual({
+        foo: { mode: '=', optional: false, attrName: 'foo' },
+      });
+      // No exception-handler routing — the directive is valid.
+      expect(handlerSpy).not.toHaveBeenCalled();
+    });
+
+    it('keeps the deprecated IsolateScopeNotSupportedError class exported and constructable', () => {
+      // Backwards-compatibility: existing consumers catching the class
+      // via `instanceof` must keep compiling. Spec 022 Slice 1 retires
+      // the throw site but keeps the class exported for one release.
+      // eslint-disable-next-line @typescript-eslint/no-deprecated -- Deliberate use of the deprecated class to pin its public-API surface for the grace-period release.
+      const err = new IsolateScopeNotSupportedError('myDir');
+      expect(err).toBeInstanceOf(Error);
+      expect(err.name).toBe('IsolateScopeNotSupportedError');
     });
   });
 

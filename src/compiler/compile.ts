@@ -89,11 +89,12 @@
 
 import type { ControllerLocals } from '@controller/controller-types';
 import type { Scope } from '@core/index';
-import { invokeExceptionHandler } from '@exception-handler/index';
+import { invokeExceptionHandler, type ExceptionHandler } from '@exception-handler/index';
 
 import { bindAttrsToScope } from './attributes';
 import { addElementCleanup, setElementScope } from './cleanup';
 import {
+  MultipleIsolateScopeError,
   MultipleTemplateDirectivesError,
   MultipleTranscludeDirectivesError,
   RequiredTranscludeSlotUnfilledError,
@@ -103,7 +104,10 @@ import {
 import { describeValue } from './describe-value';
 import { collectDirectives } from './directive-collector';
 import type { CompileOptions, CompileService, Directive, Linker, LinkFn, Attributes } from './directive-types';
+import { wireIsolateBindings, type NormalizedBindingMap } from './isolate-bindings';
+import { ChangesQueue, flushChangesQueue, hasHook, invokeHook, UNINITIALIZED_VALUE } from './lifecycle';
 import { parseTemplate } from './template-parse';
+import { resolveRequireForm } from './require-resolver';
 import { captureChildren } from './transclude-capture';
 import { compileBuckets } from './transclude-compile';
 import { buildTranscludeFn } from './transclude-fn';
@@ -112,6 +116,25 @@ import type { BoundTranscludeFn, NormalizedTransclude, TranscludeFn, TranscludeS
 type LinkEntry = {
   pre?: LinkFn;
   post?: LinkFn;
+  /**
+   * The directive that contributed this entry. Spec 022 Slice 4 reads
+   * it at link time to look up `require` and pass the resolved
+   * controllers as the link fn's 4th argument. Older paths that built
+   * entries before the seam carried no per-entry metadata still work —
+   * `directive` is optional and an unset slot means "no require for
+   * this link entry".
+   */
+  directive?: Directive;
+  /**
+   * Resolved `require` controllers for this entry (spec 022 Slice 4).
+   * Populated AFTER `runControllerSeam` completes so the resolver sees
+   * every own-element controller stashed on `$$ngControllers`. Shape
+   * mirrors the directive's `require` declaration form: single value
+   * for string form, array for `string[]`, record for object form.
+   * `null` for an optional miss; `undefined` when the directive
+   * declared no `require`.
+   */
+  requiredControllers?: unknown;
 };
 
 /**
@@ -168,6 +191,13 @@ interface DeferredTemplateEntry {
  */
 interface NgManagedElement extends Element {
   $$ngScope?: Scope;
+  /**
+   * Per-element controller registry (spec 022 Slice 3 — written here;
+   * spec 022 Slice 4 — read by the `require` resolver). Keyed by directive
+   * name; each value is the constructed controller instance for that
+   * directive on this element.
+   */
+  $$ngControllers?: Map<string, unknown>;
 }
 
 /**
@@ -184,6 +214,148 @@ function isScopeDestroyed(scope: Scope | undefined) {
     return false;
   }
   return (scope as unknown as ScopeWatchersSlot).$$watchers === null;
+}
+
+/**
+ * Internal per-controller bookkeeping for Slice 3 lifecycle dispatch.
+ * Walked by the per-element link site after the post-link loop to
+ * fire `$postLink`. The `scope` is the scope the controller was
+ * constructed against — kept here in case future slices need it for
+ * lifecycle teardown sequencing.
+ */
+interface TrackedController {
+  readonly instance: unknown;
+  readonly scope: Scope;
+}
+
+/**
+ * Structural shape passed to `$onChanges(changes)` — see
+ * `lifecycle.ts`'s `SimpleChange`. Re-spelled here as an interface so
+ * the compiler's call sites don't need to import `SimpleChange`
+ * concretely (Slice 3 keeps the class internal to the integration
+ * tests; the compiler reads it through this shape).
+ */
+interface SimpleChangeLike {
+  currentValue: unknown;
+  previousValue: unknown;
+  isFirstChange(): boolean;
+}
+
+/**
+ * Build a `SimpleChange`-shaped record. Re-spelled as a small helper
+ * so the lifecycle.ts class import stays scoped to the wiring sites
+ * that strictly need it.
+ */
+function makeSimpleChange(currentValue: unknown, previousValue: unknown, isFirst: boolean): SimpleChangeLike {
+  return {
+    currentValue,
+    previousValue,
+    isFirstChange: () => isFirst,
+  };
+}
+
+/**
+ * Stash `instance` on `element.$$ngControllers` under `directiveName`.
+ * Creates the map lazily on first call. Non-enumerable so it does not
+ * appear in `for..in` traversals.
+ *
+ * Slice 4 will add the READ path (the `^` / `^^` ancestor walk for
+ * `require`); Slice 3 only writes.
+ */
+function stashController(element: Element, directiveName: string, instance: unknown): void {
+  let map = (element as unknown as { $$ngControllers?: Map<string, unknown> }).$$ngControllers;
+  if (map === undefined) {
+    map = new Map<string, unknown>();
+    Object.defineProperty(element, '$$ngControllers', {
+      value: map,
+      writable: true,
+      configurable: true,
+      enumerable: false,
+    });
+  }
+  map.set(directiveName, instance);
+}
+
+/**
+ * Object-form `require` auto-assignment (spec 022 Slice 4). When a
+ * directive declares `require: { alias: '^name', … }` AND its own
+ * `controller`, the resolved controllers are written onto the requiring
+ * controller's instance under their declared aliases BEFORE `$onInit`
+ * fires — so `$onInit` reads `this.<alias>` and gets the resolved
+ * collaborator.
+ *
+ * AngularJS-canonical: only the object form auto-assigns. The string
+ * and array forms do NOT mutate the requiring instance — they are
+ * delivered exclusively via the link fn's 4th argument. The asymmetry
+ * is deliberate: object-form aliases are the AngularJS-typical
+ * "shorthand for getting a collaborator on `this`"; the string / array
+ * forms expose lower-level access through the link signature.
+ */
+function assignRequireToInstance(
+  instance: unknown,
+  requireSpec: string | string[] | Record<string, string>,
+  resolved: unknown,
+): void {
+  if (typeof requireSpec === 'string' || Array.isArray(requireSpec)) {
+    return;
+  }
+  if (instance === null || typeof instance !== 'object') {
+    return;
+  }
+  const target = instance as Record<string, unknown>;
+  const resolvedRecord = resolved as Record<string, unknown>;
+  for (const alias of Object.keys(requireSpec)) {
+    target[alias] = resolvedRecord[alias];
+  }
+}
+
+/**
+ * Walk a per-element link-entry list and populate each entry's
+ * `requiredControllers` slot (spec 022 Slice 4). Entries whose
+ * directive has no `require` are left untouched (`undefined`).
+ *
+ * Two sources of resolved controllers:
+ *
+ *  - The shared `requireResults` map (populated by `runControllerSeam`
+ *    when the requiring directive ALSO declared `controller` — so the
+ *    seam saw it). The map hit is the common case; the resolver is
+ *    NOT re-invoked, preserving "resolve once, deliver everywhere".
+ *  - On-the-fly `resolveRequireForm` for directives without a
+ *    controller but with `require` — the canonical "link-only
+ *    directive consuming a sibling's controller" pattern.
+ *
+ * Resolution failures (`MissingRequiredControllerError`) at this site
+ * route via `$exceptionHandler('$compile')` and the failing entry's
+ * `requiredControllers` stays `undefined`. The link fn still runs but
+ * receives `undefined` for the 4th arg — same behavior as the
+ * optional-miss path delivering `null`, but without the explicit
+ * `?` marker.
+ */
+function resolveRequiredControllersForLinkEntries(
+  element: Element,
+  entries: readonly LinkEntry[],
+  requireResults: ReadonlyMap<Directive, unknown>,
+  exceptionHandler: ExceptionHandler,
+): void {
+  for (const entry of entries) {
+    const directive = entry.directive;
+    if (directive === undefined || directive.require === undefined) {
+      continue;
+    }
+    if (requireResults.has(directive)) {
+      // The seam already attempted resolution (whether it succeeded
+      // OR threw — a throwing path records `undefined` in the map).
+      // We reuse the cached value and DO NOT re-attempt, preserving
+      // the "resolve once, report once" rule.
+      entry.requiredControllers = requireResults.get(directive);
+      continue;
+    }
+    try {
+      entry.requiredControllers = resolveRequireForm(element, directive.name, directive.require);
+    } catch (err) {
+      invokeExceptionHandler(exceptionHandler, err, '$compile');
+    }
+  }
 }
 
 /**
@@ -205,26 +377,87 @@ export function createCompile(options: CompileOptions): CompileService {
   const { getDirectivesByName, controller: $controller, interpolate, exceptionHandler, templateRequest } = options;
 
   /**
-   * Per-element controller seam (spec 020 Slice 4). Runs ONCE per
-   * directive on the element that declares `controller`, AFTER the
-   * attrs-to-scope binding and the `$transclude` stash, BEFORE the
-   * pre-link loop. Errors route via `$exceptionHandler('$compile')` —
-   * no new `EXCEPTION_HANDLER_CAUSES` token; the surrounding link
-   * passes on this element AND on siblings continue.
+   * Per-element controller seam (spec 020 Slice 4, extended in spec 022
+   * Slice 2 + Slice 3). Runs ONCE per directive on the element that
+   * declares `controller`, AFTER the attrs-to-scope binding and the
+   * `$transclude` stash, BEFORE the pre-link loop. Errors route via
+   * `$exceptionHandler('$compile')` — no new `EXCEPTION_HANDLER_CAUSES`
+   * token; the surrounding link passes on this element AND on siblings
+   * continue.
    *
    * Extracted to a small helper because both the transcluding-host
    * link path and the non-transcluding link path call it with the
    * same shape (the only difference is whether `$transclude` is
    * threaded into the locals). The helper is closed over `$controller`
    * + `exceptionHandler` so the call sites stay short.
+   *
+   * **Spec 022 Slice 2 — `bindToController` integration.** When a
+   * directive declares `bindToController === true` AND a `controller`,
+   * the seam instantiates via the new `later: true` call shape
+   * (`{ instance, identifier }`), wires the relevant binding map
+   * (form 1: `directive.isolateBindings`; form 2:
+   * `directive.bindToControllerBindings`) onto the INSTANCE via
+   * {@link wireIsolateBindings} with `target: instance`, then publishes
+   * the resolved `identifier` on the per-element scope so the
+   * `controllerAs` alias becomes readable AFTER bindings have populated.
+   * Directives without `bindToController` (or with no `controller`)
+   * fall through to the spec-020 1–3 arg path unchanged.
+   *
+   * **Spec 022 Slice 3 — lifecycle hooks.** For every directive that
+   * declares a controller, the seam:
+   *
+   *  1. Stashes the instance into `element.$$ngControllers` (keyed by
+   *     directive name) — Slice-3 plants this for the future Slice-4
+   *     `require` resolver and for the post-link-time `$postLink`
+   *     walk.
+   *  2. Registers `scope.$on('$destroy', () => invokeHook($onDestroy))`
+   *     BEFORE `$onInit` fires so a `$onInit` that throws does not
+   *     prevent `$onDestroy` from running on scope destruction.
+   *  3. After binding wiring populates the instance, invokes
+   *     `$onInit`.
+   *  4. If `<` / `@` bindings have surfaced any initial-change
+   *     records (via the wireIsolateBindings `onChange` callback),
+   *     fires a synchronous initial `$onChanges` with those records.
+   *  5. Subsequent `<` / `@` watcher fires feed the per-element
+   *     {@link ChangesQueue}; when the queue transitions empty →
+   *     non-empty, schedules ONE `$$postDigest` drain that walks the
+   *     queue and fires `$onChanges(batch)` for each accumulated
+   *     controller.
+   *
+   * The returned `lifecycleControllers` list pairs each instance with
+   * the scope it was registered on so the per-element link site can
+   * walk the list AFTER post-link to fire `$postLink`. The list also
+   * remains the only callsite that knows the directive names — `$$ngControllers`
+   * is non-enumerable map state, deliberately opaque to outside code.
+   *
+   * `parentScope` is the OUTER scope (the per-element linker's
+   * `parentScope` arg) and is the namespace used for `=` / `<` / `&`
+   * parent-expression evaluation when bindings target the instance —
+   * matches the spec-022 Slice 1 contract for the scope-target wiring
+   * site.
    */
   function runControllerSeam(
     directives: readonly Directive[],
     scope: Scope,
+    parentScope: Scope,
     element: Element,
     attrs: Attributes,
     $transclude: TranscludeFn | undefined,
-  ) {
+    requireResults: Map<Directive, unknown>,
+  ): TrackedController[] {
+    const tracked: TrackedController[] = [];
+    // Lazily-created per-element `$onChanges` queue. The queue is
+    // shared across every controller on THIS element — when multiple
+    // controllers (different directives) on one element each declare
+    // `$onChanges`, they all batch into the same per-digest drain.
+    let changesQueue: ChangesQueue | null = null;
+    function ensureQueue(): ChangesQueue {
+      if (changesQueue === null) {
+        changesQueue = new ChangesQueue();
+      }
+      return changesQueue;
+    }
+
     for (const directive of directives) {
       if (directive.controller === undefined) {
         continue;
@@ -237,12 +470,230 @@ export function createCompile(options: CompileOptions): CompileService {
       if ($transclude !== undefined) {
         locals.$transclude = $transclude;
       }
+
+      // Slice 2 — `bindToController` instance-target path. The
+      // binding map source is: `bindToControllerBindings` (object
+      // form, spec 022 §2.2 "form 2") if present, else
+      // `isolateBindings` (re-used `scope: { … }` map, spec 022 §2.2
+      // "form 1"). When neither is present the flag silently degrades
+      // to the standard 1–3 arg path (`bindToController: true` without
+      // an isolate-binding map is an AngularJS-canonical no-op).
+      const bindings = directive.bindToControllerBindings ?? directive.isolateBindings;
+      const useBindToController = directive.bindToController && bindings !== undefined;
+
+      let instance: unknown = undefined;
       try {
-        $controller(directive.controller, locals, directive.controllerAs);
+        if (useBindToController) {
+          const deferred = $controller(directive.controller, locals, directive.controllerAs, true);
+          instance = deferred.instance;
+          // Stash on `$$ngControllers` BEFORE binding wiring + lifecycle
+          // hooks fire so a `$onInit` (or downstream Slice-4 `require`
+          // resolution) can find the instance on this element by name.
+          stashController(element, directive.name, instance);
+          // Spec 022 Slice 4 — resolve `require` AFTER stash, BEFORE
+          // binding wiring + `$onInit`. The object-form auto-assignment
+          // here is what lets `$onInit` read `this.<alias>` for its
+          // declared `require` aliases. The resolved value is also
+          // stored on `requireResults` so the link site can pass it as
+          // the link fn's 4th argument.
+          //
+          // Resolution failures route via `$exceptionHandler('$compile')`
+          // inside an inner try/catch so the surrounding binding wiring
+          // + lifecycle hooks still run for this directive (the rest of
+          // the seam stays robust to a single missing-require throw).
+          // The `requireResults` map records the directive either way
+          // (with the resolved value, or `undefined` on throw) so the
+          // post-seam link-entry walk knows the seam already handled it.
+          if (directive.require !== undefined) {
+            try {
+              const resolved = resolveRequireForm(element, directive.name, directive.require);
+              requireResults.set(directive, resolved);
+              assignRequireToInstance(instance, directive.require, resolved);
+            } catch (err) {
+              invokeExceptionHandler(exceptionHandler, err, '$compile');
+              requireResults.set(directive, undefined);
+            }
+          }
+          // Slice 3: pre-collect initial-change records for the
+          // synchronous `$onChanges` first fire. The compiler then
+          // fires `$onChanges(initialRecord)` AFTER `$onInit`.
+          const initialRecord: Record<string, SimpleChangeLike> = {};
+          const queueRef = hasHook(instance, '$onChanges') ? ensureQueue() : null;
+          wireIsolateBindings({
+            parentScope,
+            isolateScope: scope,
+            attrs,
+            bindings,
+            target: instance as Record<string, unknown>,
+            interpolate,
+            onChange: (localName, currentValue, _previousValue, isFirst) => {
+              if (!hasHook(instance, '$onChanges')) {
+                return;
+              }
+              if (isFirst) {
+                // Initial fire — accumulate into the synchronous
+                // initial batch with the canonical `UNINITIALIZED_VALUE`
+                // sentinel as `previousValue`.
+                initialRecord[localName] = makeSimpleChange(currentValue, UNINITIALIZED_VALUE, true);
+                return;
+              }
+              // Subsequent fire — record into the per-element changes
+              // queue. The compiler schedules ONE `$$postDigest` drain
+              // when the queue transitions empty → non-empty.
+              if (queueRef === null) {
+                return;
+              }
+              // `previousValue` for the queued record is the prior
+              // current-value the listener last surfaced (the watcher's
+              // `oldValue`). For `@` bindings this is the prior raw
+              // string; for `<` bindings the prior expression value.
+              const wasEmpty = queueRef.record(instance as object, localName, currentValue, _previousValue, false);
+              if (wasEmpty) {
+                // Schedule the drain on the next digest's post-digest
+                // tick — flush ALL accumulated records (across every
+                // controller on this element) in one pass.
+                scope.$$postDigest(() => {
+                  flushChangesQueue(queueRef, exceptionHandler);
+                });
+              }
+            },
+          });
+          // Publish the alias on the per-element scope. We always use
+          // `scope` (the isolate scope when one exists on this element,
+          // else the parent / child scope) — the spec-020 seam's
+          // bindAlias path writes here too.
+          if (deferred.identifier !== undefined) {
+            (scope as unknown as Record<string, unknown>)[deferred.identifier] = instance;
+          }
+          // ----- Slice 3 lifecycle wiring (instance-target path) -----
+          registerOnDestroy(scope, instance, changesQueue);
+          invokeHook(instance, '$onInit', exceptionHandler);
+          // Fire the initial synchronous `$onChanges` ONLY if any
+          // first-change records actually got collected during the
+          // binding wiring above. `Object.keys` length is the
+          // cleanest "did anything land?" check — and works whether
+          // the controller declares `$onChanges` or not (a missing
+          // hook makes the `invokeHook` a no-op anyway).
+          if (Object.keys(initialRecord).length > 0) {
+            invokeHook(instance, '$onChanges', exceptionHandler, initialRecord);
+          }
+        } else {
+          instance = $controller(directive.controller, locals, directive.controllerAs);
+          stashController(element, directive.name, instance);
+          // Spec 022 Slice 4 — resolve `require` AFTER stash, BEFORE
+          // `$onInit`. Same ordering as the bindToController branch:
+          // object-form auto-assignment populates `this.<alias>` so
+          // `$onInit` sees its required collaborators on `this`.
+          if (directive.require !== undefined) {
+            try {
+              const resolved = resolveRequireForm(element, directive.name, directive.require);
+              requireResults.set(directive, resolved);
+              assignRequireToInstance(instance, directive.require, resolved);
+            } catch (err) {
+              invokeExceptionHandler(exceptionHandler, err, '$compile');
+              requireResults.set(directive, undefined);
+            }
+          }
+          // ----- Slice 3 lifecycle wiring (scope-target / no-binding path) -----
+          //
+          // Even without `bindToController`, a controller may still
+          // define `$onInit` / `$onDestroy` / `$postLink`. `$onChanges`
+          // for scope-target wiring is intentionally NOT plumbed: the
+          // scope-target binding wiring lives in the early per-element
+          // linker site (outside this seam), where no controller exists
+          // to receive change records. Slice 3 mirrors AngularJS
+          // canonical behavior — `$onChanges` is for `bindToController`
+          // bindings on the instance.
+          registerOnDestroy(scope, instance, changesQueue);
+          invokeHook(instance, '$onInit', exceptionHandler);
+        }
       } catch (err) {
         invokeExceptionHandler(exceptionHandler, err, '$compile');
       }
+
+      if (instance !== undefined) {
+        tracked.push({ instance, scope });
+      }
     }
+    return tracked;
+  }
+
+  /**
+   * Register the per-controller `$onDestroy` listener on the scope the
+   * controller was constructed against. Drops any pending `$onChanges`
+   * batch for the controller BEFORE invoking `$onDestroy` so a deferred
+   * flush can't fire after destruction.
+   */
+  function registerOnDestroy(scope: Scope, instance: unknown, queue: ChangesQueue | null): void {
+    if (typeof instance !== 'object' || instance === null) {
+      return;
+    }
+    const ctrlObject = instance;
+    scope.$on('$destroy', () => {
+      if (queue !== null) {
+        queue.clearForController(ctrlObject);
+      }
+      invokeHook(ctrlObject, '$onDestroy', exceptionHandler);
+    });
+  }
+
+  /**
+   * Fire `$postLink` on every controller in `tracked`. Walks in
+   * registration order (priority-DESCENDING by `Directive.index`
+   * tie-break — same as `runControllerSeam`'s iteration). Called by
+   * the per-element link site AFTER the post-link loop completes for
+   * this element (which itself runs after child linking).
+   */
+  function firePostLinkHooks(tracked: TrackedController[]): void {
+    for (const { instance } of tracked) {
+      invokeHook(instance, '$postLink', exceptionHandler);
+    }
+  }
+
+  /**
+   * Decide whether the directive's binding map should be wired onto the
+   * isolate scope at the early wiring site (BEFORE attrs-to-scope and
+   * BEFORE the controller seam runs). Returns `true` for the
+   * scope-target cases:
+   *
+   *  - `isolateBindings` present AND `bindToController` is `false`
+   *    (form-1 binding map targets the scope, no controller
+   *    indirection).
+   *  - `isolateBindings` present AND `bindToController` is `true`
+   *    BUT the directive declares NO controller (the documented
+   *    silent-degrade case — `bindToController` is meaningless without
+   *    a controller).
+   *
+   * Returns `false` when the controller seam will handle the wiring on
+   * the instance target.
+   */
+  function shouldWireBindingsToScope(directive: Directive | null): directive is Directive {
+    if (directive === null) return false;
+    if (directive.isolateBindings === undefined) return false;
+    if (!directive.bindToController) return true;
+    // `bindToController === true` AND a binding map exists. Degrade to
+    // the scope target only when no controller is present to receive
+    // the bindings.
+    return directive.controller === undefined;
+  }
+
+  /**
+   * Form-2 scope-target degrade: when a directive declared
+   * `bindToController: { … }` (object form) BUT no controller, the
+   * map's bindings target the existing scope on the element. The
+   * isolate-scope-creation contract does NOT widen here — form 2 never
+   * creates an isolate scope on its own (a deliberate asymmetry vs.
+   * form 1's `scope: { … }`). When this returns a non-`undefined`
+   * directive, the early wiring site uses its
+   * `bindToControllerBindings` as the binding map.
+   */
+  function findOrphanedBindToControllerBindings(directives: readonly Directive[]): Directive | undefined {
+    for (const directive of directives) {
+      if (directive.bindToControllerBindings !== undefined && directive.controller === undefined) {
+        return directive;
+      }
+    }
+    return undefined;
   }
 
   function compileNode(node: Node, queue: DeferredTemplateEntry[]) {
@@ -312,6 +763,32 @@ export function createCompile(options: CompileOptions): CompileService {
     // Slice 10 — `scope: true` detection (FS §2.12). Decide ONCE at
     // compile time whether THIS node needs its own child scope.
     const needsChildScope = isElement(node) && directives.some((d) => d.scope);
+
+    // ----- Spec 022 Slice 1: isolate-scope pre-pass -----
+    //
+    // Identify the directive (if any) requesting an isolate scope on
+    // this element. At most ONE isolate-scope directive is allowed per
+    // element; a second match routes `MultipleIsolateScopeError` via
+    // `$exceptionHandler('$compile')` at LINK time so the per-element
+    // linker can return early before any wiring runs. The conflict is
+    // captured here (at compile time) and the actual error route +
+    // early-return happens inside the linker closure below.
+    let isolateDirective: Directive | null = null;
+    let isolateConflict: { firstName: string; secondName: string } | null = null;
+    if (isElement(node)) {
+      for (const directive of directives) {
+        if (directive.isolateBindings === undefined) {
+          continue;
+        }
+        if (isolateDirective === null) {
+          isolateDirective = directive;
+          continue;
+        }
+        if (isolateConflict === null) {
+          isolateConflict = { firstName: isolateDirective.name, secondName: directive.name };
+        }
+      }
+    }
 
     // ----- Spec 018 / Slice 3: transclusion pre-pass -----
     //
@@ -524,11 +1001,12 @@ export function createCompile(options: CompileOptions): CompileService {
           continue;
         }
         if (typeof compileResult === 'function') {
-          templateTimeLinkEntries.push({ post: compileResult });
+          templateTimeLinkEntries.push({ post: compileResult, directive });
         } else {
           templateTimeLinkEntries.push({
             pre: compileResult.pre,
             post: compileResult.post,
+            directive,
           });
         }
       }
@@ -678,13 +1156,84 @@ export function createCompile(options: CompileOptions): CompileService {
         });
       }
 
+      // ----- Spec 022 Slice 1: isolate-scope conflict guard -----
+      //
+      // Two object-form `scope: { … }` directives on the same element
+      // is unrecoverable — the element cannot host two isolate scopes.
+      // Route the error and return early so downstream wiring doesn't
+      // run against a partially-initialized state. The directive's
+      // other behavior (link / compile / etc.) is intentionally skipped
+      // for THIS element only; sibling elements continue to link.
+      if (isolateConflict !== null && isElement(target)) {
+        invokeExceptionHandler(
+          exceptionHandler,
+          new MultipleIsolateScopeError(
+            isolateConflict.firstName,
+            isolateConflict.secondName,
+            target.tagName.toLowerCase(),
+          ),
+          '$compile',
+        );
+        return;
+      }
+
       // Slice 10 — `scope: true` wiring (FS §2.12). Create the child
       // scope AFTER the `$transclude` closure is built so the closure
       // captures `parentScope` (the OUTER scope) rather than the
       // freshly-created child.
-      const scope: Scope = needsChildScope ? parentScope.$new() : parentScope;
+      //
+      // Spec 022 Slice 1: when ANY directive on this element requested
+      // an isolate scope (object-form `scope: { … }`), create the scope
+      // via `parentScope.$new(true)` (isolate, no prototypal
+      // inheritance) instead of `parentScope.$new()` (child).
+      const isolate = isolateDirective !== null;
+      const scope: Scope = needsChildScope ? parentScope.$new(isolate) : parentScope;
       if (needsChildScope && isElement(target)) {
         setElementScope(target, scope);
+      }
+      // Wire isolate bindings AFTER scope creation and BEFORE attrs are
+      // bound to the scope (binding `@` reads attrs and seeds the
+      // initial value; binding `<` / `=` parse `attrs[attrName]` strings).
+      // The wiring uses `attrs` directly — the same view all link
+      // functions see — and uses `parentScope` for parent-expression
+      // evaluation (binding `<` / `=` / `&`) so values cross the isolate
+      // boundary explicitly.
+      //
+      // Spec 022 Slice 2: only wire bindings on the SCOPE target here.
+      // Directives with `bindToController` (form 1 or form 2) + a
+      // controller defer binding-wiring to the per-element controller
+      // seam below, which targets the instance. The two scope-target
+      // cases that DO run here:
+      //
+      //  1. form 1 with no `bindToController` (existing Slice-1 path):
+      //     `isolateDirective.isolateBindings` → isolate scope.
+      //  2. form 1 with `bindToController: true` BUT no controller
+      //     (the documented silent-degrade case): same source map,
+      //     same scope target.
+      //  3. form 2 (`bindToController: { … }`) without a controller:
+      //     `directive.bindToControllerBindings` → existing scope on
+      //     the element (which may be the parent or another
+      //     directive's isolate scope; form 2 does NOT create one).
+      if (isolate && shouldWireBindingsToScope(isolateDirective)) {
+        wireIsolateBindings({
+          parentScope,
+          isolateScope: scope,
+          attrs: attrs as Attributes,
+          bindings: isolateDirective.isolateBindings as NormalizedBindingMap,
+          target: scope as unknown as Record<string, unknown>,
+          interpolate,
+        });
+      }
+      const orphanForm2 = findOrphanedBindToControllerBindings(effectiveDirectives);
+      if (orphanForm2 !== undefined) {
+        wireIsolateBindings({
+          parentScope,
+          isolateScope: scope,
+          attrs: attrs as Attributes,
+          bindings: orphanForm2.bindToControllerBindings as NormalizedBindingMap,
+          target: scope as unknown as Record<string, unknown>,
+          interpolate,
+        });
       }
 
       // ----- Spec 018 / Slice 3: link-phase compile loop for
@@ -706,11 +1255,12 @@ export function createCompile(options: CompileOptions): CompileService {
             continue;
           }
           if (typeof compileResult === 'function') {
-            liveLinkEntries.push({ post: compileResult });
+            liveLinkEntries.push({ post: compileResult, directive });
           } else {
             liveLinkEntries.push({
               pre: compileResult.pre,
               post: compileResult.post,
+              directive,
             });
           }
         }
@@ -729,15 +1279,52 @@ export function createCompile(options: CompileOptions): CompileService {
       // element). Errors route via `$exceptionHandler('$compile')`;
       // the surrounding pre/post-link on this element AND siblings
       // continue.
+      //
+      // Spec 022 Slice 2: the seam now ALSO handles `bindToController`
+      // — directives requesting instance-target binding wiring are
+      // instantiated via `$controller(…, true)`'s deferred-alias path,
+      // wired against the instance, then have their `controllerAs`
+      // alias published on `scope`. `parentScope` is threaded through
+      // so the binding wiring uses it for parent-expression evaluation.
+      //
+      // Spec 022 Slice 3: the seam additionally fires `$onInit` and the
+      // initial synchronous `$onChanges`, registers `$onDestroy` via
+      // `scope.$on('$destroy', …)`, and returns the controllers it
+      // touched. The per-element linker walks the returned list
+      // AFTER the post-link loop completes (see below) to invoke
+      // `$postLink`.
+      const requireResults = new Map<Directive, unknown>();
+      let trackedControllers: TrackedController[] = [];
       if (isElement(target)) {
-        runControllerSeam(effectiveDirectives, scope, target, attrs as Attributes, $transclude);
+        trackedControllers = runControllerSeam(
+          effectiveDirectives,
+          scope,
+          parentScope,
+          target,
+          attrs as Attributes,
+          $transclude,
+          requireResults,
+        );
+      }
+
+      // ----- Spec 022 Slice 4: populate `requiredControllers` on each
+      // link entry so the per-directive link fn receives the resolved
+      // controllers as its 4th argument. For controller-having
+      // directives the seam already resolved + auto-assigned (object
+      // form) above; we just look up the cached result here. For
+      // directives WITHOUT controllers but WITH `require`, we resolve
+      // them on the fly so the 4th-arg contract still holds — this is
+      // the canonical AngularJS pattern of a link-only directive
+      // consuming a sibling's controller.
+      if (isElement(target)) {
+        resolveRequiredControllersForLinkEntries(target, effectiveLinkEntries, requireResults, exceptionHandler);
       }
 
       // Pre-link: priority-DESCENDING, runs BEFORE child linking.
       for (const entry of effectiveLinkEntries) {
         if (entry.pre !== undefined) {
           try {
-            entry.pre(scope, target as Element, attrs as Attributes, undefined, $transclude);
+            entry.pre(scope, target as Element, attrs as Attributes, entry.requiredControllers, $transclude);
           } catch (err) {
             invokeExceptionHandler(exceptionHandler, err, '$compile');
           }
@@ -755,12 +1342,21 @@ export function createCompile(options: CompileOptions): CompileService {
       for (const entry of effectiveLinkEntries.slice().reverse()) {
         if (entry.post !== undefined) {
           try {
-            entry.post(scope, target as Element, attrs as Attributes, undefined, $transclude);
+            entry.post(scope, target as Element, attrs as Attributes, entry.requiredControllers, $transclude);
           } catch (err) {
             invokeExceptionHandler(exceptionHandler, err, '$compile');
           }
         }
       }
+
+      // ----- Spec 022 Slice 3: `$postLink` dispatch -----
+      //
+      // Fires AFTER the per-element post-link loop completes — which
+      // itself runs AFTER child linking. The order across the tree
+      // is therefore CHILD `$postLink` (fired by the recursive
+      // child linker) BEFORE parent `$postLink` (here), matching
+      // AngularJS's "inside-out" semantics.
+      firePostLinkHooks(trackedControllers);
 
       // ----- Spec 018 / Slice 4: eager required-slot-unfilled report.
       //
@@ -905,6 +1501,25 @@ export function createCompile(options: CompileOptions): CompileService {
     // Determine `scope: true` requirement on the pending directives.
     const needsChildScope = pendingDirectives.some((d) => d.scope);
 
+    // Spec 022 Slice 1: detect isolate-scope directive among pending
+    // directives (mirrors the synchronous-link pre-pass). At most one
+    // is allowed; a second match routes `MultipleIsolateScopeError`
+    // and the post-template link returns early.
+    let pendingIsolateDirective: Directive | null = null;
+    let pendingIsolateConflict: { firstName: string; secondName: string } | null = null;
+    for (const directive of pendingDirectives) {
+      if (directive.isolateBindings === undefined) {
+        continue;
+      }
+      if (pendingIsolateDirective === null) {
+        pendingIsolateDirective = directive;
+        continue;
+      }
+      if (pendingIsolateConflict === null) {
+        pendingIsolateConflict = { firstName: pendingIsolateDirective.name, secondName: directive.name };
+      }
+    }
+
     // Run compile on each pending directive against the post-template
     // element. Compile failures route + skip the directive.
     const templateTimeLinkEntries: LinkEntry[] = [];
@@ -932,19 +1547,63 @@ export function createCompile(options: CompileOptions): CompileService {
         continue;
       }
       if (typeof compileResult === 'function') {
-        templateTimeLinkEntries.push({ post: compileResult });
+        templateTimeLinkEntries.push({ post: compileResult, directive });
       } else {
         templateTimeLinkEntries.push({
           pre: compileResult.pre,
           post: compileResult.post,
+          directive,
         });
       }
     }
 
     return (parentScope): void => {
-      const scope: Scope = needsChildScope ? parentScope.$new() : parentScope;
+      // ----- Spec 022 Slice 1: isolate-scope conflict guard (post-template path).
+      if (pendingIsolateConflict !== null) {
+        invokeExceptionHandler(
+          exceptionHandler,
+          new MultipleIsolateScopeError(
+            pendingIsolateConflict.firstName,
+            pendingIsolateConflict.secondName,
+            element.tagName.toLowerCase(),
+          ),
+          '$compile',
+        );
+        return;
+      }
+
+      const isolate = pendingIsolateDirective !== null;
+      const scope: Scope = needsChildScope ? parentScope.$new(isolate) : parentScope;
       if (needsChildScope) {
         setElementScope(element, scope);
+      }
+      // Wire isolate bindings BEFORE attrs are bound to scope so the
+      // `@` binding's $observe seed reads the same `attrs[attrName]`
+      // the synchronous path sees.
+      //
+      // Spec 022 Slice 2: as in the inline-link path, only the
+      // SCOPE-target cases run here. `bindToController` + controller
+      // routes binding wiring through the controller seam below.
+      if (isolate && shouldWireBindingsToScope(pendingIsolateDirective)) {
+        wireIsolateBindings({
+          parentScope,
+          isolateScope: scope,
+          attrs,
+          bindings: pendingIsolateDirective.isolateBindings as NormalizedBindingMap,
+          target: scope as unknown as Record<string, unknown>,
+          interpolate,
+        });
+      }
+      const pendingOrphanForm2 = findOrphanedBindToControllerBindings(pendingDirectives);
+      if (pendingOrphanForm2 !== undefined) {
+        wireIsolateBindings({
+          parentScope,
+          isolateScope: scope,
+          attrs,
+          bindings: pendingOrphanForm2.bindToControllerBindings as NormalizedBindingMap,
+          target: scope as unknown as Record<string, unknown>,
+          interpolate,
+        });
       }
 
       // Recover the bound transclude (if any) so directive pre/post
@@ -963,12 +1622,36 @@ export function createCompile(options: CompileOptions): CompileService {
       // field stripped so it doesn't re-trigger the install). The
       // `$transclude` here is whatever was stashed at enqueue time
       // (may be `undefined` for non-transcluding hosts).
-      runControllerSeam(pendingDirectives, scope, element, attrs, $transclude);
+      //
+      // Spec 022 Slice 2 — `bindToController` integration runs here
+      // too: directives requesting instance-target bindings get
+      // instantiated via the deferred-alias path inside `runControllerSeam`.
+      //
+      // Spec 022 Slice 3: `$onInit` / initial `$onChanges` / `$onDestroy`
+      // wiring runs inside the seam exactly as in the synchronous path;
+      // the returned `trackedControllers` list is walked AFTER the
+      // post-link loop below to fire `$postLink`.
+      const requireResults = new Map<Directive, unknown>();
+      const trackedControllers = runControllerSeam(
+        pendingDirectives,
+        scope,
+        parentScope,
+        element,
+        attrs,
+        $transclude,
+        requireResults,
+      );
+
+      // Spec 022 Slice 4 — populate `requiredControllers` on each link
+      // entry (post-template link path). Same contract as the inline
+      // path: controller-having directives have their require resolved
+      // by the seam; controllerless `require` directives resolve here.
+      resolveRequiredControllersForLinkEntries(element, templateTimeLinkEntries, requireResults, exceptionHandler);
 
       for (const entry of templateTimeLinkEntries) {
         if (entry.pre !== undefined) {
           try {
-            entry.pre(scope, element, attrs, undefined, $transclude);
+            entry.pre(scope, element, attrs, entry.requiredControllers, $transclude);
           } catch (err) {
             invokeExceptionHandler(exceptionHandler, err, '$compile');
           }
@@ -978,12 +1661,16 @@ export function createCompile(options: CompileOptions): CompileService {
       for (const entry of templateTimeLinkEntries.slice().reverse()) {
         if (entry.post !== undefined) {
           try {
-            entry.post(scope, element, attrs, undefined, $transclude);
+            entry.post(scope, element, attrs, entry.requiredControllers, $transclude);
           } catch (err) {
             invokeExceptionHandler(exceptionHandler, err, '$compile');
           }
         }
       }
+
+      // ----- Spec 022 Slice 3: `$postLink` dispatch (post-template
+      // link path). Same contract as the synchronous link site.
+      firePostLinkHooks(trackedControllers);
     };
   }
 

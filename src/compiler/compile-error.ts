@@ -59,23 +59,81 @@ export class InvalidDirectiveFactoryError extends Error {
 }
 
 /**
- * Thrown when a directive factory returns a Directive Definition
- * Object whose `scope` property is the isolate-scope object form
- * (`scope: { foo: '=' }`). Spec 017 deliberately rejects isolate
- * scope at registration time so a future spec can add it without a
- * silent semantic change.
+ * @deprecated Spec 022 Slice 1 lifted the registration-time rejection of
+ * the isolate-scope object form (`scope: { foo: '=' }`). This class is no
+ * longer thrown anywhere in the codebase; it is kept exported for one
+ * release as a deprecated no-op so a consumer catching it via
+ * `err instanceof IsolateScopeNotSupportedError` does not see a sudden
+ * `ReferenceError`. A future spec may remove it outright. Use
+ * {@link InvalidIsolateBindingError} for malformed binding specs and
+ * {@link MultipleIsolateScopeError} for the two-isolate-directives
+ * conflict.
  *
- * @example
- * ```ts
- * $compileProvider.directive('myDir', () => ({ scope: { foo: '=' } }));
- * // throws IsolateScopeNotSupportedError
- * ```
+ * Historic behavior (spec 017 — now removed): thrown lazily at
+ * `<name>Directive` provider `$get` time when `ddo.scope` was the
+ * object-form isolate-scope declaration.
  */
 export class IsolateScopeNotSupportedError extends Error {
   readonly name = 'IsolateScopeNotSupportedError' as const;
 
   constructor(directiveName: string) {
     super(`Isolate scope is not yet supported (spec 017 ships only scope: false | true). Directive: ${directiveName}`);
+  }
+}
+
+/**
+ * Thrown by `parseBindingSpec` (spec 022 Slice 1) when a binding-spec
+ * string inside an isolate-scope `scope: { … }` declaration cannot be
+ * parsed against the canonical
+ * `^\s*([=@<&])(\?)?\s*([A-Za-z_$][\w$]*)?\s*$` shape.
+ *
+ * Routed via the existing factory `try/catch` in
+ * `$$buildDirectiveArrayProvider` → `$exceptionHandler('$compile')`.
+ *
+ * @example
+ * ```ts
+ * $compileProvider.directive('myDir', () => ({
+ *   scope: { value: '==' }, // double-equals — not a valid binding spec
+ * }));
+ * // routes InvalidIsolateBindingError via $exceptionHandler('$compile')
+ * ```
+ */
+export class InvalidIsolateBindingError extends Error {
+  readonly name = 'InvalidIsolateBindingError' as const;
+
+  constructor(directiveName: string, bindingKey: string, rawSpec: string) {
+    super(
+      `Invalid isolate binding "${rawSpec}" for "${bindingKey}" on directive ${directiveName}. ` +
+        `Expected one of =, @, <, & (each optionally followed by ? and an attribute alias identifier).`,
+    );
+  }
+}
+
+/**
+ * Thrown at LINK time (not registration) when two directives on the SAME
+ * element both declare an isolate-scope object-form `scope: { … }`. An
+ * element can host at most one isolate scope; the conflict is routed via
+ * `$exceptionHandler('$compile')` and the per-element linker returns
+ * early so downstream wiring does not run against a partially-initialized
+ * state.
+ *
+ * @example
+ * ```ts
+ * $compileProvider
+ *   .directive('dirA', () => ({ scope: { a: '@' } }))
+ *   .directive('dirB', () => ({ scope: { b: '@' } }));
+ * // <div dir-a dir-b></div> — at link time, MultipleIsolateScopeError
+ * // routes via $exceptionHandler('$compile').
+ * ```
+ */
+export class MultipleIsolateScopeError extends Error {
+  readonly name = 'MultipleIsolateScopeError' as const;
+
+  constructor(firstDirectiveName: string, secondDirectiveName: string, tagName: string) {
+    super(
+      `Multiple directives requesting an isolate scope on the same element <${tagName}>: ` +
+        `"${firstDirectiveName}" and "${secondDirectiveName}". Only one isolate-scope directive is allowed per element.`,
+    );
   }
 }
 
@@ -585,5 +643,86 @@ export class TemplateFetchFailedError extends Error {
 
   constructor(url: string, reason: string) {
     super(`Failed to load template "${url}": ${reason}`);
+  }
+}
+
+/**
+ * Thrown at LINK time (not registration) when a directive declaring
+ * `require: '<name>'` (or a `^`/`^^`-prefixed variant, or an entry of
+ * the array / object forms) cannot resolve the named controller and the
+ * requirement is NOT marked optional (no leading `?`).
+ *
+ * Routed via `$exceptionHandler('$compile')` from the per-element
+ * `require` resolver. The directive's other behavior (link, compile,
+ * transclude) on the same element still runs; siblings are unaffected.
+ *
+ * The error message names the requiring directive, the missing
+ * controller's directive name, and describes the search scope as
+ * own-element, element-and-ancestors (`^`), or ancestors-only (`^^`).
+ *
+ * @example
+ * ```ts
+ * $compileProvider.directive('child', () => ({
+ *   require: '^parent',          // search element + ancestors
+ *   link: (_s, _e, _a, parentCtrl) => {
+ *     // parentCtrl is the resolved controller instance
+ *   },
+ * }));
+ * // <div child></div> — no `parent` directive anywhere → at link time,
+ * // MissingRequiredControllerError routes via $exceptionHandler('$compile').
+ * ```
+ */
+export class MissingRequiredControllerError extends Error {
+  readonly name = 'MissingRequiredControllerError' as const;
+
+  constructor(requiringDirective: string, requiredName: string, prefix: '' | '^' | '^^') {
+    const scope =
+      prefix === '^^' ? 'ancestors only' : prefix === '^' ? 'this element and its ancestors' : 'this element';
+    super(`Controller "${requiredName}" required by directive "${requiringDirective}" was not found in ${scope}`);
+  }
+}
+
+/**
+ * Thrown by `$compileProvider.component(name, definition)` (spec 022
+ * Slice 5) when registration arguments are not well-formed. Two
+ * categories of misuse surface this error:
+ *
+ *  1. **Invalid component name** — the same camelCase identifier rule
+ *     `$compileProvider.directive` enforces. An empty string, a
+ *     hyphenated tag-name, or a name starting with a digit trips
+ *     `InvalidComponentDefinitionError(name, 'name must be a non-empty camelCase identifier')`.
+ *  2. **Invalid definition object** — the second argument must be a
+ *     plain object (not `null`, not an array, not a primitive). A
+ *     primitive or array trips
+ *     `InvalidComponentDefinitionError(name, 'definition must be a plain object')`.
+ *     Misshapen individual fields (`controller`, `bindings`, etc.) are
+ *     caught downstream by the directive normalizer because
+ *     `.component(...)` forwards to `this.directive(name, factory)` —
+ *     the directive's existing validation runs at provider `$get` time
+ *     and routes via the same `'$compile'` cause.
+ *
+ * Because `.component` runs synchronously inside the caller's frame
+ * (registration time), this class is thrown **directly** to the caller.
+ * The exception-handler routing happens only when the underlying
+ * `.directive` registration's factory invocation runs later — those
+ * surface as `InvalidDirectiveFactoryError`-shaped errors with cause
+ * `'$compile'`. No new `EXCEPTION_HANDLER_CAUSES` token is introduced.
+ *
+ * @example
+ * ```ts
+ * try {
+ *   $compileProvider.component('1bad', { template: '' });
+ * } catch (err) {
+ *   if (err instanceof InvalidComponentDefinitionError) {
+ *     console.warn('Fix the component:', err.message);
+ *   }
+ * }
+ * ```
+ */
+export class InvalidComponentDefinitionError extends Error {
+  readonly name = 'InvalidComponentDefinitionError' as const;
+
+  constructor(componentName: string, reason: string) {
+    super(`Invalid component definition for "${componentName}": ${reason}`);
   }
 }

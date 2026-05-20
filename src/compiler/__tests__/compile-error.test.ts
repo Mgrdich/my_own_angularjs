@@ -46,6 +46,7 @@ describe('InvalidDirectiveFactoryError', () => {
   });
 });
 
+/* eslint-disable @typescript-eslint/no-deprecated -- The block exercises the deprecated class's surface; spec 022 Slice 1 keeps it exported for one release so consumers catching it via `instanceof` keep compiling. */
 describe('IsolateScopeNotSupportedError', () => {
   it('formats the message naming the offending directive', () => {
     const err = new IsolateScopeNotSupportedError('myDir');
@@ -63,3 +64,4 @@ describe('IsolateScopeNotSupportedError', () => {
     expect(new IsolateScopeNotSupportedError('myDir')).toBeInstanceOf(Error);
   });
 });
+/* eslint-enable @typescript-eslint/no-deprecated */
