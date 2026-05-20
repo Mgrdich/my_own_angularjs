@@ -29,7 +29,7 @@ export function buildAST(tokens: Token[]): Program {
    * Look at the current token without advancing.
    * If `text` is provided, only return the token if its text matches.
    */
-  function peek(text?: string): Token | undefined {
+  function peek(text?: string) {
     if (cursor < tokens.length) {
       const token = tokens[cursor];
       if (token !== undefined && (text === undefined || token.text === text)) {
@@ -43,7 +43,7 @@ export function buildAST(tokens: Token[]): Program {
    * Advance the cursor if the current token matches `text`.
    * Returns the token if matched, or `undefined` otherwise.
    */
-  function expect(text?: string): Token | undefined {
+  function expect(text?: string) {
     const token = peek(text);
     if (token !== undefined) {
       cursor++;
@@ -56,7 +56,7 @@ export function buildAST(tokens: Token[]): Program {
    * Advance the cursor and assert the current token matches `text`.
    * Throws if the token does not match.
    */
-  function consume(text: string): Token {
+  function consume(text: string) {
     const token = expect(text);
     if (token === undefined) {
       throw new Error(`Unexpected. Expecting: ${text}`);
@@ -420,7 +420,7 @@ export function buildAST(tokens: Token[]): Program {
   /**
    * Parse a comma-separated list of arguments for a call expression.
    */
-  function parseArguments(): ASTNode[] {
+  function parseArguments() {
     const args: ASTNode[] = [];
     if (peek(')') === undefined) {
       do {

@@ -224,4 +224,102 @@ describe('dependency injection', () => {
       expect(mod.$$invokeQueue[2]?.[0]).toBe('factory');
     });
   });
+
+  describe('Module.directive', () => {
+    beforeEach(() => {
+      resetRegistry();
+    });
+
+    it('returns the same module instance (for chaining)', () => {
+      const mod = createModule('app', []);
+      const chained = mod.directive('myWidget', [() => ({ restrict: 'E' })]);
+      expect(chained).toBe(mod);
+    });
+
+    it('chains alongside other recipes (.value etc.)', () => {
+      const mod = createModule('app', [])
+        .value('greeting', 'hello')
+        .directive('myWidget', [() => ({ restrict: 'E' })]);
+      expect(mod.$$invokeQueue).toHaveLength(1);
+      expect(mod.$$invokeQueue[0]?.[0]).toBe('value');
+    });
+
+    it('pushes exactly one config block naming $compileProvider (string form)', () => {
+      const mod = createModule('app', []);
+      mod.directive('myWidget', [() => ({ restrict: 'E' })]);
+      expect(mod.$$configBlocks).toHaveLength(1);
+      const block = mod.$$configBlocks[0];
+      expect(Array.isArray(block)).toBe(true);
+      expect((block as readonly unknown[])[0]).toBe('$compileProvider');
+    });
+
+    it('pushes exactly one config block naming $compileProvider (bulk-map form)', () => {
+      const mod = createModule('app', []);
+      mod.directive({
+        widgetA: [() => ({ restrict: 'E' })],
+        widgetB: [() => ({ restrict: 'A' })],
+      });
+      // ONE block for the whole map — not one per key.
+      expect(mod.$$configBlocks).toHaveLength(1);
+      const block = mod.$$configBlocks[0];
+      expect(Array.isArray(block)).toBe(true);
+      expect((block as readonly unknown[])[0]).toBe('$compileProvider');
+    });
+
+    it('each .directive call pushes its own config block (accumulation at the DSL layer)', () => {
+      const mod = createModule('app', [])
+        .directive('foo', [() => ({ restrict: 'A' })])
+        .directive('foo', [() => ({ restrict: 'A' })]);
+      expect(mod.$$configBlocks).toHaveLength(2);
+    });
+  });
+
+  describe('Module.controller', () => {
+    beforeEach(() => {
+      resetRegistry();
+    });
+
+    it('returns the same module instance (for chaining)', () => {
+      const mod = createModule('app', []);
+      const chained = mod.controller('HomeCtrl', [() => undefined]);
+      expect(chained).toBe(mod);
+    });
+
+    it('chains alongside other recipes (.value etc.)', () => {
+      const mod = createModule('app', [])
+        .value('greeting', 'hello')
+        .controller('HomeCtrl', [() => undefined]);
+      expect(mod.$$invokeQueue).toHaveLength(1);
+      expect(mod.$$invokeQueue[0]?.[0]).toBe('value');
+    });
+
+    it('pushes exactly one config block naming $controllerProvider (string form)', () => {
+      const mod = createModule('app', []);
+      mod.controller('HomeCtrl', [() => undefined]);
+      expect(mod.$$configBlocks).toHaveLength(1);
+      const block = mod.$$configBlocks[0];
+      expect(Array.isArray(block)).toBe(true);
+      expect((block as readonly unknown[])[0]).toBe('$controllerProvider');
+    });
+
+    it('pushes exactly one config block naming $controllerProvider (bulk-map form)', () => {
+      const mod = createModule('app', []);
+      mod.controller({
+        a: [() => undefined],
+        b: [() => undefined],
+      });
+      // ONE block for the whole map — not one per key.
+      expect(mod.$$configBlocks).toHaveLength(1);
+      const block = mod.$$configBlocks[0];
+      expect(Array.isArray(block)).toBe(true);
+      expect((block as readonly unknown[])[0]).toBe('$controllerProvider');
+    });
+
+    it('each .controller call pushes its own config block', () => {
+      const mod = createModule('app', [])
+        .controller('X', [() => undefined])
+        .controller('X', [() => undefined]);
+      expect(mod.$$configBlocks).toHaveLength(2);
+    });
+  });
 });

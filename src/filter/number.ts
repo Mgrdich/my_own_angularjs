@@ -33,7 +33,7 @@ import type { LocaleService, NumberPattern } from './locale-types';
  * matches AngularJS — its `formatNumber` checks `numStr.indexOf('e')`
  * and bails to the exponent form.
  */
-function isExponentNotation(value: number): boolean {
+function isExponentNotation(value: number) {
   return String(value).indexOf('e') !== -1;
 }
 
@@ -44,7 +44,7 @@ function isExponentNotation(value: number): boolean {
  * pulls back to the actual value's representation while honoring
  * `minFrac`.
  */
-function trimTrailingZeros(formatted: string, decimalSep: string, minFrac: number): string {
+function trimTrailingZeros(formatted: string, decimalSep: string, minFrac: number) {
   const dotIdx = formatted.lastIndexOf(decimalSep);
   if (dotIdx === -1) {
     return formatted;

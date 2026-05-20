@@ -256,7 +256,7 @@ export function createInjector<const Mods extends readonly AnyModule[]>(
    * helper only runs at call time (well after the closure assignment), so
    * the late-binding reference is safe.
    */
-  function applyDecoratorChain(name: string, current: unknown): unknown {
+  function applyDecoratorChain(name: string, current: unknown) {
     const chain = decorators.get(name);
     if (chain === undefined || chain.length === 0) {
       return current;
@@ -277,7 +277,7 @@ export function createInjector<const Mods extends readonly AnyModule[]>(
    * per-module-name basis, which also breaks any cycles at the module graph
    * level.
    */
-  function loadModule(mod: AnyModule): void {
+  function loadModule(mod: AnyModule) {
     if (loadedModules.has(mod.name)) {
       return;
     }
@@ -529,7 +529,7 @@ export function createInjector<const Mods extends readonly AnyModule[]>(
    * (e.g. test harnesses, higher-level APIs) can inspect an invokable's
    * declared dependencies without importing the helper directly.
    */
-  function annotate(fn: Invokable): readonly string[] {
+  function annotate(fn: Invokable) {
     return annotateInvokable(fn);
   }
 
@@ -565,7 +565,7 @@ export function createInjector<const Mods extends readonly AnyModule[]>(
     throw new Error(`Unknown provider: ${name}`);
   }
 
-  function providerHas(name: string): boolean {
+  function providerHas(name: string) {
     return providerCache.has(name) || providerInstances.has(name);
   }
 
@@ -584,7 +584,7 @@ export function createInjector<const Mods extends readonly AnyModule[]>(
     return actualFn.apply(self, resolvedDeps) as T;
   }
 
-  function providerAnnotate(fn: Invokable): readonly string[] {
+  function providerAnnotate(fn: Invokable) {
     return annotateInvokable(fn);
   }
 

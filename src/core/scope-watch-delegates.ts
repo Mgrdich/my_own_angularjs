@@ -32,7 +32,7 @@ import { isArray } from './utils';
  *
  * Matches AngularJS `isAllDefined` at `src/ng/parse.js:1931`.
  */
-function isAllDefined(value: unknown): boolean {
+function isAllDefined(value: unknown) {
   if (value === undefined) {
     return false;
   }

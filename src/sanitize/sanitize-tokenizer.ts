@@ -184,7 +184,7 @@ export function htmlParser(html: string, handler: TokenHandler): void {
  * the open-element stack (unless syntactically void), and emits
  * `start`.
  */
-function parseStartTag(tag: string, rest: string, unaryFlag: string, stack: string[], handler: TokenHandler): void {
+function parseStartTag(tag: string, rest: string, unaryFlag: string, stack: string[], handler: TokenHandler) {
   const lowered = tag.toLowerCase();
   // The `unary` event flag is purely the trailing-slash syntactic marker.
   // The void-element semantic decision is made by the consumer with its
@@ -221,7 +221,7 @@ function parseStartTag(tag: string, rest: string, unaryFlag: string, stack: stri
  * tag from the stack top down to (and including) the match. Spurious
  * end tags with no opener are silently dropped.
  */
-function parseEndTag(tag: string, stack: string[], handler: TokenHandler): void {
+function parseEndTag(tag: string, stack: string[], handler: TokenHandler) {
   const lowered = tag.toLowerCase();
   let pos = -1;
   for (let i = stack.length - 1; i >= 0; i--) {

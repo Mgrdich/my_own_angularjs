@@ -127,3 +127,14 @@ export type {
   TemplateFetcher,
   TemplateRequestFn,
 } from './template/index';
+
+export {
+  ControllerAsWithoutControllerError,
+  ControllerRegistrationOutOfPhaseError,
+  createController,
+  InvalidControllerFactoryError,
+  InvalidControllerNameError,
+  MalformedControllerAliasError,
+  UnknownControllerError,
+} from './controller/index';
+export type { ControllerInvokable, ControllerLocals, ControllerService, IControllerProvider } from './controller/index';

@@ -49,7 +49,7 @@ const ANY_PROPERTY_KEY_DEFAULT = '$';
 // boolean / bigint leaves participate in the match. Non-primitive `actual`
 // values (e.g. plain objects) would `[object Object]`-stringify and produce
 // spurious matches; we instead refuse the comparison and return `false`.
-function primitiveToString(value: unknown): string | null {
+function primitiveToString(value: unknown) {
   if (typeof value === 'string') return value;
   if (typeof value === 'number' || typeof value === 'boolean' || typeof value === 'bigint') {
     return String(value);
@@ -68,7 +68,7 @@ const defaultSubstringComparator: Comparator = (actual, expected) => {
 
 const strictComparator: Comparator = (actual, expected) => actual === expected;
 
-function resolveComparator(comparator: unknown): Comparator {
+function resolveComparator(comparator: unknown) {
   if (comparator === true) {
     return strictComparator;
   }

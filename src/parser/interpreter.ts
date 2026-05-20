@@ -259,7 +259,7 @@ function ensurePath(
  * If the existing value is not object-like, throw — traversing through a
  * primitive would silently drop writes at runtime.
  */
-function ensureChild(parent: Record<string, unknown>, key: string): Record<string, unknown> {
+function ensureChild(parent: Record<string, unknown>, key: string) {
   const current = parent[key];
   if (current === undefined || current === null) {
     const fresh: Record<string, unknown> = {};

@@ -37,8 +37,9 @@ import { createModule, getModule, createInjector } from 'my-own-angularjs/di';
 |-------------------------------------------------------------------------------|---------------------------------------------|---------------------------------------------------------------------------------------------------------|
 | `.provider` / `.factory` / `.service` / `.value` / `.constant` / `.decorator` | `$provide`                                  | Phase 1 — module-DSL chain shipped in spec 007–008; config-phase `$provide` injectable shipped in spec 015. Both paths share `applyRegistrationRecord` from `src/di/registration.ts`. |
 | `.config` / `.run`                                                            | module lifecycle                            | Phase 1 (already shipped — spec 008)                                                                    |
-| `.controller`                                                                 | `$controllerProvider.register`              | Phase 2 (with `$compile`)                |
-| `.directive` / `.component`                                                   | `$compileProvider.directive` / `.component` | Phase 2 (with `$compile`)                |
+| `.controller`                                                                 | `$controllerProvider.register`              | Phase 2 — shipped in spec 021            |
+| `.directive`                                                                  | `$compileProvider.directive`                | Phase 2 — shipped in spec 021            |
+| `.component`                                                                  | `$compileProvider.component`                | Deferred — "Components & isolate scope" roadmap item (needs isolate scope, `bindToController`, lifecycle hooks; explicitly out of scope in spec 021) |
 | `.filter`                                                                     | `$filterProvider.register`                  | Phase 2 (with filter pipeline)           |
 | `.animation`                                                                  | `$animateProvider.register`                 | Phase 4 (with `$animate`)                |
 

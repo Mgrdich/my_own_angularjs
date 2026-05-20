@@ -1,3 +1,6 @@
+import type { $CompileProvider } from '@compiler/compile-provider';
+import type { Directive, DirectiveFactory } from '@compiler/directive-types';
+import type { ControllerInvokable, IControllerProvider } from '@controller/controller-types';
 import type { FilterFn, IFilterProvider } from '@filter/filter-types';
 
 import type { Invokable, InvokableReturn, RequiredConfigRegistry, RequiredRunRegistry, ResolveDeps } from './di-types';
@@ -402,6 +405,172 @@ export class Module<
 
     return this as unknown as Module<Registry & { [P in K as `${P}Filter`]: F }, ConfigRegistry, Name, Requires>;
   }
+
+  /**
+   * Register a directive under `name`. Sugar for opening a config block
+   * by hand and reaching for `$compileProvider`:
+   *
+   * ```ts
+   * module.config(['$compileProvider', ($cp: $CompileProvider) => {
+   *   $cp.directive(name, factory);
+   * }]);
+   * ```
+   *
+   * The method owns no state and adds no validation — it pushes ONE
+   * config block onto {@link $$configBlocks} that forwards verbatim to
+   * `$compileProvider.directive(...)`. Accumulation (two registrations of
+   * the same name BOTH run on a matched element), priority/terminal
+   * sorting, name/factory validation, and registration timing are all
+   * inherited unchanged from the provider.
+   *
+   * Two forms:
+   *
+   * - **String form** — `directive(name, factory)` registers a single
+   *   directive factory.
+   * - **Bulk-map form** — `directive({ a: factoryA, b: factoryB })`
+   *   registers every entry in the object in a single call (still ONE
+   *   config block).
+   *
+   * Returns the same module instance so the call can be chained with
+   * every other module-builder method.
+   *
+   * @param nameOrMap - The directive name (string form) or a map of
+   *   `{ name: factory }` entries (bulk-map form).
+   * @param factory - The directive factory, required in the string form
+   *   and ignored in the bulk-map form. An {@link Invokable} of any
+   *   shape (array-style annotation, `$inject`-tagged function, or a
+   *   bare zero-dep function).
+   *
+   * @example
+   * ```ts
+   * createModule('app', ['ng']).directive('myWidget', () => ({
+   *   restrict: 'E',
+   *   link: (_scope, el) => {
+   *     el.textContent = 'hello';
+   *   },
+   * }));
+   * // injector.get('$compile')(node)(scope) matches <my-widget> and links it.
+   * ```
+   */
+  directive(
+    nameOrMap: string | Record<string, DirectiveFactory>,
+    factory?: DirectiveFactory,
+  ): Module<Registry, ConfigRegistry, Name, Requires> {
+    // `.directive()` is sugar over `.config(['$compileProvider', $cp =>
+    // $cp.directive(nameOrMap, factory)])`. Branch on the argument shape
+    // so the provider's matching overload is called: the string form
+    // forwards `(name, factory)`, the bulk-map form forwards `(map)`.
+    // `$cp.directive`'s implementation signature accepts `factory?`, so a
+    // missing `factory` in the string branch is the provider's misuse to
+    // surface — the DSL adds no validation of its own.
+    if (typeof nameOrMap === 'string') {
+      const name = nameOrMap;
+      this.$$configBlocks.push([
+        '$compileProvider',
+        ($compileProvider: $CompileProvider) => {
+          $compileProvider.directive(name, factory as DirectiveFactory);
+        },
+      ]);
+    } else {
+      const map = nameOrMap;
+      this.$$configBlocks.push([
+        '$compileProvider',
+        ($compileProvider: $CompileProvider) => {
+          $compileProvider.directive(map);
+        },
+      ]);
+    }
+
+    return this as unknown as Module<Registry, ConfigRegistry, Name, Requires>;
+  }
+
+  /**
+   * Register a controller under `name`. Sugar for opening a config block
+   * by hand and reaching for `$controllerProvider`:
+   *
+   * ```ts
+   * module.config(['$controllerProvider', ($cp: IControllerProvider) => {
+   *   $cp.register(name, fn);
+   * }]);
+   * ```
+   *
+   * The method owns no state and adds no validation — it pushes ONE
+   * config block onto {@link $$configBlocks} that forwards verbatim to
+   * `$controllerProvider.register(...)`. Last-wins on duplicate names
+   * (a later registration overwrites the earlier one — contrast with
+   * `.directive`, which accumulates), name/factory validation, and
+   * registration timing are all inherited unchanged from the provider.
+   *
+   * Two forms:
+   *
+   * - **String form** — `controller(name, fn)` registers a single
+   *   controller factory.
+   * - **Bulk-map form** — `controller({ HomeCtrl: fnA, AboutCtrl: fnB })`
+   *   registers every entry in the object in a single call (still ONE
+   *   config block).
+   *
+   * Returns the same module instance so the call can be chained with
+   * every other module-builder method.
+   *
+   * **No registry widening.** Unlike `.filter` (which routes through
+   * `$provide.factory` as `<name>Filter`) and `.directive` (which
+   * registers a `<name>Directive` provider), controllers are stored in
+   * `$ControllerProvider`'s private `$$registry` Map and are NEVER
+   * injector-resolvable services. There is no injector key to widen the
+   * typed `Registry` with — this is an intrinsic fact about how
+   * `$controllerProvider` works, not a design choice. Both typed
+   * overloads on {@link TypedModule} therefore return the module type
+   * unchanged.
+   *
+   * @param nameOrMap - The controller name (string form) or a map of
+   *   `{ name: fn }` entries (bulk-map form).
+   * @param fn - The controller factory, required in the string form
+   *   and ignored in the bulk-map form. A {@link ControllerInvokable}
+   *   — either a bare function or an array-style annotation whose
+   *   trailing element is the function.
+   *
+   * @example
+   * ```ts
+   * createModule('app', ['ng']).controller('HomeCtrl', [
+   *   '$scope',
+   *   ($scope) => {
+   *     ($scope as { title: string }).title = 'Home';
+   *   },
+   * ]);
+   * // injector.get('$controller')('HomeCtrl', { $scope }) runs the factory.
+   * ```
+   */
+  controller(
+    nameOrMap: string | Record<string, ControllerInvokable>,
+    fn?: ControllerInvokable,
+  ): Module<Registry, ConfigRegistry, Name, Requires> {
+    // `.controller()` is sugar over `.config(['$controllerProvider', $cp =>
+    // $cp.register(nameOrMap, fn)])`. Branch on the argument shape so the
+    // provider's matching overload is called: the string form forwards
+    // `(name, fn)`, the bulk-map form forwards `(map)`. `$cp.register`'s
+    // implementation signature accepts `fn?`, so a missing `fn` in the
+    // string branch is the provider's misuse to surface — the DSL adds no
+    // validation of its own.
+    if (typeof nameOrMap === 'string') {
+      const name = nameOrMap;
+      this.$$configBlocks.push([
+        '$controllerProvider',
+        ($controllerProvider: IControllerProvider) => {
+          $controllerProvider.register(name, fn as ControllerInvokable);
+        },
+      ]);
+    } else {
+      const map = nameOrMap;
+      this.$$configBlocks.push([
+        '$controllerProvider',
+        ($controllerProvider: IControllerProvider) => {
+          $controllerProvider.register(map);
+        },
+      ]);
+    }
+
+    return this as unknown as Module<Registry, ConfigRegistry, Name, Requires>;
+  }
 }
 
 /**
@@ -787,6 +956,129 @@ export interface TypedModule<
     name: K,
     factory: Invokable<F>,
   ): TypedModule<Registry & { [P in K as `${P}Filter`]: F }, ConfigRegistry, Name, Requires>;
+
+  /**
+   * Register a single directive under `name`. Sugar for a config block
+   * that forwards to `$compileProvider.directive(name, factory)` — the
+   * DSL owns no state and adds no validation; accumulation,
+   * priority/terminal sorting, and error messages are all inherited
+   * from the provider.
+   *
+   * The chain is widened to record `${K}Directive: Directive[]` so a
+   * downstream `injector.get('myWidgetDirective')` lookup or a
+   * `decorator('myWidgetDirective', ['$delegate', …])` call gets typed
+   * — the `$delegate` of such a decorator is the `Directive[]` array
+   * registered under this name (directives accumulate per name, which
+   * is why the registry value is an array rather than a single object).
+   *
+   * @example
+   * ```ts
+   * createModule('app', ['ng']).directive('myWidget', () => ({
+   *   restrict: 'E',
+   *   link: (_scope, el) => {
+   *     el.textContent = 'hello';
+   *   },
+   * }));
+   * // injector.get('myWidgetDirective') is typed as Directive[].
+   * ```
+   */
+  directive<const K extends string>(
+    name: K,
+    factory: DirectiveFactory,
+  ): TypedModule<Registry & { [P in K as `${P}Directive`]: Directive[] }, ConfigRegistry, Name, Requires>;
+
+  /**
+   * Register several directives at once from a `{ name: factory }` map.
+   * Sugar for a single config block that forwards the whole map to
+   * `$compileProvider.directive(map)`.
+   *
+   * **Deliberate limitation: the bulk-map form does NOT widen the
+   * registry.** Unlike the single-name form, this overload returns the
+   * module type unchanged — no `${K}Directive` keys are added. Building
+   * a mapped type that widens over an arbitrary object's keys is a
+   * high type-system cost for low value; users who want typed widening
+   * (and therefore a typed `decorator('xDirective', …)`) should use the
+   * single-name form, which is the common case.
+   *
+   * @example
+   * ```ts
+   * createModule('app', ['ng']).directive({
+   *   widgetA: () => ({ restrict: 'E' }),
+   *   widgetB: () => ({ restrict: 'A' }),
+   * });
+   * // Both directives are registered; the module type is unchanged.
+   * ```
+   */
+  directive(map: Record<string, DirectiveFactory>): TypedModule<Registry, ConfigRegistry, Name, Requires>;
+
+  /**
+   * Untyped fallback for `directive` — matches the wide signature on the
+   * `Module` class. Used by dynamic call sites where `nameOrMap` is not
+   * a string literal. Leaves the registry unchanged.
+   */
+  directive(
+    nameOrMap: string | Record<string, DirectiveFactory>,
+    factory?: DirectiveFactory,
+  ): TypedModule<Registry, ConfigRegistry, Name, Requires>;
+
+  /**
+   * Register a single controller under `name`. Sugar for a config block
+   * that forwards to `$controllerProvider.register(name, fn)` — the DSL
+   * owns no state and adds no validation; last-wins on duplicate names
+   * and error messages are all inherited from the provider.
+   *
+   * **No registry widening.** This overload returns the module type
+   * unchanged — no key is added to `Registry`. Controllers live in
+   * `$ControllerProvider`'s private `$$registry` Map and are never
+   * injector-resolvable services (unlike filters, which route through
+   * `$provide.factory` as `<name>Filter`, and directives, which register
+   * a `<name>Directive` provider). There is simply no injector key to
+   * widen the typed `Registry` with — this is an intrinsic fact about
+   * how `$controllerProvider` works, not a design choice.
+   *
+   * @example
+   * ```ts
+   * createModule('app', ['ng']).controller('HomeCtrl', [
+   *   '$scope',
+   *   ($scope) => {
+   *     ($scope as { title: string }).title = 'Home';
+   *   },
+   * ]);
+   * // The module type is unchanged — no `HomeCtrl` key on the registry.
+   * ```
+   */
+  controller(name: string, fn: ControllerInvokable): TypedModule<Registry, ConfigRegistry, Name, Requires>;
+
+  /**
+   * Register several controllers at once from a `{ name: fn }` map.
+   * Sugar for a single config block that forwards the whole map to
+   * `$controllerProvider.register(map)`.
+   *
+   * **No registry widening** — for the same reason the single-name form
+   * does not widen (see above): controllers are never injector-resolvable
+   * services, so there is no key to add to `Registry`. This overload
+   * returns the module type unchanged.
+   *
+   * @example
+   * ```ts
+   * createModule('app', ['ng']).controller({
+   *   HomeCtrl: ['$scope', ($scope) => { void $scope; }],
+   *   AboutCtrl: ['$scope', ($scope) => { void $scope; }],
+   * });
+   * // Both controllers are registered; the module type is unchanged.
+   * ```
+   */
+  controller(map: Record<string, ControllerInvokable>): TypedModule<Registry, ConfigRegistry, Name, Requires>;
+
+  /**
+   * Untyped fallback for `controller` — matches the wide signature on the
+   * `Module` class. Used by dynamic call sites where `nameOrMap` is not
+   * a string literal. Leaves the registry unchanged.
+   */
+  controller(
+    nameOrMap: string | Record<string, ControllerInvokable>,
+    fn?: ControllerInvokable,
+  ): TypedModule<Registry, ConfigRegistry, Name, Requires>;
 }
 
 /**

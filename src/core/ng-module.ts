@@ -18,6 +18,8 @@
 import { $CompileProvider } from '@compiler/compile-provider';
 import type { CompileService } from '@compiler/directive-types';
 import { ngTranscludeDirective } from '@compiler/ng-transclude';
+import { $ControllerProvider } from '@controller/controller-provider';
+import type { ControllerService } from '@controller/controller-types';
 import { createModule } from '@di/module';
 import { consoleErrorExceptionHandler, type ExceptionHandler } from '@exception-handler/index';
 import { lowercaseFilterFactory, uppercaseFilterFactory } from '@filter/case';
@@ -51,6 +53,7 @@ declare module '@di/di-types' {
         $sce: SceService;
         $filter: FilterService;
         $locale: LocaleService;
+        $controller: ControllerService;
         $compile: CompileService;
         $templateCache: TemplateCacheService;
         $templateRequest: TemplateRequestFn;
@@ -69,6 +72,7 @@ declare module '@di/di-types' {
         $sceDelegateProvider: $SceDelegateProvider;
         $sceProvider: $SceProvider;
         $filterProvider: $FilterProvider;
+        $controllerProvider: $ControllerProvider;
         $compileProvider: $CompileProvider;
         $templateCacheProvider: $TemplateCacheProvider;
         $templateRequestProvider: $TemplateRequestProvider;
@@ -89,6 +93,13 @@ export const ngModule = createModule('ng', [])
   .provider('$sce', $SceProvider)
   .provider('$interpolate', $InterpolateProvider)
   .provider<'$filter', FilterService, $FilterProvider>('$filter', ['$provide', $FilterProvider])
+  // `$controller` (spec 020) — registered BEFORE `$compile` because the
+  // Slice 4 spec wires the compiler's per-element controller seam against
+  // a resolved `$controller` injected into `$CompileProvider.$get`. Order
+  // among providers is otherwise informational (DI resolves on dependency
+  // graph, not registration order), but keeping the source-order parity
+  // with the runtime dep graph makes the intent obvious to readers.
+  .provider<'$controller', ControllerService, $ControllerProvider>('$controller', ['$provide', $ControllerProvider])
   .provider<'$compile', CompileService, $CompileProvider>('$compile', ['$provide', $CompileProvider])
   // `$locale` carries the en-US default. Apps swap the entire object
   // via `module.factory('$locale', () => myLocale)` — the `currency`,

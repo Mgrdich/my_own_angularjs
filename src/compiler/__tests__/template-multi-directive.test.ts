@@ -23,6 +23,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { $CompileProvider } from '@compiler/compile-provider';
 import { MultipleTemplateDirectivesError, MultipleTranscludeDirectivesError } from '@compiler/compile-error';
+import { $ControllerProvider } from '@controller/controller-provider';
 import type { CompileService, DirectiveFactory, DirectiveFactoryReturn, LinkFn } from '@compiler/directive-types';
 import { Scope } from '@core/index';
 import { createInjector } from '@di/injector';
@@ -56,6 +57,7 @@ function bootstrap(register: ($cp: $CompileProvider) => void): Harness {
     .provider('$sce', $SceProvider)
     .provider('$interpolate', $InterpolateProvider)
     .provider('$filter', ['$provide', $FilterProvider])
+    .provider('$controller', ['$provide', $ControllerProvider])
     .factory('$templateCache', [() => createTemplateCache()])
     .factory('$templateRequest', [
       '$templateCache',

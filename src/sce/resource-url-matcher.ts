@@ -38,7 +38,7 @@ export type CompiledMatcher = { readonly kind: 'self' } | { readonly kind: 'rege
 const REGEX_METACHARACTERS = new Set<string>(['\\', '^', '$', '.', '|', '?', '(', ')', '[', ']', '{', '}', '+', '/']);
 
 /** Truncate a description of an invalid entry for inclusion in an error. */
-function describeInvalidEntry(entry: unknown): string {
+function describeInvalidEntry(entry: unknown) {
   const typeofEntry = typeof entry;
   let stringified: string;
   try {
@@ -59,7 +59,7 @@ function describeInvalidEntry(entry: unknown): string {
  * anchored with `^…$` so a pattern matches only if it consumes the entire
  * URL string.
  */
-function compileStringPattern(pattern: string): RegExp {
+function compileStringPattern(pattern: string) {
   let out = '^';
   let i = 0;
   while (i < pattern.length) {
@@ -127,7 +127,7 @@ export function compileMatchers(list: readonly ResourceUrlListEntry[]): Compiled
  * document's `baseURI` when a `document` exists, else `undefined` so the
  * caller can treat `'self'` matching as inert.
  */
-function resolveBaseUrl(baseUrl: string | undefined): string | undefined {
+function resolveBaseUrl(baseUrl: string | undefined) {
   if (baseUrl !== undefined) return baseUrl;
   if (typeof document !== 'undefined') return document.baseURI;
   return undefined;

@@ -32,6 +32,7 @@
 
 import { $CompileProvider } from '@compiler/compile-provider';
 import type { CompileService } from '@compiler/directive-types';
+import { $ControllerProvider } from '@controller/controller-provider';
 import { createInjector } from '@di/injector';
 import { createModule, resetRegistry } from '@di/module';
 import { $FilterProvider } from '@filter/filter-provider';
@@ -74,6 +75,12 @@ export function bootstrapNgModule(options?: BootstrapNgModuleOptions): void {
     .provider('$sce', $SceProvider)
     .provider('$interpolate', $InterpolateProvider)
     .provider('$filter', ['$provide', $FilterProvider])
+    // `$controller` (spec 020) — registered BEFORE `$compile` so the
+    // compiler's per-element controller seam (Slice 4) can resolve
+    // `'$controller'` from `$CompileProvider.$get`'s deps array. The
+    // production `ngModule` registers the two in the same order; the
+    // compiler test bootstrap mirrors that here.
+    .provider('$controller', ['$provide', $ControllerProvider])
     .factory('$templateCache', [() => createTemplateCache()])
     .factory('$templateRequest', [
       '$templateCache',
