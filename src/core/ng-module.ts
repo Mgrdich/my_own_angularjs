@@ -17,6 +17,16 @@
 
 import { $CompileProvider } from '@compiler/compile-provider';
 import type { CompileService } from '@compiler/directive-types';
+import {
+  ngCheckedDirective,
+  ngDisabledDirective,
+  ngHrefDirective,
+  ngOpenDirective,
+  ngReadonlyDirective,
+  ngSelectedDirective,
+  ngSrcDirective,
+  ngSrcsetDirective,
+} from '@compiler/ng-attribute-aliases';
 import { ngBindDirective } from '@compiler/ng-bind';
 import { ngBindHtmlDirective } from '@compiler/ng-bind-html';
 import { ngBindTemplateDirective } from '@compiler/ng-bind-template';
@@ -241,5 +251,31 @@ export const ngModule = createModule('ng', [])
       // same property. Writes via `setProperty` / `removeProperty`,
       // never `cssText`. See `src/compiler/ng-style.ts`.
       $compileProvider.directive('ngStyle', ngStyleDirective);
+      // Spec 025 Slice 1 — interpolation-safe URL/value attribute
+      // aliases (`ngHref`, `ngSrc`, `ngSrcset`). Each watches the
+      // interpolated value of the `ng`-prefixed attribute via
+      // `attrs.$observe` and writes through to the real DOM
+      // attribute via `attrs.$set`, so the browser never sees the
+      // literal `{{ … }}` mustache string (avoids the pre-compile
+      // navigation / network-fetch bug). Priority 99 — load-bearing
+      // for AngularJS-1.x parity. See
+      // `src/compiler/ng-attribute-aliases.ts`.
+      $compileProvider.directive('ngHref', ngHrefDirective);
+      $compileProvider.directive('ngSrc', ngSrcDirective);
+      $compileProvider.directive('ngSrcset', ngSrcsetDirective);
+      // Spec 025 Slice 2 — boolean attribute alias directives
+      // (`ngDisabled`, `ngChecked`, `ngReadonly`, `ngSelected`,
+      // `ngOpen`). Each watches a scope expression (NOT an
+      // interpolation) via `scope.$watch` and adds/removes the real
+      // boolean DOM attribute through `attrs.$set` — truthy →
+      // `setAttribute(name, '')` (bare-presence form, equivalent to
+      // `<button disabled>` per HTML5), falsy → `removeAttribute(name)`.
+      // Priority 100 — one notch above the URL aliases at 99, matching
+      // AngularJS-1.x parity. See `src/compiler/ng-attribute-aliases.ts`.
+      $compileProvider.directive('ngChecked', ngCheckedDirective);
+      $compileProvider.directive('ngDisabled', ngDisabledDirective);
+      $compileProvider.directive('ngOpen', ngOpenDirective);
+      $compileProvider.directive('ngReadonly', ngReadonlyDirective);
+      $compileProvider.directive('ngSelected', ngSelectedDirective);
     },
   ]);
