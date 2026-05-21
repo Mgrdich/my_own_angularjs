@@ -93,7 +93,7 @@ _The layer that connects the runtime to templates and the DOM._
     - [ ] **Structural / flow control:** `ng-if`, `ng-repeat`, `ng-switch` (plus `ng-switch-when`, `ng-switch-default`), `ng-include`, `ng-transclude`, `ng-init`, `ng-controller`. _(separate spec — substantial; `ng-repeat` alone is non-trivial. `ng-transclude` already shipped in spec 018.)_
     - [x] **Visibility:** `ng-show`, `ng-hide`, `ng-cloak`. _(spec 023 — shipped; bundled with Binding below.)_
     - [x] **Binding:** `ng-bind`, `ng-bind-template`, `ng-bind-html` (delegates to `$sce.getTrustedHtml`; falls back to `$sanitize` when `ngSanitize` is loaded), `ng-non-bindable`. _(spec 023 — shipped; bundled with Visibility above.)_
-    - [ ] **Class / style:** `ng-class`, `ng-class-even`, `ng-class-odd`, `ng-style`. _(separate spec.)_
+    - [x] **Class / style:** `ng-class`, `ng-class-even`, `ng-class-odd`, `ng-style`. _(spec 024 — shipped.)_
     - [ ] **Attribute helpers (interpolation-safe booleans and URLs):** `ng-href`, `ng-src`, `ng-srcset`, `ng-disabled`, `ng-checked`, `ng-readonly`, `ng-selected`, `ng-open`. _(separate spec.)_
     - [ ] **Mouse events:** `ng-click`, `ng-dblclick`, `ng-mousedown`, `ng-mouseup`, `ng-mouseover`, `ng-mouseout`, `ng-mousemove`, `ng-mouseenter`, `ng-mouseleave`. _(separate spec — may bundle with Keyboard + Clipboard/focus/form-lifecycle below.)_
     - [ ] **Keyboard events:** `ng-keydown`, `ng-keyup`, `ng-keypress`. _(separate spec — see Mouse events.)_

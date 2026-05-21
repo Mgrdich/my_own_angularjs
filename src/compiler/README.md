@@ -848,6 +848,153 @@ allow-list swap implementations via `module.decorator('$sanitize', …)`
 — the swap is invisible to the `ng-bind-html` directive, which
 keeps consuming the public `$sce.getTrustedHtml` surface.
 
+## Class & Style built-ins (spec 024)
+
+Spec 024 ships the second cohesive batch of `ngModule`-registered
+built-in directives — the class and style directives every styled
+AngularJS app reaches for. All four are registered on the `'ng'`
+module's existing `$compileProvider` config block (the same one
+that holds the spec 023 directives); apps that declare `'ng'` in
+their dependency chain get them for free. Each is also a plain
+`module.directive('<name>', …)` away from being overridden or
+decorated by an app — these are built-ins, not hardcoded behavior.
+
+Like the spec 023 directives, the four ship as DI registrations
+only — there are NO new exports from `@compiler/index`. The
+factory functions are file-local exports (matches the spec 018
+`ngTransclude` precedent), reachable exclusively via
+`injector.get('<name>Directive')`.
+
+### `ng-class`
+
+Dynamic CSS-class binding. `<div ng-class="expr">` evaluates the
+expression and applies the resulting class set to the element via
+`element.classList.add` / `.remove`. Three expression forms are
+supported, normalized by the shared module-private
+`flattenClassExpression` helper:
+
+- **String** — `ng-class="'highlighted'"` adds the class
+  `highlighted`. Multiple whitespace-separated names
+  (`'class1 class2'`) add each as a separate class.
+- **Array** — `ng-class="['selected', 'primary']"` adds each
+  element. Array elements that are themselves plain objects follow
+  the object form; string elements follow the string form. Other
+  element types are silently ignored.
+- **Object** — `ng-class="{ active: cond, error: hasFault }"` adds
+  each key whose value is truthy and removes each key whose value
+  is falsy.
+
+A single `scope.$watchCollection(attrs.ngClass, …)` per element
+drives the diff cycle. `$watchCollection` provides one-level-deep
+collection diffing so `arr.push('new-class')` mutations and
+`obj.active = false` flips are caught without the consumer
+re-assigning the whole value. Canonical use: toggle conditional
+styling (selected state, error state, …) without writing
+imperative DOM code.
+
+### `ng-class-even`
+
+Index-gated class binding. `<li ng-class-even="expr">` evaluates
+the expression using the same three forms as `ng-class`, but only
+APPLIES the resulting classes when the scope's `$even` property is
+truthy. The canonical pairing is with `ng-repeat` (which sets
+`$even` / `$odd` on each iteration's child scope), but `ng-class-even`
+works against any scope where the developer sets `$even` directly —
+which is how spec 024 tests it today, before `ng-repeat` lands.
+Outside `ng-repeat` (no `$even` on the scope) the directive
+contributes no classes and never throws.
+
+### `ng-class-odd`
+
+Mirror-inverse of `ng-class-even`. `<li ng-class-odd="expr">` gates
+on the scope's `$odd` property. The two directives combine on the
+same element to produce zebra-stripe styling
+(`<li ng-class-even="'row-even'" ng-class-odd="'row-odd'">`); each
+iteration carries exactly one of the two classes.
+
+### `ng-style`
+
+Dynamic inline-style binding. `<div ng-style="{ color: 'red',
+fontSize: '14px' }">` evaluates the expression and applies the
+resulting `{ cssProperty: value }` pairs as inline styles via per-
+property writes (NOT `cssText`). Only the object form is supported
+— other shapes (string, array, primitive, `null`, `undefined`)
+resolve to the empty property set, which clears any directive-applied
+styles and writes nothing new. A single `scope.$watchCollection`
+per element drives the diff cycle.
+
+### Classes-preserved guarantee
+
+`ng-class` tracks `appliedClasses: Set<string>` per directive
+instance — the set of classes THIS directive has added on the most
+recent digest. The diff cycle has two halves:
+
+1. **Removal half:** iterate `appliedClasses`; for each class no
+   longer in the new target set, call `element.classList.remove(cls)`.
+2. **Addition half:** iterate the new target set; for each class
+   not in `appliedClasses`, call `element.classList.add(cls)`.
+   Classes already in both are untouched.
+
+The key invariant: a class enters `appliedClasses` only when WE
+called `add()`. Consumer-shipped classes — `<div class="card"
+ng-class="…">`, classes added by `ng-show` / `ng-hide`
+(`classList.toggle('ng-hide', …)`), classes added by app code
+through `attrs.$set('class', …)` — are NEVER in our tracking set,
+so the removal half can never touch them. `ng-class` plays nicely
+with every other directive on the same element.
+
+`ng-style` applies the mirror mechanism via `appliedProps:
+Set<string>` — only properties THIS directive has written are
+eligible for removal. A consumer-shipped `<div style="margin: 5px"
+ng-style="…">` keeps the `margin` across digests unless `ng-style`
+later names `margin` in its expression — at which point the
+directive overwrites it and the property becomes directive-owned
+(the AngularJS-canonical "ng-style wins" behavior).
+
+### `ng-style` property-name convention
+
+`ng-style` dispatches on hyphen-presence: kebab-case keys
+(`'background-color'`) go through CSSOM's `setProperty` /
+`removeProperty`; camelCase keys (`'backgroundColor'`) go through
+direct IDL assignment (`element.style[name] = value`). Both forms
+work. Neither path uses `cssText`, so consumer-shipped inline
+styles (set via the `style="…"` attribute) are preserved unless
+`ng-style`'s expression names the same property — in which case
+`ng-style` wins (the "ownership transfer" described above).
+
+The dispatch is necessary because CSSOM's `setProperty` is
+specified to accept ONLY kebab-case property names per W3C;
+`setProperty('fontSize', '14px')` is a spec-defined no-op (and
+jsdom enforces this strictly). The IDL surface is the opposite —
+`style.fontSize = '14px'` works, `style['font-size'] = '14px'` is
+undefined behavior. Together the two surfaces cover every property
+name a consumer can spell. The hyphen-presence test
+(`name.includes('-')`) is a complete classifier: every CSS
+property is either kebab-case (contains a hyphen) or camelCase
+(contains no hyphen).
+
+### Animation-deferred note
+
+Class and style transitions in spec 024 are synchronous.
+`$animate.addClass` / `$animate.removeClass` hooks integrate with
+`ng-class` (and `$animate.setStyles` with `ng-style`) in Phase 4
+(Animations roadmap item). The directive link functions do NOT
+contain animation hooks today; the parity tests pin the
+synchronous behavior and mark the animated variants as
+`it.skip(…)` citing Phase 4.
+
+### Spec 023 cross-reference
+
+`ng-class` / `ng-class-even` / `ng-class-odd` and spec 023's
+`ng-show` / `ng-hide` share the same underlying `classList` DOM
+surface — `add` / `remove` for spec 024, `toggle` for spec 023.
+Both batches preserve unrelated classes on the element across
+every digest (the same single-class-name discipline that lets
+`ng-show` and `ng-class` co-exist without stepping on each other).
+The `ng-hide` class added by `ng-show` / `ng-hide` is never in any
+`ng-class` instance's `appliedClasses`, so flipping `ng-class`
+will not strip `ng-hide`, and vice versa.
+
 ### Terminal directives
 
 Spec 017 implemented `terminal: true` as a same-element directive

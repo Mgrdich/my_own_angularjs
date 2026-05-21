@@ -20,10 +20,12 @@ import type { CompileService } from '@compiler/directive-types';
 import { ngBindDirective } from '@compiler/ng-bind';
 import { ngBindHtmlDirective } from '@compiler/ng-bind-html';
 import { ngBindTemplateDirective } from '@compiler/ng-bind-template';
+import { ngClassDirective, ngClassEvenDirective, ngClassOddDirective } from '@compiler/ng-class';
 import { ngCloakDirective } from '@compiler/ng-cloak';
 import { ngHideDirective } from '@compiler/ng-hide';
 import { ngNonBindableDirective } from '@compiler/ng-non-bindable';
 import { ngShowDirective } from '@compiler/ng-show';
+import { ngStyleDirective } from '@compiler/ng-style';
 import { ngTranscludeDirective } from '@compiler/ng-transclude';
 import { $ControllerProvider } from '@controller/controller-provider';
 import type { ControllerService } from '@controller/controller-types';
@@ -208,5 +210,36 @@ export const ngModule = createModule('ng', [])
       $compileProvider.directive('ngShow', ngShowDirective);
       $compileProvider.directive('ngHide', ngHideDirective);
       $compileProvider.directive('ngNonBindable', ngNonBindableDirective);
+      // Spec 024 Slice 1 — `ngClass` dynamically toggles CSS classes
+      // on an element from a scope expression. Three expression forms
+      // (string / array / object) are normalized via the shared
+      // `flattenClassExpression` helper; a `$watchCollection` listener
+      // diffs the current set against the previous and only ever
+      // removes classes the directive itself added (the
+      // classes-preserved guarantee). See `src/compiler/ng-class.ts`.
+      $compileProvider.directive('ngClass', ngClassDirective);
+      // Spec 024 Slice 2 — `ngClassEven` and `ngClassOdd` are
+      // index-gated variants of `ngClass` driven by `scope.$even` /
+      // `scope.$odd` (canonically set by `ng-repeat`, manually-set
+      // today). They share the same `installClassWatcher` engine as
+      // `ngClass`; the engine takes a gate predicate plus the gate's
+      // scope-property name so a secondary `scope.$watch('$even', …)`
+      // re-fires the diff when the gate flips with the expression
+      // itself unchanged. Each instance maintains its own
+      // `appliedClasses` set, so combining `ngClass` /
+      // `ngClassEven` / `ngClassOdd` on the same element works as
+      // expected — the rendered class set is the union of each
+      // directive's contribution. See `src/compiler/ng-class.ts`.
+      $compileProvider.directive('ngClassEven', ngClassEvenDirective);
+      $compileProvider.directive('ngClassOdd', ngClassOddDirective);
+      // Spec 024 Slice 3 — `ngStyle` dynamically sets inline CSS
+      // styles on an element from a scope expression. Object-only
+      // expression form (`{ cssProperty: value }`); a per-instance
+      // `appliedProps` set drives the diff cycle so consumer-shipped
+      // inline styles (e.g. `<div style="margin: 5px">`) are
+      // preserved unless the directive's expression later names the
+      // same property. Writes via `setProperty` / `removeProperty`,
+      // never `cssText`. See `src/compiler/ng-style.ts`.
+      $compileProvider.directive('ngStyle', ngStyleDirective);
     },
   ]);
