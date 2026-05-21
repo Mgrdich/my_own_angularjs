@@ -17,6 +17,13 @@
 
 import { $CompileProvider } from '@compiler/compile-provider';
 import type { CompileService } from '@compiler/directive-types';
+import { ngBindDirective } from '@compiler/ng-bind';
+import { ngBindHtmlDirective } from '@compiler/ng-bind-html';
+import { ngBindTemplateDirective } from '@compiler/ng-bind-template';
+import { ngCloakDirective } from '@compiler/ng-cloak';
+import { ngHideDirective } from '@compiler/ng-hide';
+import { ngNonBindableDirective } from '@compiler/ng-non-bindable';
+import { ngShowDirective } from '@compiler/ng-show';
 import { ngTranscludeDirective } from '@compiler/ng-transclude';
 import { $ControllerProvider } from '@controller/controller-provider';
 import type { ControllerService } from '@controller/controller-types';
@@ -147,9 +154,59 @@ export const ngModule = createModule('ng', [])
   // slot-marker directive consumed by transcluding hosts to render
   // captured content (default / named / fallback paths). See
   // `src/compiler/ng-transclude.ts` for the implementation.
+  //
+  // Spec 023 Slice 2 extends this block with `ngCloak` — the
+  // compile-only directive that removes the `ng-cloak` attribute /
+  // class once the compiler reaches the element so the
+  // consumer-shipped `[ng-cloak], .ng-cloak { display: none !important; }`
+  // CSS rule stops matching. See `src/compiler/ng-cloak.ts`.
+  //
+  // Spec 023 Slice 3 extends this block with `ngBind` and
+  // `ngBindTemplate` — the text-binding directives that set an
+  // element's `textContent` from a single expression
+  // (`<span ng-bind="user.name">`) or a multi-expression template
+  // string (`<span ng-bind-template="Hello {{name}}, today is {{day}}">`).
+  // Both escape HTML automatically via `textContent` — the
+  // security-relevant difference from spec 023 Slice 5's `ngBindHtml`.
+  // See `src/compiler/ng-bind.ts` and `src/compiler/ng-bind-template.ts`.
+  //
+  // Spec 023 Slice 4 extends this block with `ngShow` and `ngHide` —
+  // the visibility-toggle directives that add or remove the
+  // `ng-hide` CSS class on an element based on the truthiness of an
+  // expression. Both share the consumer-shipped
+  // `.ng-hide { display: none !important; }` CSS rule; toggles are
+  // synchronous in this spec (animations are deferred to Phase 4).
+  // See `src/compiler/ng-show.ts` and `src/compiler/ng-hide.ts`.
+  //
+  // Spec 023 Slice 5 extends this block with `ngBindHtml` — the
+  // trusted-HTML binding directive that evaluates an expression,
+  // routes the value through `$sce.getTrustedHtml(...)` (consuming
+  // the spec 013 `$sce` → `$sanitize` integration transparently when
+  // `ngSanitize` is loaded), and writes the result to the element's
+  // `innerHTML`. This is the security-relevant alternative to
+  // `ngBind` — use it only when the value genuinely carries markup
+  // verified safe by the SCE pipeline. See `src/compiler/ng-bind-html.ts`.
+  //
+  // Spec 023 Slice 6 extends this block with `ngNonBindable` — the
+  // subtree-opt-out directive that signals the compiler walker to
+  // skip descent into the element's children (literal `{{ }}` and
+  // directive-looking child markup stay verbatim). The directive is
+  // pure metadata (`restrict: 'AC'`, `terminal: true`, `priority: 1000`,
+  // no compile / link); the heavy lifting lives in the Slice 1 walker
+  // hook in `src/compiler/compile.ts`, narrowed to fire only when a
+  // matched directive's `name === 'ngNonBindable'`. See
+  // `src/compiler/ng-non-bindable.ts` for the file-level rationale
+  // (including the narrowing audit note).
   .config([
     '$compileProvider',
     ($compileProvider: $CompileProvider) => {
       $compileProvider.directive('ngTransclude', ngTranscludeDirective);
+      $compileProvider.directive('ngCloak', ngCloakDirective);
+      $compileProvider.directive('ngBind', ngBindDirective);
+      $compileProvider.directive('ngBindHtml', ngBindHtmlDirective);
+      $compileProvider.directive('ngBindTemplate', ngBindTemplateDirective);
+      $compileProvider.directive('ngShow', ngShowDirective);
+      $compileProvider.directive('ngHide', ngHideDirective);
+      $compileProvider.directive('ngNonBindable', ngNonBindableDirective);
     },
   ]);

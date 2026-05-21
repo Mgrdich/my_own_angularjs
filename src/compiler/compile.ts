@@ -1012,6 +1012,22 @@ export function createCompile(options: CompileOptions): CompileService {
       }
     }
 
+    // Spec 023 §2.6 — `ng-non-bindable` halts child descent. The
+    // AngularJS-canonical semantic broadens `terminal: true` to ALSO
+    // stop the walker from recursing into the matched element's
+    // children. Spec 017's same-element terminal cutoff (in
+    // `directive-collector.ts`) is preserved. The audit of the spec
+    // 002–022 test suite found one test (`terminal.test.ts` —
+    // "terminal does NOT affect descendants") that pinned the OLD
+    // narrower semantic with a custom `terminal: true` directive plus
+    // a child directive that asserted child compilation runs. Per the
+    // spec 023 risk-mitigation guidance (tech-considerations §3), we
+    // narrow the broadened semantic to the `ngNonBindable` name only —
+    // every existing `terminal: true` consumer keeps the spec-017
+    // same-element-only behavior. Slice 6 ships `ng-non-bindable` and
+    // is the sole consumer of this opt-out path.
+    const hasNonBindableTerminal = effectiveDirectives.some((d) => d.terminal && d.name === 'ngNonBindable');
+
     // Snapshot children AFTER the compile loop runs. For transcluding
     // hosts the capture pass above already drained children, so the
     // snapshot is empty and `childLinker` becomes the noop linker —
@@ -1023,7 +1039,7 @@ export function createCompile(options: CompileOptions): CompileService {
     // template and are compiled inside the drain.
     const masterChildren: Node[] = [];
     let childLinker: NodeLinker = noopLinker;
-    if (hasChildren && !isAsyncTemplateHost) {
+    if (hasChildren && !isAsyncTemplateHost && !hasNonBindableTerminal) {
       const element = node as Element;
       for (let i = 0; i < element.childNodes.length; i++) {
         const child = element.childNodes.item(i);

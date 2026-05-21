@@ -715,6 +715,156 @@ For the full surface (deferred upstream cases, parity with
 `componentSpec.js`, etc.) see
 `src/compiler/__tests__/spec022-parity.test.ts`.
 
+## Visibility & Binding built-ins (spec 023)
+
+Spec 023 ships the first cohesive batch of `ngModule`-registered
+built-in directives — the visibility and binding directives every
+non-trivial AngularJS app reaches for. All seven are registered on
+the `'ng'` module's existing `$compileProvider` config block (the same
+one spec 018 introduced for `ngTransclude`); apps that declare
+`'ng'` in their dependency chain get them for free. Each is also a
+plain `module.directive('<name>', …)` away from being overridden or
+decorated by an app — these are built-ins, not hardcoded behavior.
+
+The directives ship as DI registrations only — there are NO new
+exports from `@compiler/index`. The factory functions are file-local
+exports (matches the spec 018 `ngTransclude` precedent), reachable
+exclusively via `injector.get('<name>Directive')`.
+
+### `ng-cloak`
+
+Prevents the brief flash of un-compiled `{{ … }}` markup before
+`$compile` reaches the element. A pure compile-time cleanup
+directive: it removes both the `ng-cloak` attribute and the
+`ng-cloak` class once the compiler touches the element, then
+disappears. No watchers installed, zero per-digest cost.
+`restrict: 'AC'` so consumers may write `<div ng-cloak>` (attribute)
+or `<div class="ng-cloak">` (class) interchangeably. Canonical use:
+wrap the page root or any `{{ … }}`-heavy region whose unrendered
+form must not be visible to users.
+
+### `ng-bind`
+
+Single-expression text binding. `<span ng-bind="user.name">` sets
+the element's `textContent` from the current value of the expression
+and updates on every digest when the value changes. Coerces via
+`String(value)`; `null` / `undefined` render as the empty string.
+The `textContent` setter escapes HTML special characters
+automatically — `<` and `>` appear LITERALLY in the rendered DOM,
+which is the security-relevant difference from `ng-bind-html`.
+Canonical use: bind a single scope value as text without writing an
+inline `{{ }}` mustache that might briefly be visible.
+
+### `ng-bind-template`
+
+Multi-expression text binding via `$interpolate`.
+`<span ng-bind-template="Hello {{first}} {{last}}!">` interpolates
+the template string once at link time, then watches the resulting
+`InterpolateFn` so the rendered `textContent` updates whenever any
+referenced expression changes. Like `ng-bind`, the listener writes
+to `textContent` so HTML characters are escaped automatically.
+Canonical use: bind a multi-expression message as text without
+writing inline mustaches.
+
+### `ng-bind-html`
+
+Trusted HTML binding. `<div ng-bind-html="snippet">` evaluates the
+expression, routes the value through `$sce.getTrustedHtml(…)` (the
+existing spec 012 SCE pipeline), and assigns the result to the
+element's `innerHTML`. A `$sce.trustAsHtml(…)` wrapper short-circuits
+sanitization; a plain string routes through the spec 013 `$sce` →
+`$sanitize` fallback (when `ngSanitize` is loaded) or throws inside
+the watch listener (when it isn't). A throw is caught by the
+digest's existing `'watchListener'` path and `innerHTML` degrades
+to empty — the digest continues. Canonical use: render markup
+verified safe by the SCE pipeline; never use for plain text (use
+`ng-bind` instead).
+
+### `ng-show`
+
+Visibility toggle on truthiness. `<div ng-show="visible">` adds the
+`ng-hide` CSS class when the expression is FALSY and removes it
+when TRUTHY. A single `scope.$watch(expr, …)` per element drives
+the toggle via `classList.toggle('ng-hide', !value)`. Other classes
+on the element are preserved across digests — `classList.toggle`
+only touches the named class. Canonical use: hide a panel,
+modal, or block conditional on application state.
+
+### `ng-hide`
+
+Mirror-inverse of `ng-show`. `<div ng-hide="hidden">` adds the
+`ng-hide` class when the expression is TRUTHY and removes it when
+FALSY. Both directives share the same `ng-hide` class name — the
+canonical AngularJS idiom. Canonical use: same as `ng-show` but
+the predicate reads more naturally as "is this thing hidden?"
+(e.g. `<div ng-hide="!user.loggedIn">` vs `<div ng-show="user.loggedIn">`).
+
+### `ng-non-bindable`
+
+Opts a subtree out of compilation. `<pre ng-non-bindable>{{ literal }}</pre>`
+preserves literal `{{ }}` mustaches in child text nodes and prevents
+the walker from descending into the element's children at all —
+no `$interpolate`, no directive matching on descendants. The
+directive itself is pure metadata (`restrict: 'AC'`, `terminal: true`,
+`priority: 1000`, no compile / link function); the heavy lifting
+lives in the compiler walker hook (see "Terminal directives" below).
+The host element's OWN attributes (`class="foo"`, …) survive
+intact — only the children are pruned. Canonical use: documentation
+pages, code samples, developer-tools panels that display
+AngularJS-style markup as literal characters.
+
+### Consumer-shipped CSS
+
+`ng-show`, `ng-hide`, and `ng-cloak` rely on a small CSS block that
+the framework documents but does NOT auto-inject (auto-injection
+would violate the no-runtime-DOM-injection invariant). Apps drop
+this verbatim into their stylesheet:
+
+```css
+.ng-hide { display: none !important; }
+[ng-cloak], .ng-cloak { display: none !important; }
+```
+
+The `.ng-hide` rule is shared by `ng-show` and `ng-hide`. The
+`[ng-cloak], .ng-cloak` rule hides un-compiled regions before
+`$compile` strips the attribute / class.
+
+### Animation-deferred note
+
+Visibility transitions in spec 023 are synchronous. `$animate.enter`
+and `$animate.leave` hooks integrate with `ng-show`, `ng-hide`, and
+`ng-cloak` in Phase 4 (Animations roadmap item). The directive
+link functions do NOT contain animation hooks today; the parity
+tests pin the synchronous behavior and mark the animated variants
+as `it.skip(…)` citing Phase 4.
+
+### Spec 013 cross-reference
+
+`ng-bind-html` consumes the existing `$sce.getTrustedHtml` pipeline
+(spec 012) which transparently routes through `$sanitize` when
+`ngSanitize` is loaded (spec 013 integration). The directive does
+not re-implement sanitization. Apps that need a custom HTML
+allow-list swap implementations via `module.decorator('$sanitize', …)`
+— the swap is invisible to the `ng-bind-html` directive, which
+keeps consuming the public `$sce.getTrustedHtml` surface.
+
+### Terminal directives
+
+Spec 017 implemented `terminal: true` as a same-element directive
+cutoff (lower-priority directives on the same element are skipped).
+Spec 023 Slice 1 broadened this to also halt child-node recursion
+in the compiler walker — but ONLY when the matched directive's
+normalized name is `ngNonBindable`. This narrowing is deliberate:
+the spec 017 test `src/compiler/__tests__/terminal.test.ts:178`
+pinned the original narrower semantic for custom `terminal: true`
+directives, and broadening the no-descent behavior for all consumers
+would be a breaking change. Future structural directives (`ng-if`,
+`ng-repeat`, etc.) will get the no-descent semantic via dedicated
+mechanisms (e.g. `transclude: 'element'`), NOT via the broadened
+`terminal` flag. The walker hook lives in
+`src/compiler/compile.ts` in `compileElementOrComment` — search for
+`hasNonBindableTerminal`.
+
 ## Deferred items
 
 Spec 017 deliberately stops at the compiler core. The following are
@@ -744,10 +894,13 @@ do not produce observable behavior in this spec:
   **`bindToController` + `require` + lifecycle hooks +
   `$compileProvider.component`** shipped with spec 022 — see "Isolate
   scope & components" above.
-- **Built-in directives** — `ng-if`, `ng-repeat`, `ng-class`, `ng-show`,
-  `ng-hide`, `ng-bind`, `ng-bind-html`, `ng-click`, `ng-model`, `ng-href`,
-  `ng-src`, `ng-srcset`, and the rest. None ship with spec 017; user
-  code registers its own directives inline.
+- **Built-in directives — visibility + binding subset shipped in spec
+  023.** `ng-cloak`, `ng-bind`, `ng-bind-template`, `ng-bind-html`,
+  `ng-show`, `ng-hide`, `ng-non-bindable` are now registered on
+  `ngModule` — see "Visibility & Binding built-ins (spec 023)" above.
+  The remaining built-ins (`ng-if`, `ng-repeat`, `ng-class`, `ng-click`,
+  `ng-model`, `ng-href`, `ng-src`, `ng-srcset`, and the rest) ship
+  under their own roadmap items.
 - **Multi-element directives** (`multiElement: true`, `*-start` /
   `*-end` pairs) — deferred; lands alongside `ng-repeat`.
 - **Module DSL `.directive(...)` shorthand** on `createModule` —
@@ -768,6 +921,3 @@ do not produce observable behavior in this spec:
 - **`$rootScope` registration on `ngModule`** — separate roadmap bullet
   under "Application Bootstrap". Spec 017 tests construct
   `Scope.create()` directly.
-- **`ng-bind-html` directive integration** — explicitly deferred under
-  the HTML Sanitization roadmap pending `$compile`. Spec 017 delivers
-  the compiler pieces; the directive itself ships separately.
