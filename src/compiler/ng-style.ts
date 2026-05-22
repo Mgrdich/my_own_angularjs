@@ -112,6 +112,49 @@ import type { DirectiveFactory, DirectiveFactoryReturn, LinkFn } from './directi
 export const NG_STYLE_NAME = 'ngStyle';
 
 /**
+ * Subset of `keyof CSSStyleDeclaration` whose slots hold writable
+ * strings — i.e. the camelCase IDL property names (`color`,
+ * `backgroundColor`, …) excluding methods (`setProperty`,
+ * `getPropertyValue`, …) and the numeric `length` slot.
+ *
+ * @internal
+ */
+type CssIdlKey = {
+  [K in Extract<keyof CSSStyleDeclaration, string>]-?: CSSStyleDeclaration[K] extends string
+    ? K
+    : never;
+}[Extract<keyof CSSStyleDeclaration, string>];
+
+/**
+ * Kebab-case CSS property name — any string containing a hyphen.
+ * Matches the runtime shape `setProperty` / `removeProperty` consume.
+ *
+ * @internal
+ */
+type KebabCssKey = `${string}-${string}`;
+
+/**
+ * Either spelling a consumer may use as an `ng-style` object key. The
+ * single boundary cast lives in `resolveStyleProps`; from there on
+ * `appliedProps`, the diff loop, and `applyStyle` / `clearStyle` are
+ * cast-free.
+ *
+ * @internal
+ */
+type StyleName = CssIdlKey | KebabCssKey;
+
+/**
+ * Type predicate for the kebab branch. Narrows `StyleName` to
+ * `KebabCssKey` (the `setProperty` surface) or — by exhaustion — to
+ * `CssIdlKey` (the IDL-assignment surface) in the else branch.
+ *
+ * @internal
+ */
+function isKebabName(name: StyleName): name is KebabCssKey {
+  return name.includes('-');
+}
+
+/**
  * Compute the set of property names contributed by `value`. Only plain
  * objects (`typeof === 'object'`, non-null, non-array) contribute keys;
  * every other shape — including arrays, primitives, and `null` /
@@ -121,20 +164,26 @@ export const NG_STYLE_NAME = 'ngStyle';
  * value clears any directive-applied styles rather than spraying
  * numeric-name properties onto `element.style`.
  *
+ * The `Object.keys(...) as StyleName[]` cast is the single boundary
+ * narrowing in the file: it expresses the `ng-style` contract that
+ * object keys are CSS property names (camelCase IDL or kebab-case
+ * CSSOM). Downstream consumers (`applyStyle` / `clearStyle` / the diff
+ * loop) operate on `StyleName` end-to-end with no further casts.
+ *
  * @internal
  */
-function resolveStyleProps(value: unknown): Set<string> {
+function resolveStyleProps(value: unknown): Set<StyleName> {
   if (value === null || typeof value !== 'object' || Array.isArray(value)) {
-    return new Set<string>();
+    return new Set<StyleName>();
   }
-  return new Set<string>(Object.keys(value));
+  return new Set<StyleName>(Object.keys(value) as StyleName[]);
 }
 
 /**
  * Write a single inline style. Dispatches on the property-name shape:
- * kebab-case (contains `-`) goes through `setProperty` (the CSSOM
- * surface for hyphenated property names); camelCase goes through
- * direct `style[name] = value` assignment (the DOM IDL surface).
+ * kebab-case goes through `setProperty` (the CSSOM surface for
+ * hyphenated property names); camelCase goes through direct
+ * `style[name] = value` assignment (the DOM IDL surface).
  *
  * The dispatch is necessary because CSSOM's `setProperty` is specified
  * to accept ONLY kebab-case property names — `setProperty('fontSize',
@@ -145,14 +194,11 @@ function resolveStyleProps(value: unknown): Set<string> {
  *
  * @internal
  */
-function applyStyle(style: CSSStyleDeclaration, name: string, value: string): void {
-  if (name.includes('-')) {
+function applyStyle(style: CSSStyleDeclaration, name: StyleName, value: string): void {
+  if (isKebabName(name)) {
     style.setProperty(name, value);
   } else {
-    // Index into `CSSStyleDeclaration` by the camelCase IDL name. The
-    // type's index signature is `string`-keyed, so this is type-safe;
-    // unknown names are simply ignored by the browser.
-    (style as unknown as Record<string, string>)[name] = value;
+    style[name] = value;
   }
 }
 
@@ -163,11 +209,11 @@ function applyStyle(style: CSSStyleDeclaration, name: string, value: string): vo
  *
  * @internal
  */
-function clearStyle(style: CSSStyleDeclaration, name: string): void {
-  if (name.includes('-')) {
+function clearStyle(style: CSSStyleDeclaration, name: StyleName): void {
+  if (isKebabName(name)) {
     style.removeProperty(name);
   } else {
-    (style as unknown as Record<string, string>)[name] = '';
+    style[name] = '';
   }
 }
 
@@ -187,7 +233,7 @@ function ngStyleFactory(): DirectiveFactoryReturn {
     // inline styles (e.g. `<div style="margin: 5px">`) are never in
     // this set and are therefore never removed by the diff cycle —
     // this is the styles-preserved guarantee.
-    let appliedProps: Set<string> = new Set<string>();
+    let appliedProps: Set<StyleName> = new Set<StyleName>();
 
     // `Element` is the directive-link signature — narrow once to
     // `HTMLElement` for the `.style` access. Comment-restricted
