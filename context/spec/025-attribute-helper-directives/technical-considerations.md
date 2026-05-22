@@ -1,7 +1,7 @@
 # Technical Specification: Attribute Helper Directives
 
 - **Functional Specification:** [`./functional-spec.md`](./functional-spec.md)
-- **Status:** Draft
+- **Status:** Completed
 - **Author(s):** Mgrdich
 
 ---

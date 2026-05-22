@@ -1,7 +1,7 @@
 # Functional Specification: Attribute Helper Directives
 
 - **Roadmap Item:** Phase 2 → Directives & DOM Compilation → Built-in Directives (Attribute helpers subset)
-- **Status:** Draft
+- **Status:** Completed
 - **Author:** Mgrdich
 
 ---
@@ -47,31 +47,31 @@ Eight directives ship in this batch, in two patterns:
 
 - **As a template author**, I want to bind a URL or image source to an attribute via the interpolation syntax (`{{ }}`) without the browser acting on the literal un-compiled value, so users never navigate to or fetch the literal `"{{url}}"` string.
   - **Acceptance Criteria:**
-    - [ ] `<a ng-href="{{url}}">` interpolates the value of `ng-href` and sets the real `href` attribute to the resulting string after each digest.
-    - [ ] `<img ng-src="{{url}}">` does the same for the `src` attribute.
-    - [ ] `<img ng-srcset="{{set}}">` does the same for the `srcset` attribute.
-    - [ ] Before the first digest completes, the real `href` / `src` / `srcset` attribute is **absent** — the browser sees no URL to navigate to or fetch.
-    - [ ] When the interpolated value changes (e.g. because a referenced scope expression changes), the real attribute updates on the next digest.
-    - [ ] When the interpolated value resolves to an empty string, the real attribute is **removed** entirely — not set to `""`.
+    - [x] `<a ng-href="{{url}}">` interpolates the value of `ng-href` and sets the real `href` attribute to the resulting string after each digest.
+    - [x] `<img ng-src="{{url}}">` does the same for the `src` attribute.
+    - [x] `<img ng-srcset="{{set}}">` does the same for the `srcset` attribute.
+    - [x] Before the first digest completes, the real `href` / `src` / `srcset` attribute is **absent** — the browser sees no URL to navigate to or fetch.
+    - [x] When the interpolated value changes (e.g. because a referenced scope expression changes), the real attribute updates on the next digest.
+    - [x] When the interpolated value resolves to an empty string, the real attribute is **removed** entirely — not set to `""`.
 
 ### 2.2 `ng-disabled`, `ng-checked`, `ng-readonly`, `ng-selected`, `ng-open` — boolean attribute toggles
 
 - **As a template author**, I want to bind a boolean HTML attribute to the truthiness of a scope expression, so the attribute is present when the expression is truthy and absent when falsy.
   - **Acceptance Criteria:**
-    - [ ] `<button ng-disabled="expr">` watches `expr` and **adds** the `disabled` attribute whenever `expr` is truthy, **removes** it whenever `expr` is falsy.
-    - [ ] `<input ng-checked="expr">` does the same for the `checked` attribute.
-    - [ ] `<input ng-readonly="expr">` does the same for the `readonly` attribute.
-    - [ ] `<option ng-selected="expr">` does the same for the `selected` attribute.
-    - [ ] `<details ng-open="expr">` does the same for the `open` attribute.
-    - [ ] The attribute transition happens on every digest where the expression's truthiness flips — not just on identity changes.
-    - [ ] When the boolean attribute is **added**, the corresponding DOM property (`element.disabled`, `element.checked`, etc.) is also `true`. The browser keeps the property and attribute in sync automatically; the directive does not need to write the property explicitly.
+    - [x] `<button ng-disabled="expr">` watches `expr` and **adds** the `disabled` attribute whenever `expr` is truthy, **removes** it whenever `expr` is falsy.
+    - [x] `<input ng-checked="expr">` does the same for the `checked` attribute.
+    - [x] `<input ng-readonly="expr">` does the same for the `readonly` attribute.
+    - [x] `<option ng-selected="expr">` does the same for the `selected` attribute.
+    - [x] `<details ng-open="expr">` does the same for the `open` attribute.
+    - [x] The attribute transition happens on every digest where the expression's truthiness flips — not just on identity changes.
+    - [x] When the boolean attribute is **added**, the corresponding DOM property (`element.disabled`, `element.checked`, etc.) is also `true`. The browser keeps the property and attribute in sync automatically; the directive does not need to write the property explicitly.
 
 ### 2.3 Module integration
 
 - **As a framework consumer**, I want all eight directives available without doing anything special — loading the core framework should make them work.
   - **Acceptance Criteria:**
-    - [ ] All eight directives are registered automatically when an app's module declares a dependency on the core framework module.
-    - [ ] A developer can replace any of them via the standard module-DSL mechanisms (`.directive`, `.decorator`) — these are built-ins, not hardcoded behavior.
+    - [x] All eight directives are registered automatically when an app's module declares a dependency on the core framework module.
+    - [x] A developer can replace any of them via the standard module-DSL mechanisms (`.directive`, `.decorator`) — these are built-ins, not hardcoded behavior.
 
 ---
 
