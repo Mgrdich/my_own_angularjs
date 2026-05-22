@@ -54,14 +54,13 @@ import { invokeExceptionHandler, type ExceptionHandler } from '@exception-handle
 
 import type { Attributes, DirectiveFactory, DirectiveFactoryReturn, LinkFn } from './directive-types';
 import { NgTranscludeMisuseError, UndeclaredTranscludeSlotError } from './compile-error';
-import { NG_BOUND_TRANSCLUDE, type NgManagedElement } from './element-slots';
+import { hasBoundTransclude, NG_BOUND_TRANSCLUDE } from './element-slots';
 
 function findBoundTransclude(element: Element) {
   let cursor: Element | null = element.parentElement;
   while (cursor !== null) {
-    const bound = (cursor as NgManagedElement)[NG_BOUND_TRANSCLUDE];
-    if (bound !== undefined) {
-      return { host: cursor, bound };
+    if (hasBoundTransclude(cursor)) {
+      return { host: cursor, bound: cursor[NG_BOUND_TRANSCLUDE] };
     }
     cursor = cursor.parentElement;
   }

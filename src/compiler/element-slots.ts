@@ -54,3 +54,21 @@ export interface NgManagedElement extends Element {
   [NG_CONTROLLERS]?: Map<string, unknown>;
   [NG_BOUND_TRANSCLUDE]?: BoundTranscludeFn;
 }
+
+/**
+ * Type-predicate guard: `true` when `el` has a non-`undefined`
+ * {@link NG_BOUND_TRANSCLUDE} slot — i.e. the element is the host of a
+ * transcluding directive that captured children at compile time. Inside
+ * the truthy branch TypeScript narrows `el` so `el[NG_BOUND_TRANSCLUDE]`
+ * is `BoundTranscludeFn` (no `| undefined`) and no inline cast is
+ * needed.
+ *
+ * ```ts
+ * if (hasBoundTransclude(cursor)) {
+ *   const bound = cursor[NG_BOUND_TRANSCLUDE]; // BoundTranscludeFn
+ * }
+ * ```
+ */
+export function hasBoundTransclude(el: Element): el is NgManagedElement & { [NG_BOUND_TRANSCLUDE]: BoundTranscludeFn } {
+  return Reflect.get(el, NG_BOUND_TRANSCLUDE) !== undefined;
+}
