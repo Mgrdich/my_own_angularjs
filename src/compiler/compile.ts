@@ -106,6 +106,7 @@ import { collectDirectives } from './directive-collector';
 import type { CompileOptions, CompileService, Directive, Linker, LinkFn, Attributes } from './directive-types';
 import { wireIsolateBindings, type NormalizedBindingMap } from './isolate-bindings';
 import { ChangesQueue, flushChangesQueue, hasHook, invokeHook, UNINITIALIZED_VALUE } from './lifecycle';
+import { NG_NON_BINDABLE_NAME } from './ng-non-bindable';
 import { parseTemplate } from './template-parse';
 import { resolveRequireForm } from './require-resolver';
 import { captureChildren } from './transclude-capture';
@@ -1026,7 +1027,7 @@ export function createCompile(options: CompileOptions): CompileService {
     // every existing `terminal: true` consumer keeps the spec-017
     // same-element-only behavior. Slice 6 ships `ng-non-bindable` and
     // is the sole consumer of this opt-out path.
-    const hasNonBindableTerminal = effectiveDirectives.some((d) => d.terminal && d.name === 'ngNonBindable');
+    const hasNonBindableTerminal = effectiveDirectives.some((d) => d.terminal && d.name === NG_NON_BINDABLE_NAME);
 
     // Snapshot children AFTER the compile loop runs. For transcluding
     // hosts the capture pass above already drained children, so the

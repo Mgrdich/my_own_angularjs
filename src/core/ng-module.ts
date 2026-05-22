@@ -53,7 +53,7 @@ import {
   ngSubmitDirective,
 } from '@compiler/ng-event-directives';
 import { ngHideDirective } from '@compiler/ng-hide';
-import { ngNonBindableDirective } from '@compiler/ng-non-bindable';
+import { NG_NON_BINDABLE_NAME, ngNonBindableDirective } from '@compiler/ng-non-bindable';
 import { ngShowDirective } from '@compiler/ng-show';
 import { ngStyleDirective } from '@compiler/ng-style';
 import { ngTranscludeDirective } from '@compiler/ng-transclude';
@@ -239,7 +239,7 @@ export const ngModule = createModule('ng', [])
       $compileProvider.directive('ngBindTemplate', ngBindTemplateDirective);
       $compileProvider.directive('ngShow', ngShowDirective);
       $compileProvider.directive('ngHide', ngHideDirective);
-      $compileProvider.directive('ngNonBindable', ngNonBindableDirective);
+      $compileProvider.directive(NG_NON_BINDABLE_NAME, ngNonBindableDirective);
       // Spec 024 Slice 1 — `ngClass` dynamically toggles CSS classes
       // on an element from a scope expression. Three expression forms
       // (string / array / object) are normalized via the shared

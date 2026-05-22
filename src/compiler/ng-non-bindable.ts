@@ -82,6 +82,22 @@
 
 import type { DirectiveFactory, DirectiveFactoryReturn } from './directive-types';
 
+/**
+ * Normalized directive name used at THREE coupled sites:
+ *   1. Registration: `$compileProvider.directive(NG_NON_BINDABLE_NAME, …)`
+ *      in `src/core/ng-module.ts`.
+ *   2. Walker gate: `d.name === NG_NON_BINDABLE_NAME` in
+ *      `compileElementOrComment` (`src/compiler/compile.ts`) — the
+ *      no-descent extension is narrowed to THIS directive only.
+ *   3. The directive's own factory below (re-exported for documentation).
+ *
+ * Keeping the literal in one place means a rename touches all three call
+ * sites at once. A drift between (1) and (2) would silently break the
+ * directive — no compile error, no test failure unless a specific
+ * regression test catches it.
+ */
+export const NG_NON_BINDABLE_NAME = 'ngNonBindable';
+
 function ngNonBindableFactory(): DirectiveFactoryReturn {
   // Pure metadata — no `compile`, no `link`. The directive's effect is
   // delivered entirely by the Slice 1 walker hook (no-descent into
