@@ -120,9 +120,7 @@ export const NG_STYLE_NAME = 'ngStyle';
  * @internal
  */
 type CssIdlKey = {
-  [K in Extract<keyof CSSStyleDeclaration, string>]-?: CSSStyleDeclaration[K] extends string
-    ? K
-    : never;
+  [K in Extract<keyof CSSStyleDeclaration, string>]-?: CSSStyleDeclaration[K] extends string ? K : never;
 }[Extract<keyof CSSStyleDeclaration, string>];
 
 /**
