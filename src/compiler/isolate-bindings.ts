@@ -559,6 +559,5 @@ function wireExpressionBinding(
     return;
   }
   const parentExpr = parse(attrExpr);
-  target[localName] = (locals?: Record<string, unknown>) =>
-    parentExpr(parentScope, locals);
+  target[localName] = (locals?: Record<string, unknown>) => parentExpr(parentScope, locals);
 }

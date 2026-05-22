@@ -148,7 +148,6 @@ type LinkEntry = {
  */
 type NodeLinker = (scope: Scope, cloneMap?: Map<Node, Node>) => void;
 
-
 /**
  * Internal per-`$compile`-call queue carrying the host element + URL +
  * pending directives for every `templateUrl`-declaring directive
@@ -184,7 +183,6 @@ interface DeferredTemplateEntry {
    */
   cancelled: boolean;
 }
-
 
 /**
  * A scope is "destroyed" when `$destroy()` sets `$$watchers = null`
