@@ -98,7 +98,7 @@ import type { DirectiveFactory, DirectiveFactoryReturn, LinkFn } from './directi
  * `ng-class-even` and `(scope) => !!scope.$odd` for `ng-class-odd`. The
  * plain `ng-class` directive passes no gate.
  */
-type ClassWatcherGate = (scope: Scope) => boolean;
+type ClassWatcherGate = (scope: Scope & { $odd?: boolean; $even?: boolean }) => boolean;
 
 /**
  * Install the class-watch + diff cycle on `element` against `expr`,
@@ -186,20 +186,6 @@ function installClassWatcher(
   }
 }
 
-/**
- * Scope-shape extension used by the even / odd gate predicates. Avoids
- * a wide `any` cast at the `scope.$even` / `scope.$odd` read sites
- * while staying compatible with the `Scope` type's index-style
- * dynamic-property access. The `$even` / `$odd` keys are conventionally
- * populated by `ng-repeat` (a future spec); outside that context the
- * keys are simply absent and `!!undefined === false`, which is the
- * documented "no-op" behavior.
- */
-interface IndexGatedScope extends Scope {
-  $even?: unknown;
-  $odd?: unknown;
-}
-
 function ngClassFactory(): DirectiveFactoryReturn {
   const link: LinkFn = (scope, element, attrs) => {
     const expr = attrs['ngClass'];
@@ -225,7 +211,12 @@ function ngClassEvenFactory(): DirectiveFactoryReturn {
     if (typeof expr !== 'string') {
       return;
     }
-    installClassWatcher(scope, element, expr, (s: Scope): boolean => !!(s as IndexGatedScope).$even, '$even');
+    // `$even` is conventionally populated by `ng-repeat` (a future
+    // spec) on each iteration's child scope; outside that context the
+    // property is absent and `!!undefined === false`, which is the
+    // documented "no-op" behavior. Reachable through the `Scope`
+    // class's `[key: string]: unknown` index signature — no cast.
+    installClassWatcher(scope, element, expr, (s) => !!s.$even, '$even');
   };
 
   return {
@@ -240,7 +231,9 @@ function ngClassOddFactory(): DirectiveFactoryReturn {
     if (typeof expr !== 'string') {
       return;
     }
-    installClassWatcher(scope, element, expr, (s: Scope): boolean => !!(s as IndexGatedScope).$odd, '$odd');
+    // See `ngClassEvenFactory` — same `$odd` convention, same
+    // index-signature access path.
+    installClassWatcher(scope, element, expr, (s) => !!s.$odd, '$odd');
   };
 
   return {
