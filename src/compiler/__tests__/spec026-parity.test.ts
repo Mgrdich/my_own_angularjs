@@ -39,14 +39,14 @@
  * @see context/spec/026-event-directives/technical-considerations.md
  */
 
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { CompileService } from '@compiler/directive-types';
 import { Scope } from '@core/index';
 import { ngModule } from '@core/ng-module';
 import { createInjector } from '@di/injector';
 import { createModule, resetRegistry } from '@di/module';
-import { EXCEPTION_HANDLER_CAUSES } from '@exception-handler/index';
+import { EXCEPTION_HANDLER_CAUSES, type ExceptionHandler } from '@exception-handler/index';
 
 import { bootstrapNgModule } from './test-helpers';
 
@@ -263,5 +263,63 @@ describe('parity: scope destroy removes the event listener', () => {
 
     element.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
     expect(scope.count).toBe(1);
+  });
+});
+
+// ---------------------------------------------------------------------
+// Nested-throw cause-token asymmetry — the handler dispatches via
+// `scope.$evalAsync(run)` when a digest is already in flight, so a
+// throw from the runner is drained by the digest's '$evalAsync' catch
+// path, NOT routed through the directive's outer try/catch as
+// 'eventListener'. Spec 026 tech-considerations §V predicted this:
+// "'eventListener' is the natural fit but the existing $apply plumbing
+// may route via something else (one of the existing 10 tokens —
+// confirm during implementation)." This test pins the answer so
+// downstream apps that branch their $exceptionHandler on cause know
+// both tokens are reachable from a single ng-event directive.
+// ---------------------------------------------------------------------
+
+describe('parity: nested handler throw routes via `$evalAsync`', () => {
+  it("a throw from inside a nested ng-click handler lands at $exceptionHandler with cause '$evalAsync', not 'eventListener'", () => {
+    const exceptionSpy = vi.fn<ExceptionHandler>();
+    // `bootstrapNgModule`'s `exceptionHandler` option is typed loosely
+    // as `(...args: unknown[]) => void` — a strict `ExceptionHandler`
+    // mock is structurally compatible (the helper only ever forwards
+    // `(err, cause)`) but TS function-parameter contravariance refuses
+    // the direct assignment. Cast at the boundary so both DI-side
+    // (directive's outer try/catch) and scope-side (digest's
+    // $evalAsync catch) install the SAME spy — otherwise the
+    // `eventListenerCalls.length === 0` assertion below would be
+    // trivially true.
+    bootstrapNgModule({ exceptionHandler: exceptionSpy as unknown as (...args: unknown[]) => void });
+    const { $compile } = compileFromNg();
+
+    const scope = Scope.create({ exceptionHandler: exceptionSpy });
+    scope.boom = (): void => {
+      throw new Error('intentional');
+    };
+
+    const element = document.createElement('button');
+    element.setAttribute('ng-click', 'boom()');
+
+    $compile(element)(scope);
+
+    // Wrap the dispatch in $apply so $$phase === '$apply' WHEN the
+    // event fires. The directive's handler will see the active phase
+    // and route through $evalAsync, NOT $apply. The throw is drained
+    // by the trailing $digest()'s $evalAsync catch — cause
+    // '$evalAsync', not 'eventListener'.
+    expect(() => {
+      scope.$apply(() => {
+        element.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+      });
+    }).not.toThrow();
+
+    const evalAsyncCalls = exceptionSpy.mock.calls.filter((c) => c[1] === '$evalAsync');
+    const eventListenerCalls = exceptionSpy.mock.calls.filter((c) => c[1] === 'eventListener');
+
+    expect(evalAsyncCalls.length).toBeGreaterThanOrEqual(1);
+    expect(eventListenerCalls.length).toBe(0);
+    expect((evalAsyncCalls[0]?.[0] as Error | undefined)?.message).toBe('intentional');
   });
 });

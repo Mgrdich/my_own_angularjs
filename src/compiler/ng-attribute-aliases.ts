@@ -74,7 +74,7 @@ const NG_ATTR_NAME: { readonly href: 'ngHref'; readonly src: 'ngSrc'; readonly s
  * interpolation-safe URL/value alias pattern for a given DOM attribute.
  *
  * The link function calls
- * `attrs.$observe(ngAttrName, value => attrs.$set(domAttrName, value || null))`:
+ * `attrs.$observe(ngAttrName, value => attrs.$set(domAttrName, value !== undefined && value !== '' ? value : null))`:
  *
  *  - The `$observe` callback fires whenever the interpolated value of
  *    the `ng`-prefixed attribute changes. Spec 017's `$observe` lazily
@@ -84,19 +84,21 @@ const NG_ATTR_NAME: { readonly href: 'ngHref'; readonly src: 'ngSrc'; readonly s
  *    empty string, so the observer's `value` argument is either a
  *    non-empty string or `''` (never `null` / `undefined` in practice,
  *    but the union type still includes `undefined`).
- *  - `value || null` collapses any falsy string — empty string,
- *    `undefined` — to `null`. Spec 017's `$set` at `attributes.ts:273`
- *    routes a `null` value to `removeAttribute(domAttrName)`, removing
- *    the real DOM attribute entirely. Any non-empty string triggers
+ *  - The explicit `value !== undefined && value !== '' ? value : null`
+ *    check collapses ONLY empty string and `undefined` to `null` —
+ *    NOT every falsy string. A relative URL like `'0'` (valid `href`
+ *    target, falsy in JS) survives intact. Spec 017's `$set` at
+ *    `attributes.ts:273` routes a `null` value to
+ *    `removeAttribute(domAttrName)`, removing the real DOM attribute
+ *    entirely; any non-empty string triggers
  *    `setAttribute(domAttrName, value)`. This is the behavior the
  *    functional spec demands (FS §2.1: "When the interpolated value
  *    resolves to an empty string, the real attribute is REMOVED
- *    entirely — not set to `""`").
+ *    entirely — not set to `""`"). Do NOT "simplify" to `value || null`
+ *    — that would silently strip valid falsy-string URLs.
  *  - `$set` requires a `string | null` argument; the runtime contract
- *    is satisfied because the only falsy result of `value || null` is
- *    `null` itself, and any truthy value is by definition a non-empty
- *    string. The local type cast keeps strict-mode happy without
- *    widening the public `$set` signature.
+ *    is satisfied because the false branch of the ternary is `null`
+ *    and the true branch is by definition a non-empty string.
  *
  * **Priority 99** matches AngularJS-canonical and is LOAD-BEARING for
  * compatibility — the priority places these directives ABOVE the
@@ -127,9 +129,12 @@ function createUrlAliasDirective(domAttrName: 'href' | 'src' | 'srcset'): Direct
 
   const link: LinkFn = (_scope, _element, attrs) => {
     attrs.$observe(ngAttrName, (value) => {
-      // Truthy value (non-empty string) → setAttribute via `$set`.
-      // Empty / `undefined` value → `null` → removeAttribute via `$set`
-      // (spec 017 `attributes.ts:273` removes when `value === null`).
+      // Non-empty string (including JS-falsy strings like `'0'`, valid
+      // relative URLs) → setAttribute via `$set`. Only `''` and
+      // `undefined` → `null` → removeAttribute via `$set` (spec 017
+      // `attributes.ts:273` removes when `value === null`). The
+      // explicit ternary deliberately rejects the looser `value || null`
+      // shape that would also strip `'0'` / `'false'`.
       attrs.$set(domAttrName, value !== undefined && value !== '' ? value : null);
     });
   };
