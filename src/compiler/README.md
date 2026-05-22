@@ -715,6 +715,682 @@ For the full surface (deferred upstream cases, parity with
 `componentSpec.js`, etc.) see
 `src/compiler/__tests__/spec022-parity.test.ts`.
 
+## Visibility & Binding built-ins (spec 023)
+
+Spec 023 ships the first cohesive batch of `ngModule`-registered
+built-in directives — the visibility and binding directives every
+non-trivial AngularJS app reaches for. All seven are registered on
+the `'ng'` module's existing `$compileProvider` config block (the same
+one spec 018 introduced for `ngTransclude`); apps that declare
+`'ng'` in their dependency chain get them for free. Each is also a
+plain `module.directive('<name>', …)` away from being overridden or
+decorated by an app — these are built-ins, not hardcoded behavior.
+
+The directives ship as DI registrations only — there are NO new
+exports from `@compiler/index`. The factory functions are file-local
+exports (matches the spec 018 `ngTransclude` precedent), reachable
+exclusively via `injector.get('<name>Directive')`.
+
+### `ng-cloak`
+
+Prevents the brief flash of un-compiled `{{ … }}` markup before
+`$compile` reaches the element. A pure compile-time cleanup
+directive: it removes both the `ng-cloak` attribute and the
+`ng-cloak` class once the compiler touches the element, then
+disappears. No watchers installed, zero per-digest cost.
+`restrict: 'AC'` so consumers may write `<div ng-cloak>` (attribute)
+or `<div class="ng-cloak">` (class) interchangeably. Canonical use:
+wrap the page root or any `{{ … }}`-heavy region whose unrendered
+form must not be visible to users.
+
+### `ng-bind`
+
+Single-expression text binding. `<span ng-bind="user.name">` sets
+the element's `textContent` from the current value of the expression
+and updates on every digest when the value changes. Coerces via
+`String(value)`; `null` / `undefined` render as the empty string.
+The `textContent` setter escapes HTML special characters
+automatically — `<` and `>` appear LITERALLY in the rendered DOM,
+which is the security-relevant difference from `ng-bind-html`.
+Canonical use: bind a single scope value as text without writing an
+inline `{{ }}` mustache that might briefly be visible.
+
+### `ng-bind-template`
+
+Multi-expression text binding via `$interpolate`.
+`<span ng-bind-template="Hello {{first}} {{last}}!">` interpolates
+the template string once at link time, then watches the resulting
+`InterpolateFn` so the rendered `textContent` updates whenever any
+referenced expression changes. Like `ng-bind`, the listener writes
+to `textContent` so HTML characters are escaped automatically.
+Canonical use: bind a multi-expression message as text without
+writing inline mustaches.
+
+### `ng-bind-html`
+
+Trusted HTML binding. `<div ng-bind-html="snippet">` evaluates the
+expression, routes the value through `$sce.getTrustedHtml(…)` (the
+existing spec 012 SCE pipeline), and assigns the result to the
+element's `innerHTML`. A `$sce.trustAsHtml(…)` wrapper short-circuits
+sanitization; a plain string routes through the spec 013 `$sce` →
+`$sanitize` fallback (when `ngSanitize` is loaded) or throws inside
+the watch listener (when it isn't). A throw is caught by the
+digest's existing `'watchListener'` path and `innerHTML` degrades
+to empty — the digest continues. Canonical use: render markup
+verified safe by the SCE pipeline; never use for plain text (use
+`ng-bind` instead).
+
+### `ng-show`
+
+Visibility toggle on truthiness. `<div ng-show="visible">` adds the
+`ng-hide` CSS class when the expression is FALSY and removes it
+when TRUTHY. A single `scope.$watch(expr, …)` per element drives
+the toggle via `classList.toggle('ng-hide', !value)`. Other classes
+on the element are preserved across digests — `classList.toggle`
+only touches the named class. Canonical use: hide a panel,
+modal, or block conditional on application state.
+
+### `ng-hide`
+
+Mirror-inverse of `ng-show`. `<div ng-hide="hidden">` adds the
+`ng-hide` class when the expression is TRUTHY and removes it when
+FALSY. Both directives share the same `ng-hide` class name — the
+canonical AngularJS idiom. Canonical use: same as `ng-show` but
+the predicate reads more naturally as "is this thing hidden?"
+(e.g. `<div ng-hide="!user.loggedIn">` vs `<div ng-show="user.loggedIn">`).
+
+### `ng-non-bindable`
+
+Opts a subtree out of compilation. `<pre ng-non-bindable>{{ literal }}</pre>`
+preserves literal `{{ }}` mustaches in child text nodes and prevents
+the walker from descending into the element's children at all —
+no `$interpolate`, no directive matching on descendants. The
+directive itself is pure metadata (`restrict: 'AC'`, `terminal: true`,
+`priority: 1000`, no compile / link function); the heavy lifting
+lives in the compiler walker hook (see "Terminal directives" below).
+The host element's OWN attributes (`class="foo"`, …) survive
+intact — only the children are pruned. Canonical use: documentation
+pages, code samples, developer-tools panels that display
+AngularJS-style markup as literal characters.
+
+### Consumer-shipped CSS
+
+`ng-show`, `ng-hide`, and `ng-cloak` rely on a small CSS block that
+the framework documents but does NOT auto-inject (auto-injection
+would violate the no-runtime-DOM-injection invariant). Apps drop
+this verbatim into their stylesheet:
+
+```css
+.ng-hide { display: none !important; }
+[ng-cloak], .ng-cloak { display: none !important; }
+```
+
+The `.ng-hide` rule is shared by `ng-show` and `ng-hide`. The
+`[ng-cloak], .ng-cloak` rule hides un-compiled regions before
+`$compile` strips the attribute / class.
+
+### Animation-deferred note
+
+Visibility transitions in spec 023 are synchronous. `$animate.enter`
+and `$animate.leave` hooks integrate with `ng-show`, `ng-hide`, and
+`ng-cloak` in Phase 4 (Animations roadmap item). The directive
+link functions do NOT contain animation hooks today; the parity
+tests pin the synchronous behavior and mark the animated variants
+as `it.skip(…)` citing Phase 4.
+
+### Spec 013 cross-reference
+
+`ng-bind-html` consumes the existing `$sce.getTrustedHtml` pipeline
+(spec 012) which transparently routes through `$sanitize` when
+`ngSanitize` is loaded (spec 013 integration). The directive does
+not re-implement sanitization. Apps that need a custom HTML
+allow-list swap implementations via `module.decorator('$sanitize', …)`
+— the swap is invisible to the `ng-bind-html` directive, which
+keeps consuming the public `$sce.getTrustedHtml` surface.
+
+## Class & Style built-ins (spec 024)
+
+Spec 024 ships the second cohesive batch of `ngModule`-registered
+built-in directives — the class and style directives every styled
+AngularJS app reaches for. All four are registered on the `'ng'`
+module's existing `$compileProvider` config block (the same one
+that holds the spec 023 directives); apps that declare `'ng'` in
+their dependency chain get them for free. Each is also a plain
+`module.directive('<name>', …)` away from being overridden or
+decorated by an app — these are built-ins, not hardcoded behavior.
+
+Like the spec 023 directives, the four ship as DI registrations
+only — there are NO new exports from `@compiler/index`. The
+factory functions are file-local exports (matches the spec 018
+`ngTransclude` precedent), reachable exclusively via
+`injector.get('<name>Directive')`.
+
+### `ng-class`
+
+Dynamic CSS-class binding. `<div ng-class="expr">` evaluates the
+expression and applies the resulting class set to the element via
+`element.classList.add` / `.remove`. Three expression forms are
+supported, normalized by the shared module-private
+`flattenClassExpression` helper:
+
+- **String** — `ng-class="'highlighted'"` adds the class
+  `highlighted`. Multiple whitespace-separated names
+  (`'class1 class2'`) add each as a separate class.
+- **Array** — `ng-class="['selected', 'primary']"` adds each
+  element. Array elements that are themselves plain objects follow
+  the object form; string elements follow the string form. Other
+  element types are silently ignored.
+- **Object** — `ng-class="{ active: cond, error: hasFault }"` adds
+  each key whose value is truthy and removes each key whose value
+  is falsy.
+
+A single `scope.$watchCollection(attrs.ngClass, …)` per element
+drives the diff cycle. `$watchCollection` provides one-level-deep
+collection diffing so `arr.push('new-class')` mutations and
+`obj.active = false` flips are caught without the consumer
+re-assigning the whole value. Canonical use: toggle conditional
+styling (selected state, error state, …) without writing
+imperative DOM code.
+
+### `ng-class-even`
+
+Index-gated class binding. `<li ng-class-even="expr">` evaluates
+the expression using the same three forms as `ng-class`, but only
+APPLIES the resulting classes when the scope's `$even` property is
+truthy. The canonical pairing is with `ng-repeat` (which sets
+`$even` / `$odd` on each iteration's child scope), but `ng-class-even`
+works against any scope where the developer sets `$even` directly —
+which is how spec 024 tests it today, before `ng-repeat` lands.
+Outside `ng-repeat` (no `$even` on the scope) the directive
+contributes no classes and never throws.
+
+### `ng-class-odd`
+
+Mirror-inverse of `ng-class-even`. `<li ng-class-odd="expr">` gates
+on the scope's `$odd` property. The two directives combine on the
+same element to produce zebra-stripe styling
+(`<li ng-class-even="'row-even'" ng-class-odd="'row-odd'">`); each
+iteration carries exactly one of the two classes.
+
+### `ng-style`
+
+Dynamic inline-style binding. `<div ng-style="{ color: 'red',
+fontSize: '14px' }">` evaluates the expression and applies the
+resulting `{ cssProperty: value }` pairs as inline styles via per-
+property writes (NOT `cssText`). Only the object form is supported
+— other shapes (string, array, primitive, `null`, `undefined`)
+resolve to the empty property set, which clears any directive-applied
+styles and writes nothing new. A single `scope.$watchCollection`
+per element drives the diff cycle.
+
+### Classes-preserved guarantee
+
+`ng-class` tracks `appliedClasses: Set<string>` per directive
+instance — the set of classes THIS directive has added on the most
+recent digest. The diff cycle has two halves:
+
+1. **Removal half:** iterate `appliedClasses`; for each class no
+   longer in the new target set, call `element.classList.remove(cls)`.
+2. **Addition half:** iterate the new target set; for each class
+   not in `appliedClasses`, call `element.classList.add(cls)`.
+   Classes already in both are untouched.
+
+The key invariant: a class enters `appliedClasses` only when WE
+called `add()`. Consumer-shipped classes — `<div class="card"
+ng-class="…">`, classes added by `ng-show` / `ng-hide`
+(`classList.toggle('ng-hide', …)`), classes added by app code
+through `attrs.$set('class', …)` — are NEVER in our tracking set,
+so the removal half can never touch them. `ng-class` plays nicely
+with every other directive on the same element.
+
+`ng-style` applies the mirror mechanism via `appliedProps:
+Set<string>` — only properties THIS directive has written are
+eligible for removal. A consumer-shipped `<div style="margin: 5px"
+ng-style="…">` keeps the `margin` across digests unless `ng-style`
+later names `margin` in its expression — at which point the
+directive overwrites it and the property becomes directive-owned
+(the AngularJS-canonical "ng-style wins" behavior).
+
+### `ng-style` property-name convention
+
+`ng-style` dispatches on hyphen-presence: kebab-case keys
+(`'background-color'`) go through CSSOM's `setProperty` /
+`removeProperty`; camelCase keys (`'backgroundColor'`) go through
+direct IDL assignment (`element.style[name] = value`). Both forms
+work. Neither path uses `cssText`, so consumer-shipped inline
+styles (set via the `style="…"` attribute) are preserved unless
+`ng-style`'s expression names the same property — in which case
+`ng-style` wins (the "ownership transfer" described above).
+
+The dispatch is necessary because CSSOM's `setProperty` is
+specified to accept ONLY kebab-case property names per W3C;
+`setProperty('fontSize', '14px')` is a spec-defined no-op (and
+jsdom enforces this strictly). The IDL surface is the opposite —
+`style.fontSize = '14px'` works, `style['font-size'] = '14px'` is
+undefined behavior. Together the two surfaces cover every property
+name a consumer can spell. The hyphen-presence test
+(`name.includes('-')`) is a complete classifier: every CSS
+property is either kebab-case (contains a hyphen) or camelCase
+(contains no hyphen).
+
+### Animation-deferred note
+
+Class and style transitions in spec 024 are synchronous.
+`$animate.addClass` / `$animate.removeClass` hooks integrate with
+`ng-class` (and `$animate.setStyles` with `ng-style`) in Phase 4
+(Animations roadmap item). The directive link functions do NOT
+contain animation hooks today; the parity tests pin the
+synchronous behavior and mark the animated variants as
+`it.skip(…)` citing Phase 4.
+
+### Spec 023 cross-reference
+
+`ng-class` / `ng-class-even` / `ng-class-odd` and spec 023's
+`ng-show` / `ng-hide` share the same underlying `classList` DOM
+surface — `add` / `remove` for spec 024, `toggle` for spec 023.
+Both batches preserve unrelated classes on the element across
+every digest (the same single-class-name discipline that lets
+`ng-show` and `ng-class` co-exist without stepping on each other).
+The `ng-hide` class added by `ng-show` / `ng-hide` is never in any
+`ng-class` instance's `appliedClasses`, so flipping `ng-class`
+will not strip `ng-hide`, and vice versa.
+
+### Terminal directives
+
+Spec 017 implemented `terminal: true` as a same-element directive
+cutoff (lower-priority directives on the same element are skipped).
+Spec 023 Slice 1 broadened this to also halt child-node recursion
+in the compiler walker — but ONLY when the matched directive's
+normalized name is `ngNonBindable`. This narrowing is deliberate:
+the spec 017 test `src/compiler/__tests__/terminal.test.ts:178`
+pinned the original narrower semantic for custom `terminal: true`
+directives, and broadening the no-descent behavior for all consumers
+would be a breaking change. Future structural directives (`ng-if`,
+`ng-repeat`, etc.) will get the no-descent semantic via dedicated
+mechanisms (e.g. `transclude: 'element'`), NOT via the broadened
+`terminal` flag. The walker hook lives in
+`src/compiler/compile.ts` in `compileElementOrComment` — search for
+`hasNonBindableTerminal`.
+
+## Attribute helper built-ins (spec 025)
+
+Spec 025 ships the third cohesive batch of `ngModule`-registered
+built-in directives — eight directives that drive the element's
+standard HTML attributes (URLs, image sources, boolean flags). All
+eight are registered on the `'ng'` module's existing
+`$compileProvider` config block (the same one that holds the spec
+023 / 024 directives); apps that declare `'ng'` in their dependency
+chain get them for free. Each is also a plain
+`module.directive('<name>', …)` away from being overridden or
+decorated — these are built-ins, not hardcoded behavior.
+
+Like the spec 023 / 024 directives, the eight ship as DI
+registrations only — there are NO new exports from
+`@compiler/index`. The factory functions are file-local exports
+(matches the spec 018 `ngTransclude` precedent), reachable
+exclusively via `injector.get('<name>Directive')`. Both module-
+private factory helpers (`createUrlAliasDirective`,
+`createBooleanAliasDirective`) live inside
+`src/compiler/ng-attribute-aliases.ts` and are NOT exported from
+`@compiler/index` either.
+
+### Why these directives exist — the browser pre-compile bug
+
+Without `ng-href`, a browser would let users click
+`<a href="{{userProfileUrl}}">` BEFORE AngularJS compiles the
+template and navigate to the literal URL `"{{userProfileUrl}}"`.
+Without `ng-disabled`, `<button disabled="{{ false }}">` is still
+disabled because HTML5 boolean attributes work by presence, not
+value. These eight directives fix both bugs.
+
+Mechanically the fix is the same on both sides: the consumer writes
+the `ng`-prefixed attribute on the element instead of the real
+attribute, and the framework writes the real attribute LATER —
+during the first digest, AFTER the interpolation / expression has
+resolved. The browser never sees a literal `{{ … }}` URL to follow
+and never sees a stale `disabled="…"` to obey.
+
+### URL / value aliases — `ng-href`, `ng-src`, `ng-srcset`
+
+The first pattern handles attributes that the BROWSER eagerly
+resolves the moment it sees them — URLs and image sources.
+
+```html
+<a   ng-href="{{userProfileUrl}}">View profile</a>
+<img ng-src="{{photoUrl}}" alt="profile photo">
+<img ng-srcset="{{photoSet}}" alt="responsive photo">
+```
+
+Each directive calls `attrs.$observe(ngAttrName, listener)` against
+its own `ng`-prefixed attribute. Spec 017's `$observe` lazily wires a
+single `scope.$watch` on the interpolated value; the listener writes
+the resolved string to the corresponding real attribute (`href` /
+`src` / `srcset`) through `attrs.$set`. Before the first digest the
+real attribute is absent — a click on `<a ng-href="{{url}}">` BEFORE
+compile-then-digest goes nowhere instead of navigating to the literal
+URL `"{{url}}"`. The "pre-compile attribute absent" guarantee falls
+out of the framework's normal compile-then-digest ordering — no
+explicit pre-compile work is needed.
+
+### Boolean aliases — `ng-disabled`, `ng-checked`, `ng-readonly`, `ng-selected`, `ng-open`
+
+The second pattern handles HTML5 BOOLEAN attributes — attributes the
+browser interprets by presence, not value (`<button disabled="false">`
+is still a disabled button).
+
+```html
+<button   ng-disabled="!form.$valid">Submit</button>
+<input    type="checkbox" ng-checked="settings.notifications">
+<input    ng-readonly="record.locked">
+<option   value="b" ng-selected="choice === 'b'">B</option>
+<details  ng-open="section === 'about'"><summary>…</summary></details>
+```
+
+Each directive calls `scope.$watch(attrs[ngAttrName], listener)`
+against the bound expression — there's no `{{ }}` resolution step on
+this side, so `$observe` would be wrong. The listener flips the
+real attribute's presence through `attrs.$set` per the truthiness of
+the watched value. The corresponding DOM property
+(`element.disabled`, `element.checked`, …) stays in sync
+automatically — browsers reflect the boolean attribute through the
+property getter.
+
+### Shared factory pattern
+
+Both halves are generated by two module-private factory helpers
+parameterized by attribute name:
+
+```ts
+// All three URL aliases.
+const ngHrefDirective   = createUrlAliasDirective('href');
+const ngSrcDirective    = createUrlAliasDirective('src');
+const ngSrcsetDirective = createUrlAliasDirective('srcset');
+
+// All five boolean aliases.
+const ngDisabledDirective = createBooleanAliasDirective('disabled');
+const ngCheckedDirective  = createBooleanAliasDirective('checked');
+const ngReadonlyDirective = createBooleanAliasDirective('readonly');
+const ngSelectedDirective = createBooleanAliasDirective('selected');
+const ngOpenDirective     = createBooleanAliasDirective('open');
+```
+
+This mirrors AngularJS-1.x's `ngAttributeAliasDirectives` pattern —
+one file, two `forEach`-style generators, eight outputs.
+
+### The `attrs.$set` contract — important
+
+Both helpers map their resolved value through `attrs.$set(name, value)`.
+The `$set` function (from spec 017) accepts `string | null` and
+removes the attribute ONLY when `value === null` — NOT for any falsy
+value. An empty string `''` is treated as a valid attribute value:
+`setAttribute(name, '')` produces the bare-presence form
+`<button disabled>` (equivalent to `disabled=""` per HTML5).
+
+Each helper maps its operand to `string | null` explicitly:
+
+- **URL aliases** map empty / undefined to `null` via
+  `value !== undefined && value !== '' ? value : null`. The
+  functional-spec criterion "empty interpolated value → attribute
+  removed" holds because the helper itself collapses the empty
+  string to `null` before calling `$set`. A naive
+  `attrs.$set(domAttr, value || '')` would WRITE the empty string
+  and leave a useless `href=""` on the element.
+- **Boolean aliases** map `value ? '' : null`. Truthy values write
+  the empty string (canonical bare-presence form per HTML5); falsy
+  values write `null` (which `$set` translates to
+  `removeAttribute`). Passing `!!value` (a boolean) would be both a
+  type error and behaviorally wrong — `setAttribute(name, true)`
+  would coerce to the literal string `"true"`, producing the
+  cosmetic noise `<button disabled="true">`.
+
+Any future directive that writes attributes through `$set` must
+observe this contract. Search for `$set` in
+`src/compiler/attributes.ts` for the underlying implementation
+(the `value === null` branch around line 273).
+
+### Priority
+
+URL aliases use `priority: 99`; boolean aliases use `priority: 100`
+— one notch higher. Both are LOAD-BEARING for AngularJS-1.x parity
+if a consumer combines these with other prioritized directives.
+Both sit well above the default 0 and below `ng-non-bindable`
+(1000), so the spec 017–024 directives have no priority conflict
+with this batch.
+
+### Cross-references
+
+`attrs.$observe` and `attrs.$set` are the underlying mechanisms
+(see [`Attributes.$set` and `$observe`](#attributessset-and-observe)
+above). The URL aliases lean on `$observe` (interpolated values
+need a per-attribute watch); the boolean aliases lean on
+`scope.$watch` directly (the bound expression isn't an
+interpolation). No new framework primitives, no new error classes,
+no new `EXCEPTION_HANDLER_CAUSES` token — the tuple stays at 10.
+URL allowlisting (the AngularJS `aHrefSanitizationTrustedUrlList`
+surface) is explicitly out of scope; this batch sets URLs that the
+consumer asks for and the browser's URL parser handles them.
+
+## Event built-ins (spec 026)
+
+Spec 026 ships the fourth cohesive batch of `ngModule`-registered
+built-in directives — eighteen directives that let scope expressions
+respond to native DOM events. All eighteen are registered on the
+`'ng'` module's existing `$compileProvider` config block (the same
+one that holds the spec 023 / 024 / 025 directives); apps that
+declare `'ng'` in their dependency chain get them for free. Each is
+also a plain `module.directive('<name>', …)` away from being
+overridden or decorated by an app — these are built-ins, not
+hardcoded behavior.
+
+Like the spec 023 / 024 / 025 directives, the eighteen ship as DI
+registrations only — there are NO new exports from `@compiler/index`.
+The factory functions are file-local exports in
+`src/compiler/ng-event-directives.ts`, reachable exclusively via
+`injector.get('<name>Directive')`. The module-private factory helper
+`createEventDirective`, the `EVENT_NAMES` tuple, and the `EventName`
+union are NOT exported either.
+
+### The eighteen directives by family
+
+| Family | Directives |
+| --- | --- |
+| **Mouse** | `ng-click`, `ng-dblclick`, `ng-mousedown`, `ng-mouseup`, `ng-mouseover`, `ng-mouseout`, `ng-mousemove`, `ng-mouseenter`, `ng-mouseleave` |
+| **Keyboard** | `ng-keydown`, `ng-keyup`, `ng-keypress` |
+| **Clipboard** | `ng-copy`, `ng-cut`, `ng-paste` |
+| **Focus** | `ng-focus`, `ng-blur` |
+| **Form-lifecycle** | `ng-submit` |
+
+### The single shared pattern
+
+Every directive in this batch is a clone of the same mechanical
+contract — only the target DOM event name and the canonical host
+element differ. The factory helper `createEventDirective(eventName)`
+emits the same shape eighteen times:
+
+```ts
+$compileProvider.directive('ngClick',     ngClickDirective);
+$compileProvider.directive('ngDblclick',  ngDblclickDirective);
+// … sixteen more, all generated by `createEventDirective('<name>')` …
+$compileProvider.directive('ngSubmit',    ngSubmitDirective);
+```
+
+At link time each directive:
+
+1. Parses the bound scope expression ONCE via
+   `parse(attrs[ngAttrName])` (during the compile phase — the link fn
+   closes over the parsed callable).
+2. Registers a native event listener through
+   `element.addEventListener(eventName, handler)`.
+3. Inside the handler, builds a runner
+   `() => parsed(scope, { $event: event })` and dispatches via
+   `scope.$apply(run)` OR `scope.$evalAsync(run)` per the
+   `$$phase`-aware rule below.
+4. Registers a `scope.$on('$destroy', …)` listener that removes the
+   native event listener when the scope tears down.
+
+```html
+<button ng-click="save(item, $event)">Save</button>
+<input  ng-keydown="onKey($event)">
+<form   ng-submit="submit(formData)">…</form>
+```
+
+### `$$phase`-aware dispatch
+
+A native event can fire while a digest is already in flight — for
+example one `ng-click` handler synthetically dispatches another
+event that triggers a second `ng-click`. A naive `scope.$apply(run)`
+in that scenario would throw the canonical
+`'$digest already in progress'` error.
+
+The shared handler short-circuits this via the framework's
+`scope.$$phase` property:
+
+```ts
+if (scope.$$phase !== null) {
+  scope.$evalAsync(run); // nested-event path — enqueue, don't re-enter
+} else {
+  scope.$apply(run);     // common path — run + digest
+}
+```
+
+`$evalAsync` queues `run` onto the digest's outstanding async list;
+the active outer `$apply` will drain the queue before returning, so
+the inner expression's scope mutations are still observable after
+the outer dispatch returns. This is AngularJS-canonical.
+
+### The `$event` local
+
+The native event object is exposed inside the bound expression as
+`$event`. It is passed via the parser's locals object (the second
+argument to the parsed function), so the parser's identifier
+resolution looks it up there BEFORE the scope (spec 009). As a
+consequence, `$event` shadows any scope property of the same name
+for the duration of the single invocation — and is NOT assigned to
+the scope.
+
+```html
+<input ng-keydown="lastKey = $event.key">
+<button ng-click="$event.target.value = 'changed'">…</button>
+```
+
+Inside `<input ng-keydown="lastKey = $event.key">` the parser
+resolves `$event` from locals; `$event.key` then walks the native
+event object's `.key` property; `lastKey = …` writes the result onto
+the scope.
+
+### The `try/catch` workaround for `$apply` exception routing
+
+**Important.** This project's `scope.$apply` lacks the upstream
+AngularJS try/catch — a throw inside the runner escapes `$apply`
+without reaching `$exceptionHandler`. The event directives
+compensate by wrapping their own `$apply`/`$evalAsync` dispatch in a
+`try/catch` and routing throws via
+`invokeExceptionHandler(handler, err, 'eventListener')`. Any future
+directive that calls `scope.$apply` directly must observe the same
+workaround until `$apply` is patched (out of scope for spec 026;
+reserved for a future scope-bug spec).
+
+The factory signature was widened to inject `$exceptionHandler` via
+DI — the array form `['$exceptionHandler', factory]` is the same
+shape spec 018's `ngTransclude` uses for the same reason. Without
+this wrap, a bug in the bound expression would propagate out of
+`dispatchEvent` instead of landing on the framework's configured
+handler.
+
+### `ng-submit` does NOT auto-`preventDefault`
+
+A `<form ng-submit="…" action="…">` with an action URL will still
+navigate the page on submit unless the bound expression calls
+`$event.preventDefault()`. The directive does NOT call
+`event.preventDefault()` for the consumer. This is the
+AngularJS-canonical behavior and is explicitly carved out-of-scope
+by the functional spec (FS §3).
+
+Two canonical mitigation patterns:
+
+```html
+<!-- Pattern 1: omit `action` so the browser has nothing to navigate to. -->
+<form ng-submit="save(formData)">
+  <input type="text" ng-model="formData.name">
+  <button type="submit">Save</button>
+</form>
+
+<!-- Pattern 2: call $event.preventDefault() explicitly. -->
+<form ng-submit="save(formData); $event.preventDefault()" action="/submit">
+  <input type="text" ng-model="formData.name">
+  <button type="submit">Save</button>
+</form>
+```
+
+### The `EventName` type-safety pattern
+
+The `EVENT_NAMES` tuple at the top of
+`src/compiler/ng-event-directives.ts` is declared as:
+
+```ts
+const EVENT_NAMES = [
+  'click', 'dblclick', /* … */ 'submit',
+] as const satisfies readonly (keyof HTMLElementEventMap)[];
+
+type EventName = (typeof EVENT_NAMES)[number];
+```
+
+The `as const` narrows the array to a readonly tuple of string
+literals; the `satisfies` constraint enforces that every entry is a
+real DOM event name. Together they form the **compile-time typo
+guard** — a future maintainer who tries to add `'clikc'` to the list
+gets `Type '"clikc"' is not assignable to type 'keyof HTMLElementEventMap'.`
+A future spec adding a new event directive extends the tuple; the
+`EventName` union narrows automatically and the 18+N
+`createEventDirective('…')` call sites pass type-checked literals
+without manual juggling.
+
+### Cleanup contract
+
+Each link fn registers `scope.$on('$destroy', () => element.removeEventListener(eventName, handler))`.
+Without this hook, an element still in the DOM after its scope was
+destroyed would continue firing handlers against a dead scope — a
+leak and a correctness bug. The same hook covers both the explicit
+`scope.$destroy()` path and the `destroyElementScope(element)`
+propagation path (structural directives — `ng-if`, `ng-repeat` —
+will lean on this in future specs).
+
+### Cross-reference to spec 017's compile-then-link timing
+
+The event listener is registered at **link time**, not compile time
+— `addEventListener` runs from inside the link fn the compile fn
+returns. So multiple `$compile(template)(scope)` invocations against
+the same compiled subtree each register their own independent
+listener bound to their own scope. This is consistent with the rest
+of the framework's link-time work (watch installation, `$observe`
+wiring, child-scope creation) and matters when a directive uses
+`compile(...)` to share a parsed expression across multiple linker
+invocations — the parse runs once but each linker gets its own
+event listener.
+
+### Test-bootstrap quirk
+
+Re-registering `$exceptionHandler` on a local `createModule('ng', [])`
+is silently shadowed by the canonical `ngModule` (loaded first in
+the dependency walk), so the spy never reaches the directive's
+`try/catch`. Tests that need a spy `$exceptionHandler` should
+register it on a downstream module (e.g. `'app'`) instead — the
+last-wins rule for service factories means the `'app'` factory
+overrides the canonical `ng` factory. The spec-026 test file
+(`src/compiler/__tests__/ng-event-directives.test.ts`) demonstrates
+this pattern.
+
+### No new `EXCEPTION_HANDLER_CAUSES` entry
+
+Every event-directive error site routes through `$exceptionHandler`
+with cause `'eventListener'` (the existing 6th token, originally
+introduced for scope `$emit` / `$broadcast` listeners — its
+semantics extend naturally to native DOM event listeners). Parse-
+time errors (syntactically invalid bound expression) still route
+through `'$compile'` via the existing factory `try/catch` in
+`$$buildDirectiveArrayProvider`. `EXCEPTION_HANDLER_CAUSES.length`
+stays at 10.
+
 ## Deferred items
 
 Spec 017 deliberately stops at the compiler core. The following are
@@ -744,10 +1420,23 @@ do not produce observable behavior in this spec:
   **`bindToController` + `require` + lifecycle hooks +
   `$compileProvider.component`** shipped with spec 022 — see "Isolate
   scope & components" above.
-- **Built-in directives** — `ng-if`, `ng-repeat`, `ng-class`, `ng-show`,
-  `ng-hide`, `ng-bind`, `ng-bind-html`, `ng-click`, `ng-model`, `ng-href`,
-  `ng-src`, `ng-srcset`, and the rest. None ship with spec 017; user
-  code registers its own directives inline.
+- **Built-in directives — visibility + binding subset shipped in spec
+  023.** `ng-cloak`, `ng-bind`, `ng-bind-template`, `ng-bind-html`,
+  `ng-show`, `ng-hide`, `ng-non-bindable` are now registered on
+  `ngModule` — see "Visibility & Binding built-ins (spec 023)" above.
+  **Class & style subset shipped in spec 024** (`ng-class`,
+  `ng-class-even`, `ng-class-odd`, `ng-style` — see "Class & Style
+  built-ins" above). **Attribute helpers shipped in spec 025**
+  (`ng-href`, `ng-src`, `ng-srcset`, `ng-disabled`, `ng-checked`,
+  `ng-readonly`, `ng-selected`, `ng-open` — see "Attribute helper
+  built-ins" above). **Event directives shipped in spec 026**
+  (`ng-click`, `ng-dblclick`, `ng-mousedown`, `ng-mouseup`,
+  `ng-mouseover`, `ng-mouseout`, `ng-mousemove`, `ng-mouseenter`,
+  `ng-mouseleave`, `ng-keydown`, `ng-keyup`, `ng-keypress`, `ng-copy`,
+  `ng-cut`, `ng-paste`, `ng-focus`, `ng-blur`, `ng-submit` — see
+  "Event built-ins" above). The remaining built-ins (`ng-if`,
+  `ng-repeat`, `ng-model`, and the rest) ship under their own
+  roadmap items.
 - **Multi-element directives** (`multiElement: true`, `*-start` /
   `*-end` pairs) — deferred; lands alongside `ng-repeat`.
 - **Module DSL `.directive(...)` shorthand** on `createModule` —
@@ -768,6 +1457,3 @@ do not produce observable behavior in this spec:
 - **`$rootScope` registration on `ngModule`** — separate roadmap bullet
   under "Application Bootstrap". Spec 017 tests construct
   `Scope.create()` directly.
-- **`ng-bind-html` directive integration** — explicitly deferred under
-  the HTML Sanitization roadmap pending `$compile`. Spec 017 delivers
-  the compiler pieces; the directive itself ships separately.

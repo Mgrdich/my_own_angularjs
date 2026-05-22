@@ -431,7 +431,7 @@ function wireAtBinding(
   // on the isolateScope so it tears down with the directive's scope,
   // but evaluate against `parentScope`.
   isolateScope.$watch(
-    () => interpolateFn(parentScope as unknown as Record<string, unknown>),
+    () => interpolateFn(parentScope),
     (newValue, oldValue) => {
       target[localName] = newValue;
       // Slice-3: skip the first watcher fire (the initial seed has
@@ -465,7 +465,7 @@ function wireOneWayBinding(
   // local. AngularJS-canonical: the first parent-expression value is
   // captured eagerly at link time; subsequent changes flow through
   // the watcher below.
-  const initialValue = parentExpr(parentScope as unknown as Record<string, unknown>);
+  const initialValue = parentExpr(parentScope);
   target[localName] = initialValue;
   if (onChange !== undefined) {
     onChange(localName, initialValue, undefined, true);
@@ -481,7 +481,7 @@ function wireOneWayBinding(
   // notification in that case because the initial value was already
   // surfaced synchronously above.
   isolateScope.$watch(
-    () => parentExpr(parentScope as unknown as Record<string, unknown>),
+    () => parentExpr(parentScope),
     (newValue, oldValue) => {
       target[localName] = newValue;
       if (onChange === undefined) {
@@ -515,12 +515,12 @@ function wireTwoWayBinding(
   // Last-digest-value reconciliation. Each direction reads `lastValue`
   // before deciding whether to mirror; this prevents a parent→local→
   // parent→… ping-pong from breaching the digest TTL.
-  let lastValue: unknown = parentExpr(parentScope as unknown as Record<string, unknown>);
+  let lastValue: unknown = parentExpr(parentScope);
   target[localName] = lastValue;
 
   // Parent → local watcher.
   isolateScope.$watch(
-    () => parentExpr(parentScope as unknown as Record<string, unknown>),
+    () => parentExpr(parentScope),
     (newValue) => {
       if (newValue !== target[localName]) {
         target[localName] = newValue;
@@ -559,6 +559,5 @@ function wireExpressionBinding(
     return;
   }
   const parentExpr = parse(attrExpr);
-  target[localName] = (locals?: Record<string, unknown>) =>
-    parentExpr(parentScope as unknown as Record<string, unknown>, locals);
+  target[localName] = (locals?: Record<string, unknown>) => parentExpr(parentScope, locals);
 }

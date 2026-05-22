@@ -83,9 +83,9 @@ function compileToWatchFn<T>(
   const wrapper: WatchFn<Record<string, unknown>, T> = (scope: Scope) => {
     const filterLookup = scope.$root.$$filterLookup;
     if (filterLookup === undefined) {
-      return exprFn(scope as unknown as Record<string, unknown>) as T;
+      return exprFn(scope) as T;
     }
-    return exprFn(scope as unknown as Record<string, unknown>, { $$filter: filterLookup }) as T;
+    return exprFn(scope, { $$filter: filterLookup }) as T;
   };
   Object.defineProperties(wrapper, {
     oneTime: { value: exprFn.oneTime, writable: false, enumerable: true, configurable: false },
@@ -469,7 +469,7 @@ export class Scope {
   ): R | undefined {
     if (typeof expr === 'string') {
       const exprFn = parse(expr);
-      return exprFn(this as unknown as Record<string, unknown>, locals as Record<string, unknown> | undefined) as R;
+      return exprFn(this, locals as Record<string, unknown> | undefined) as R;
     }
     if (typeof expr === 'function') {
       return expr(this, locals);
@@ -482,6 +482,18 @@ export class Scope {
    *
    * @param expr - Optional expression to evaluate before digesting
    * @returns The result of the expression
+   * @throws Re-throws any error raised by `expr`. The wrapper is
+   *   `try/finally`, NOT `try/catch` — unlike upstream AngularJS, this
+   *   project's `$apply` does NOT route a throw from `expr` through
+   *   `$exceptionHandler`. Callers that must report instead of
+   *   propagate (e.g. native-DOM event-listener bridges, where a throw
+   *   would escape `dispatchEvent` to the browser's uncaught-exception
+   *   surface) MUST wrap the `$apply` call in their own `try/catch`
+   *   and route via `invokeExceptionHandler($exceptionHandler, err, …)`.
+   *   The spec 026 event directives (`src/compiler/ng-event-directives.ts`)
+   *   are the canonical precedent. See CLAUDE.md → "scope.$apply lacks
+   *   the upstream AngularJS try/catch" for the rationale and the
+   *   roadmap note about a future scope-parity spec.
    */
   $apply<R>(expr?: Parsable<Record<string, unknown>, R>): R | undefined {
     this.$beginPhase('$apply');

@@ -31,6 +31,7 @@
  */
 
 import { directiveNormalize } from './directive-normalize';
+import { isElement } from './node-guards';
 import type { NormalizedTransclude } from './transclude-types';
 
 export interface CapturedBuckets {
@@ -80,8 +81,8 @@ export function captureChildren(host: Element, transclude: NormalizedTransclude)
     const child = host.firstChild;
     host.removeChild(child);
 
-    if (child.nodeType === 1 /* ELEMENT_NODE */) {
-      const tagName = (child as Element).tagName.toLowerCase();
+    if (isElement(child)) {
+      const tagName = child.tagName.toLowerCase();
       const normalized = directiveNormalize(tagName);
       const slotName = selectorToSlotName.get(normalized);
       if (slotName !== undefined) {

@@ -57,6 +57,7 @@
 import { AttributesImpl } from './attributes';
 import { directiveNormalize } from './directive-normalize';
 import type { Directive } from './directive-types';
+import { isElement } from './node-guards';
 
 /**
  * Narrow writable view onto an {@link AttributesImpl} — used by the
@@ -104,8 +105,8 @@ export function collectDirectives(
   const attrs = new AttributesImpl(node);
   const matched: Directive[] = [];
 
-  if (node.nodeType === 1 /* Node.ELEMENT_NODE */) {
-    const element = node as Element;
+  if (isElement(node)) {
+    const element = node;
 
     // E (Element) — match by tag name.
     const elementName = directiveNormalize(element.tagName.toLowerCase());
@@ -140,7 +141,7 @@ export function collectDirectives(
     // matched list when the comment is non-directive (the most common
     // case in practice). Comments contribute neither E/A/C matches
     // nor any DOM attributes — the entire Element path is skipped.
-    collectCommentDirectives(node as Comment, attrs, matched, getDirectivesByName);
+    collectCommentDirectives(node, attrs, matched, getDirectivesByName);
   }
 
   return { directives: applySortAndTerminalCutoff(matched), attrs };

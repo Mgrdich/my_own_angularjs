@@ -103,9 +103,12 @@ import {
 } from './compile-error';
 import { describeValue } from './describe-value';
 import { collectDirectives } from './directive-collector';
+import { isNgManagedElement, NG_BOUND_TRANSCLUDE, NG_CONTROLLERS, NG_SCOPE } from './element-slots';
 import type { CompileOptions, CompileService, Directive, Linker, LinkFn, Attributes } from './directive-types';
 import { wireIsolateBindings, type NormalizedBindingMap } from './isolate-bindings';
 import { ChangesQueue, flushChangesQueue, hasHook, invokeHook, UNINITIALIZED_VALUE } from './lifecycle';
+import { NG_NON_BINDABLE_NAME } from './ng-non-bindable';
+import { isComment, isElement } from './node-guards';
 import { parseTemplate } from './template-parse';
 import { resolveRequireForm } from './require-resolver';
 import { captureChildren } from './transclude-capture';
@@ -146,8 +149,6 @@ type LinkEntry = {
  */
 type NodeLinker = (scope: Scope, cloneMap?: Map<Node, Node>) => void;
 
-const BOUND_TRANSCLUDE_SLOT = '$$ngBoundTransclude';
-
 /**
  * Internal per-`$compile`-call queue carrying the host element + URL +
  * pending directives for every `templateUrl`-declaring directive
@@ -182,22 +183,6 @@ interface DeferredTemplateEntry {
    * resumes and silently drops the install if it's set.
    */
   cancelled: boolean;
-}
-
-/**
- * Element augmented with the framework-internal cleanup slots stashed
- * by `cleanup.ts` (spec 017 Slice 10). Used here to detect whether the
- * host has been destroyed between enqueue and template-resolve.
- */
-interface NgManagedElement extends Element {
-  $$ngScope?: Scope;
-  /**
-   * Per-element controller registry (spec 022 Slice 3 — written here;
-   * spec 022 Slice 4 — read by the `require` resolver). Keyed by directive
-   * name; each value is the constructed controller instance for that
-   * directive on this element.
-   */
-  $$ngControllers?: Map<string, unknown>;
 }
 
 /**
@@ -263,10 +248,13 @@ function makeSimpleChange(currentValue: unknown, previousValue: unknown, isFirst
  * `require`); Slice 3 only writes.
  */
 function stashController(element: Element, directiveName: string, instance: unknown): void {
-  let map = (element as unknown as { $$ngControllers?: Map<string, unknown> }).$$ngControllers;
+  let map: Map<string, unknown> | undefined;
+  if (isNgManagedElement(element)) {
+    map = element[NG_CONTROLLERS];
+  }
   if (map === undefined) {
     map = new Map<string, unknown>();
-    Object.defineProperty(element, '$$ngControllers', {
+    Object.defineProperty(element, NG_CONTROLLERS, {
       value: map,
       writable: true,
       configurable: true,
@@ -1012,6 +1000,22 @@ export function createCompile(options: CompileOptions): CompileService {
       }
     }
 
+    // Spec 023 §2.6 — `ng-non-bindable` halts child descent. The
+    // AngularJS-canonical semantic broadens `terminal: true` to ALSO
+    // stop the walker from recursing into the matched element's
+    // children. Spec 017's same-element terminal cutoff (in
+    // `directive-collector.ts`) is preserved. The audit of the spec
+    // 002–022 test suite found one test (`terminal.test.ts` —
+    // "terminal does NOT affect descendants") that pinned the OLD
+    // narrower semantic with a custom `terminal: true` directive plus
+    // a child directive that asserted child compilation runs. Per the
+    // spec 023 risk-mitigation guidance (tech-considerations §3), we
+    // narrow the broadened semantic to the `ngNonBindable` name only —
+    // every existing `terminal: true` consumer keeps the spec-017
+    // same-element-only behavior. Slice 6 ships `ng-non-bindable` and
+    // is the sole consumer of this opt-out path.
+    const hasNonBindableTerminal = effectiveDirectives.some((d) => d.terminal && d.name === NG_NON_BINDABLE_NAME);
+
     // Snapshot children AFTER the compile loop runs. For transcluding
     // hosts the capture pass above already drained children, so the
     // snapshot is empty and `childLinker` becomes the noop linker —
@@ -1023,11 +1027,10 @@ export function createCompile(options: CompileOptions): CompileService {
     // template and are compiled inside the drain.
     const masterChildren: Node[] = [];
     let childLinker: NodeLinker = noopLinker;
-    if (hasChildren && !isAsyncTemplateHost) {
-      const element = node as Element;
-      for (let i = 0; i < element.childNodes.length; i++) {
-        const child = element.childNodes.item(i);
-        if (child.nodeType === 1 /* ELEMENT_NODE */ || child.nodeType === 8 /* COMMENT_NODE */) {
+    if (hasChildren && !isAsyncTemplateHost && !hasNonBindableTerminal && isElement(node)) {
+      for (let i = 0; i < node.childNodes.length; i++) {
+        const child = node.childNodes.item(i);
+        if (isElement(child) || isComment(child)) {
           masterChildren.push(child);
         }
       }
@@ -1075,7 +1078,7 @@ export function createCompile(options: CompileOptions): CompileService {
             kind: transcludeDecl.kind,
             directiveName: transcludingDirective.name,
           };
-          Object.defineProperty(target, BOUND_TRANSCLUDE_SLOT, {
+          Object.defineProperty(target, NG_BOUND_TRANSCLUDE, {
             value: bound,
             writable: true,
             configurable: true,
@@ -1148,7 +1151,7 @@ export function createCompile(options: CompileOptions): CompileService {
           kind: transcludeDecl.kind,
           directiveName: transcludingDirective.name,
         };
-        Object.defineProperty(target, BOUND_TRANSCLUDE_SLOT, {
+        Object.defineProperty(target, NG_BOUND_TRANSCLUDE, {
           value: bound,
           writable: true,
           configurable: true,
@@ -1433,7 +1436,7 @@ export function createCompile(options: CompileOptions): CompileService {
     // destroyed since enqueue OR the host's own child scope (created
     // lazily for `scope: true` inside a prior drain cycle) was
     // destroyed.
-    const elementScope = (entry.element as NgManagedElement).$$ngScope;
+    const elementScope = isNgManagedElement(entry.element) ? entry.element[NG_SCOPE] : undefined;
     if (entry.cancelled || isScopeDestroyed(elementScope) || isScopeDestroyed(entry.outerScope)) {
       return;
     }
@@ -1492,7 +1495,7 @@ export function createCompile(options: CompileOptions): CompileService {
     const childNodes: Node[] = [];
     for (let i = 0; i < element.childNodes.length; i++) {
       const child = element.childNodes.item(i);
-      if (child.nodeType === 1 /* ELEMENT_NODE */ || child.nodeType === 8 /* COMMENT_NODE */) {
+      if (isElement(child) || isComment(child)) {
         childNodes.push(child);
       }
     }
@@ -1609,7 +1612,7 @@ export function createCompile(options: CompileOptions): CompileService {
       // Recover the bound transclude (if any) so directive pre/post
       // link callbacks receive the same `$transclude` they would have
       // received synchronously. Pre-link reads the stash directly.
-      const bound = (element as unknown as Record<string, BoundTranscludeFn | undefined>)[BOUND_TRANSCLUDE_SLOT];
+      const bound = isNgManagedElement(element) ? element[NG_BOUND_TRANSCLUDE] : undefined;
       const $transclude: TranscludeFn | undefined = bound?.fn;
 
       bindAttrsToScope(attrs, scope, interpolate, exceptionHandler);
@@ -1725,7 +1728,7 @@ function pairChildren(masters: readonly Node[], cloneParent: Element, parentMap:
   const cloneChildren: Node[] = [];
   for (let i = 0; i < cloneParent.childNodes.length; i++) {
     const child = cloneParent.childNodes.item(i);
-    if (child.nodeType === 1 /* ELEMENT_NODE */ || child.nodeType === 8 /* COMMENT_NODE */) {
+    if (isElement(child) || isComment(child)) {
       cloneChildren.push(child);
     }
   }
@@ -1738,14 +1741,6 @@ function pairChildren(masters: readonly Node[], cloneParent: Element, parentMap:
     }
   }
   return extended;
-}
-
-function isElement(node: Node): node is Element {
-  return node.nodeType === 1; // Node.ELEMENT_NODE
-}
-
-function isComment(node: Node): node is Comment {
-  return node.nodeType === 8; // Node.COMMENT_NODE
 }
 
 function isNodeList(value: unknown): value is NodeList {

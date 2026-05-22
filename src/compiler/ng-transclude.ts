@@ -54,23 +54,23 @@ import { invokeExceptionHandler, type ExceptionHandler } from '@exception-handle
 
 import type { Attributes, DirectiveFactory, DirectiveFactoryReturn, LinkFn } from './directive-types';
 import { NgTranscludeMisuseError, UndeclaredTranscludeSlotError } from './compile-error';
-import type { BoundTranscludeFn } from './transclude-types';
+import { isNgManagedElement, NG_BOUND_TRANSCLUDE } from './element-slots';
 
 /**
- * Internal narrow view of an Element augmented with the stashed
- * `$$ngBoundTransclude` slot. Mirrors the `NgManagedElement` pattern
- * in `cleanup.ts`.
+ * Normalized directive name — registration in `ng-module.ts` and the
+ * `attrs[NG_TRANSCLUDE_NAME]` slot-name lookup in this file are tied
+ * together via this constant so a rename touches both at once.
  */
-interface NgBoundElement extends Element {
-  $$ngBoundTransclude?: BoundTranscludeFn;
-}
+export const NG_TRANSCLUDE_NAME = 'ngTransclude';
 
 function findBoundTransclude(element: Element) {
   let cursor: Element | null = element.parentElement;
   while (cursor !== null) {
-    const bound = (cursor as NgBoundElement).$$ngBoundTransclude;
-    if (bound !== undefined) {
-      return { host: cursor, bound };
+    if (isNgManagedElement(cursor)) {
+      const bound = cursor[NG_BOUND_TRANSCLUDE];
+      if (bound !== undefined) {
+        return { host: cursor, bound };
+      }
     }
     cursor = cursor.parentElement;
   }
@@ -78,7 +78,7 @@ function findBoundTransclude(element: Element) {
 }
 
 function resolveSlotName(attrs: Attributes) {
-  const raw = attrs['ngTransclude'];
+  const raw = attrs[NG_TRANSCLUDE_NAME];
   if (typeof raw !== 'string' || raw === '') {
     return null;
   }

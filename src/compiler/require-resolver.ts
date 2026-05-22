@@ -24,16 +24,7 @@
  */
 
 import { MissingRequiredControllerError } from './compile-error';
-
-/**
- * Element augmented with the per-element controller registry stashed by
- * the controller seam (spec 022 Slice 3 — `compile.ts:stashController`).
- * The cast through this interface is the single read-side choke point;
- * the write-side lives in `compile.ts`.
- */
-interface NgManagedElement extends Element {
-  $$ngControllers?: Map<string, unknown>;
-}
+import { isNgManagedElement, NG_CONTROLLERS } from './element-slots';
 
 /**
  * Parsed shape of a single `require` string entry.
@@ -124,7 +115,10 @@ function readController(element: Element | null, name: string): unknown {
   if (element === null) {
     return undefined;
   }
-  const map = (element as NgManagedElement).$$ngControllers;
+  if (!isNgManagedElement(element)) {
+    return undefined;
+  }
+  const map = element[NG_CONTROLLERS];
   if (map === undefined) {
     return undefined;
   }

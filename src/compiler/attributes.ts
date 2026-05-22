@@ -62,6 +62,7 @@ import type { InterpolateFn, InterpolateService } from '@interpolate/interpolate
 import { camelToKebab } from './attribute-name-utils';
 import type { Attributes, AttributesObserveFn, AttributesSetFn } from './directive-types';
 import { directiveNormalize } from './directive-normalize';
+import { isComment, isElement } from './node-guards';
 
 type ObserverFn = (value: string | undefined) => void;
 type BindToScopeFn = (scope: Scope, interpolate?: InterpolateService, exceptionHandler?: ExceptionHandler) => void;
@@ -192,10 +193,10 @@ export class AttributesImpl implements Attributes {
     // instance starts empty and the comment-matching pass in
     // `directive-collector` populates `this[normalizedName]` after
     // construction.
-    if (node.nodeType !== 1 /* Node.ELEMENT_NODE */) {
+    if (!isElement(node)) {
       return;
     }
-    const element = node as Element;
+    const element = node;
 
     for (let i = 0; i < element.attributes.length; i++) {
       const attr = element.attributes.item(i);
@@ -289,8 +290,8 @@ function $set(this: AttributesImpl, name: string, value: string | null, writeAtt
   // notify observers, but no DOM write happens because there's
   // nothing to write to.
   const element = internals.$$element;
-  if (writeAttr && element.nodeType !== 8 /* Node.COMMENT_NODE */) {
-    const targetElement = element as Element;
+  if (writeAttr && !isComment(element)) {
+    const targetElement = element;
     if (value === null) {
       const domName = this.$attr[name] ?? camelToKebab(name);
       targetElement.removeAttribute(domName);

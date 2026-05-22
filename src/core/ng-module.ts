@@ -17,7 +17,55 @@
 
 import { $CompileProvider } from '@compiler/compile-provider';
 import type { CompileService } from '@compiler/directive-types';
-import { ngTranscludeDirective } from '@compiler/ng-transclude';
+import {
+  NG_ATTR_NAME,
+  NG_BOOLEAN_ATTR_NAME,
+  ngCheckedDirective,
+  ngDisabledDirective,
+  ngHrefDirective,
+  ngOpenDirective,
+  ngReadonlyDirective,
+  ngSelectedDirective,
+  ngSrcDirective,
+  ngSrcsetDirective,
+} from '@compiler/ng-attribute-aliases';
+import { NG_BIND_NAME, ngBindDirective } from '@compiler/ng-bind';
+import { NG_BIND_HTML_NAME, ngBindHtmlDirective } from '@compiler/ng-bind-html';
+import { NG_BIND_TEMPLATE_NAME, ngBindTemplateDirective } from '@compiler/ng-bind-template';
+import {
+  NG_CLASS_EVEN_NAME,
+  NG_CLASS_NAME,
+  NG_CLASS_ODD_NAME,
+  ngClassDirective,
+  ngClassEvenDirective,
+  ngClassOddDirective,
+} from '@compiler/ng-class';
+import { ngCloakDirective } from '@compiler/ng-cloak';
+import {
+  ngBlurDirective,
+  ngClickDirective,
+  ngCopyDirective,
+  ngCutDirective,
+  ngDblclickDirective,
+  ngFocusDirective,
+  ngKeydownDirective,
+  ngKeypressDirective,
+  ngKeyupDirective,
+  ngMousedownDirective,
+  ngMouseenterDirective,
+  ngMouseleaveDirective,
+  ngMousemoveDirective,
+  ngMouseoutDirective,
+  ngMouseoverDirective,
+  ngMouseupDirective,
+  ngPasteDirective,
+  ngSubmitDirective,
+} from '@compiler/ng-event-directives';
+import { NG_HIDE_NAME, ngHideDirective } from '@compiler/ng-hide';
+import { NG_NON_BINDABLE_NAME, ngNonBindableDirective } from '@compiler/ng-non-bindable';
+import { NG_SHOW_NAME, ngShowDirective } from '@compiler/ng-show';
+import { NG_STYLE_NAME, ngStyleDirective } from '@compiler/ng-style';
+import { NG_TRANSCLUDE_NAME, ngTranscludeDirective } from '@compiler/ng-transclude';
 import { $ControllerProvider } from '@controller/controller-provider';
 import type { ControllerService } from '@controller/controller-types';
 import { createModule } from '@di/module';
@@ -147,9 +195,144 @@ export const ngModule = createModule('ng', [])
   // slot-marker directive consumed by transcluding hosts to render
   // captured content (default / named / fallback paths). See
   // `src/compiler/ng-transclude.ts` for the implementation.
+  //
+  // Spec 023 Slice 2 extends this block with `ngCloak` — the
+  // compile-only directive that removes the `ng-cloak` attribute /
+  // class once the compiler reaches the element so the
+  // consumer-shipped `[ng-cloak], .ng-cloak { display: none !important; }`
+  // CSS rule stops matching. See `src/compiler/ng-cloak.ts`.
+  //
+  // Spec 023 Slice 3 extends this block with `ngBind` and
+  // `ngBindTemplate` — the text-binding directives that set an
+  // element's `textContent` from a single expression
+  // (`<span ng-bind="user.name">`) or a multi-expression template
+  // string (`<span ng-bind-template="Hello {{name}}, today is {{day}}">`).
+  // Both escape HTML automatically via `textContent` — the
+  // security-relevant difference from spec 023 Slice 5's `ngBindHtml`.
+  // See `src/compiler/ng-bind.ts` and `src/compiler/ng-bind-template.ts`.
+  //
+  // Spec 023 Slice 4 extends this block with `ngShow` and `ngHide` —
+  // the visibility-toggle directives that add or remove the
+  // `ng-hide` CSS class on an element based on the truthiness of an
+  // expression. Both share the consumer-shipped
+  // `.ng-hide { display: none !important; }` CSS rule; toggles are
+  // synchronous in this spec (animations are deferred to Phase 4).
+  // See `src/compiler/ng-show.ts` and `src/compiler/ng-hide.ts`.
+  //
+  // Spec 023 Slice 5 extends this block with `ngBindHtml` — the
+  // trusted-HTML binding directive that evaluates an expression,
+  // routes the value through `$sce.getTrustedHtml(...)` (consuming
+  // the spec 013 `$sce` → `$sanitize` integration transparently when
+  // `ngSanitize` is loaded), and writes the result to the element's
+  // `innerHTML`. This is the security-relevant alternative to
+  // `ngBind` — use it only when the value genuinely carries markup
+  // verified safe by the SCE pipeline. See `src/compiler/ng-bind-html.ts`.
+  //
+  // Spec 023 Slice 6 extends this block with `ngNonBindable` — the
+  // subtree-opt-out directive that signals the compiler walker to
+  // skip descent into the element's children (literal `{{ }}` and
+  // directive-looking child markup stay verbatim). The directive is
+  // pure metadata (`restrict: 'AC'`, `terminal: true`, `priority: 1000`,
+  // no compile / link); the heavy lifting lives in the Slice 1 walker
+  // hook in `src/compiler/compile.ts`, narrowed to fire only when a
+  // matched directive's `name === 'ngNonBindable'`. See
+  // `src/compiler/ng-non-bindable.ts` for the file-level rationale
+  // (including the narrowing audit note).
   .config([
     '$compileProvider',
     ($compileProvider: $CompileProvider) => {
-      $compileProvider.directive('ngTransclude', ngTranscludeDirective);
+      $compileProvider.directive(NG_TRANSCLUDE_NAME, ngTranscludeDirective);
+      $compileProvider.directive('ngCloak', ngCloakDirective);
+      $compileProvider.directive(NG_BIND_NAME, ngBindDirective);
+      $compileProvider.directive(NG_BIND_HTML_NAME, ngBindHtmlDirective);
+      $compileProvider.directive(NG_BIND_TEMPLATE_NAME, ngBindTemplateDirective);
+      $compileProvider.directive(NG_SHOW_NAME, ngShowDirective);
+      $compileProvider.directive(NG_HIDE_NAME, ngHideDirective);
+      $compileProvider.directive(NG_NON_BINDABLE_NAME, ngNonBindableDirective);
+      // Spec 024 Slice 1 — `ngClass` dynamically toggles CSS classes
+      // on an element from a scope expression. Three expression forms
+      // (string / array / object) are normalized via the shared
+      // `flattenClassExpression` helper; a `$watchCollection` listener
+      // diffs the current set against the previous and only ever
+      // removes classes the directive itself added (the
+      // classes-preserved guarantee). See `src/compiler/ng-class.ts`.
+      $compileProvider.directive(NG_CLASS_NAME, ngClassDirective);
+      // Spec 024 Slice 2 — `ngClassEven` and `ngClassOdd` are
+      // index-gated variants of `ngClass` driven by `scope.$even` /
+      // `scope.$odd` (canonically set by `ng-repeat`, manually-set
+      // today). They share the same `installClassWatcher` engine as
+      // `ngClass`; the engine takes a gate predicate plus the gate's
+      // scope-property name so a secondary `scope.$watch('$even', …)`
+      // re-fires the diff when the gate flips with the expression
+      // itself unchanged. Each instance maintains its own
+      // `appliedClasses` set, so combining `ngClass` /
+      // `ngClassEven` / `ngClassOdd` on the same element works as
+      // expected — the rendered class set is the union of each
+      // directive's contribution. See `src/compiler/ng-class.ts`.
+      $compileProvider.directive(NG_CLASS_EVEN_NAME, ngClassEvenDirective);
+      $compileProvider.directive(NG_CLASS_ODD_NAME, ngClassOddDirective);
+      // Spec 024 Slice 3 — `ngStyle` dynamically sets inline CSS
+      // styles on an element from a scope expression. Object-only
+      // expression form (`{ cssProperty: value }`); a per-instance
+      // `appliedProps` set drives the diff cycle so consumer-shipped
+      // inline styles (e.g. `<div style="margin: 5px">`) are
+      // preserved unless the directive's expression later names the
+      // same property. Writes via `setProperty` / `removeProperty`,
+      // never `cssText`. See `src/compiler/ng-style.ts`.
+      $compileProvider.directive(NG_STYLE_NAME, ngStyleDirective);
+      // Spec 025 Slice 1 — interpolation-safe URL/value attribute
+      // aliases (`ngHref`, `ngSrc`, `ngSrcset`). Each watches the
+      // interpolated value of the `ng`-prefixed attribute via
+      // `attrs.$observe` and writes through to the real DOM
+      // attribute via `attrs.$set`, so the browser never sees the
+      // literal `{{ … }}` mustache string (avoids the pre-compile
+      // navigation / network-fetch bug). Priority 99 — load-bearing
+      // for AngularJS-1.x parity. See
+      // `src/compiler/ng-attribute-aliases.ts`.
+      $compileProvider.directive(NG_ATTR_NAME.href, ngHrefDirective);
+      $compileProvider.directive(NG_ATTR_NAME.src, ngSrcDirective);
+      $compileProvider.directive(NG_ATTR_NAME.srcset, ngSrcsetDirective);
+      // Spec 025 Slice 2 — boolean attribute alias directives
+      // (`ngDisabled`, `ngChecked`, `ngReadonly`, `ngSelected`,
+      // `ngOpen`). Each watches a scope expression (NOT an
+      // interpolation) via `scope.$watch` and adds/removes the real
+      // boolean DOM attribute through `attrs.$set` — truthy →
+      // `setAttribute(name, '')` (bare-presence form, equivalent to
+      // `<button disabled>` per HTML5), falsy → `removeAttribute(name)`.
+      // Priority 100 — one notch above the URL aliases at 99, matching
+      // AngularJS-1.x parity. See `src/compiler/ng-attribute-aliases.ts`.
+      $compileProvider.directive(NG_BOOLEAN_ATTR_NAME.checked, ngCheckedDirective);
+      $compileProvider.directive(NG_BOOLEAN_ATTR_NAME.disabled, ngDisabledDirective);
+      $compileProvider.directive(NG_BOOLEAN_ATTR_NAME.open, ngOpenDirective);
+      $compileProvider.directive(NG_BOOLEAN_ATTR_NAME.readonly, ngReadonlyDirective);
+      $compileProvider.directive(NG_BOOLEAN_ATTR_NAME.selected, ngSelectedDirective);
+      // Spec 026 — native event-binding directives. Eighteen
+      // directives, ONE mechanical pattern (register native listener,
+      // parse expression once at compile time, evaluate inside
+      // `scope.$apply()` — or `scope.$evalAsync()` when a digest is in
+      // flight — with `$event` exposed as a local, cleanup on
+      // `$destroy`). All eighteen live in a single source file driven
+      // by a module-private `createEventDirective(eventName)` factory
+      // helper; the `eventName` parameter is the 18-member
+      // `EventName` string-literal union derived from the
+      // `EVENT_NAMES` tuple. See `src/compiler/ng-event-directives.ts`.
+      $compileProvider.directive('ngBlur', ngBlurDirective);
+      $compileProvider.directive('ngClick', ngClickDirective);
+      $compileProvider.directive('ngCopy', ngCopyDirective);
+      $compileProvider.directive('ngCut', ngCutDirective);
+      $compileProvider.directive('ngDblclick', ngDblclickDirective);
+      $compileProvider.directive('ngFocus', ngFocusDirective);
+      $compileProvider.directive('ngKeydown', ngKeydownDirective);
+      $compileProvider.directive('ngKeypress', ngKeypressDirective);
+      $compileProvider.directive('ngKeyup', ngKeyupDirective);
+      $compileProvider.directive('ngMousedown', ngMousedownDirective);
+      $compileProvider.directive('ngMouseenter', ngMouseenterDirective);
+      $compileProvider.directive('ngMouseleave', ngMouseleaveDirective);
+      $compileProvider.directive('ngMousemove', ngMousemoveDirective);
+      $compileProvider.directive('ngMouseout', ngMouseoutDirective);
+      $compileProvider.directive('ngMouseover', ngMouseoverDirective);
+      $compileProvider.directive('ngMouseup', ngMouseupDirective);
+      $compileProvider.directive('ngPaste', ngPasteDirective);
+      $compileProvider.directive('ngSubmit', ngSubmitDirective);
     },
   ]);
