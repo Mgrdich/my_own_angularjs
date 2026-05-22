@@ -56,19 +56,29 @@ export interface NgManagedElement extends Element {
 }
 
 /**
- * Type-predicate guard: `true` when `el` has a non-`undefined`
- * {@link NG_BOUND_TRANSCLUDE} slot — i.e. the element is the host of a
- * transcluding directive that captured children at compile time. Inside
- * the truthy branch TypeScript narrows `el` so `el[NG_BOUND_TRANSCLUDE]`
- * is `BoundTranscludeFn` (no `| undefined`) and no inline cast is
- * needed.
+ * Type-predicate guard: `true` when `el` carries any framework-managed
+ * stash slot (i.e. the compiler has touched the element). Inside the
+ * truthy branch TypeScript narrows `el` to {@link NgManagedElement} so
+ * the optional slot fields can be read without an inline cast.
+ *
+ * Implementation uses the `in` operator — no `as` cast in the body —
+ * so the guard is a real runtime check, not a type-system fiction. A
+ * slot is created via `Object.defineProperty`, so once any slot has
+ * been set on an element the corresponding key sticks around (cleanup
+ * sets the value to `undefined` but does not `delete` the descriptor),
+ * meaning a previously-managed element keeps reporting `true` even
+ * after teardown — callers that care about live values must do their
+ * own per-slot `!== undefined` check inside the truthy branch.
  *
  * ```ts
- * if (hasBoundTransclude(cursor)) {
- *   const bound = cursor[NG_BOUND_TRANSCLUDE]; // BoundTranscludeFn
+ * if (isNgManagedElement(cursor)) {
+ *   const bound = cursor[NG_BOUND_TRANSCLUDE];
+ *   if (bound !== undefined) {
+ *     // …
+ *   }
  * }
  * ```
  */
-export function hasBoundTransclude(el: Element): el is NgManagedElement & { [NG_BOUND_TRANSCLUDE]: BoundTranscludeFn } {
-  return Reflect.get(el, NG_BOUND_TRANSCLUDE) !== undefined;
+export function isNgManagedElement(el: Element): el is NgManagedElement {
+  return NG_SCOPE in el || NG_CLEANUP_QUEUE in el || NG_CONTROLLERS in el || NG_BOUND_TRANSCLUDE in el;
 }
