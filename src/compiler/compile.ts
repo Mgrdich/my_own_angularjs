@@ -103,11 +103,12 @@ import {
 } from './compile-error';
 import { describeValue } from './describe-value';
 import { collectDirectives } from './directive-collector';
-import { NG_BOUND_TRANSCLUDE, NG_CONTROLLERS, type NgManagedElement } from './element-slots';
+import { isNgManagedElement, NG_BOUND_TRANSCLUDE, NG_CONTROLLERS, NG_SCOPE } from './element-slots';
 import type { CompileOptions, CompileService, Directive, Linker, LinkFn, Attributes } from './directive-types';
 import { wireIsolateBindings, type NormalizedBindingMap } from './isolate-bindings';
 import { ChangesQueue, flushChangesQueue, hasHook, invokeHook, UNINITIALIZED_VALUE } from './lifecycle';
 import { NG_NON_BINDABLE_NAME } from './ng-non-bindable';
+import { isComment, isElement } from './node-guards';
 import { parseTemplate } from './template-parse';
 import { resolveRequireForm } from './require-resolver';
 import { captureChildren } from './transclude-capture';
@@ -247,7 +248,10 @@ function makeSimpleChange(currentValue: unknown, previousValue: unknown, isFirst
  * `require`); Slice 3 only writes.
  */
 function stashController(element: Element, directiveName: string, instance: unknown): void {
-  let map = (element as NgManagedElement)[NG_CONTROLLERS];
+  let map: Map<string, unknown> | undefined;
+  if (isNgManagedElement(element)) {
+    map = element[NG_CONTROLLERS];
+  }
   if (map === undefined) {
     map = new Map<string, unknown>();
     Object.defineProperty(element, NG_CONTROLLERS, {
@@ -1023,11 +1027,10 @@ export function createCompile(options: CompileOptions): CompileService {
     // template and are compiled inside the drain.
     const masterChildren: Node[] = [];
     let childLinker: NodeLinker = noopLinker;
-    if (hasChildren && !isAsyncTemplateHost && !hasNonBindableTerminal) {
-      const element = node as Element;
-      for (let i = 0; i < element.childNodes.length; i++) {
-        const child = element.childNodes.item(i);
-        if (child.nodeType === 1 /* ELEMENT_NODE */ || child.nodeType === 8 /* COMMENT_NODE */) {
+    if (hasChildren && !isAsyncTemplateHost && !hasNonBindableTerminal && isElement(node)) {
+      for (let i = 0; i < node.childNodes.length; i++) {
+        const child = node.childNodes.item(i);
+        if (isElement(child) || isComment(child)) {
           masterChildren.push(child);
         }
       }
@@ -1433,7 +1436,7 @@ export function createCompile(options: CompileOptions): CompileService {
     // destroyed since enqueue OR the host's own child scope (created
     // lazily for `scope: true` inside a prior drain cycle) was
     // destroyed.
-    const elementScope = (entry.element as NgManagedElement).$$ngScope;
+    const elementScope = isNgManagedElement(entry.element) ? entry.element[NG_SCOPE] : undefined;
     if (entry.cancelled || isScopeDestroyed(elementScope) || isScopeDestroyed(entry.outerScope)) {
       return;
     }
@@ -1492,7 +1495,7 @@ export function createCompile(options: CompileOptions): CompileService {
     const childNodes: Node[] = [];
     for (let i = 0; i < element.childNodes.length; i++) {
       const child = element.childNodes.item(i);
-      if (child.nodeType === 1 /* ELEMENT_NODE */ || child.nodeType === 8 /* COMMENT_NODE */) {
+      if (isElement(child) || isComment(child)) {
         childNodes.push(child);
       }
     }
@@ -1609,7 +1612,7 @@ export function createCompile(options: CompileOptions): CompileService {
       // Recover the bound transclude (if any) so directive pre/post
       // link callbacks receive the same `$transclude` they would have
       // received synchronously. Pre-link reads the stash directly.
-      const bound = (element as NgManagedElement)[NG_BOUND_TRANSCLUDE];
+      const bound = isNgManagedElement(element) ? element[NG_BOUND_TRANSCLUDE] : undefined;
       const $transclude: TranscludeFn | undefined = bound?.fn;
 
       bindAttrsToScope(attrs, scope, interpolate, exceptionHandler);
@@ -1725,7 +1728,7 @@ function pairChildren(masters: readonly Node[], cloneParent: Element, parentMap:
   const cloneChildren: Node[] = [];
   for (let i = 0; i < cloneParent.childNodes.length; i++) {
     const child = cloneParent.childNodes.item(i);
-    if (child.nodeType === 1 /* ELEMENT_NODE */ || child.nodeType === 8 /* COMMENT_NODE */) {
+    if (isElement(child) || isComment(child)) {
       cloneChildren.push(child);
     }
   }
@@ -1738,14 +1741,6 @@ function pairChildren(masters: readonly Node[], cloneParent: Element, parentMap:
     }
   }
   return extended;
-}
-
-function isElement(node: Node): node is Element {
-  return node.nodeType === 1; // Node.ELEMENT_NODE
-}
-
-function isComment(node: Node): node is Comment {
-  return node.nodeType === 8; // Node.COMMENT_NODE
 }
 
 function isNodeList(value: unknown): value is NodeList {

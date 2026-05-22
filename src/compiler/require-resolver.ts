@@ -24,7 +24,7 @@
  */
 
 import { MissingRequiredControllerError } from './compile-error';
-import { NG_CONTROLLERS, type NgManagedElement } from './element-slots';
+import { isNgManagedElement, NG_CONTROLLERS } from './element-slots';
 
 /**
  * Parsed shape of a single `require` string entry.
@@ -115,7 +115,10 @@ function readController(element: Element | null, name: string): unknown {
   if (element === null) {
     return undefined;
   }
-  const map = (element as NgManagedElement)[NG_CONTROLLERS];
+  if (!isNgManagedElement(element)) {
+    return undefined;
+  }
+  const map = element[NG_CONTROLLERS];
   if (map === undefined) {
     return undefined;
   }

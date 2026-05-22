@@ -33,7 +33,7 @@
 
 import type { Scope } from '@core/index';
 
-import { NG_CLEANUP_QUEUE, NG_SCOPE, type NgManagedElement } from './element-slots';
+import { isNgManagedElement, NG_CLEANUP_QUEUE, NG_SCOPE } from './element-slots';
 
 /**
  * Stash the child {@link Scope} created for this element on the
@@ -66,7 +66,10 @@ export function setElementScope(element: Element, scope: Scope): void {
  * stashed (the common case for `scope: false` elements).
  */
 export function getElementScope(element: Element): Scope | undefined {
-  return (element as NgManagedElement).$$ngScope;
+  if (!isNgManagedElement(element)) {
+    return undefined;
+  }
+  return element[NG_SCOPE];
 }
 
 /**
@@ -83,17 +86,20 @@ export function getElementScope(element: Element): Scope | undefined {
  * ```
  */
 export function addElementCleanup(element: Element, fn: () => void): void {
-  const managed = element as NgManagedElement;
-  if (managed.$$ngCleanupQueue === undefined) {
+  let queue: (() => void)[] | undefined;
+  if (isNgManagedElement(element)) {
+    queue = element[NG_CLEANUP_QUEUE];
+  }
+  if (queue === undefined) {
+    queue = [];
     Object.defineProperty(element, NG_CLEANUP_QUEUE, {
-      value: [] as (() => void)[],
+      value: queue,
       writable: true,
       configurable: true,
       enumerable: false,
     });
   }
-  // Non-null after the lazy-init branch above.
-  (managed.$$ngCleanupQueue as (() => void)[]).push(fn);
+  queue.push(fn);
 }
 
 /**
@@ -137,13 +143,17 @@ export function destroyElementScope(element: Element): void {
     }
   }
 
-  const managed = element as NgManagedElement;
+  if (!isNgManagedElement(element)) {
+    // Nothing framework-managed on this node — children were handled
+    // above; there's no queue or scope to tear down here.
+    return;
+  }
 
   // Run cleanup queue entries in INSERTION order. Per-entry errors
   // are collected; after the queue completes, if any errors occurred
   // we re-throw the FIRST one. This guarantees every entry got its
   // chance to run even if an early one threw.
-  const queue = managed.$$ngCleanupQueue;
+  const queue = element[NG_CLEANUP_QUEUE];
   let firstError: unknown;
   let hasError = false;
   if (queue !== undefined) {
@@ -164,7 +174,7 @@ export function destroyElementScope(element: Element): void {
   // `scope.$emit(...)` or `scope.$broadcast(...)` for last-chance
   // notifications, and that's only meaningful before `$destroy`
   // tears down the listener tree.
-  const scope = managed.$$ngScope;
+  const scope = element[NG_SCOPE];
   if (scope !== undefined) {
     scope.$destroy();
   }
@@ -174,7 +184,7 @@ export function destroyElementScope(element: Element): void {
   // non-enumerable + configurable descriptor flags so a future
   // `setElementScope` / `addElementCleanup` on the same element
   // still works cleanly.
-  if (managed.$$ngCleanupQueue !== undefined) {
+  if (queue !== undefined) {
     Object.defineProperty(element, NG_CLEANUP_QUEUE, {
       value: undefined,
       writable: true,
@@ -182,7 +192,7 @@ export function destroyElementScope(element: Element): void {
       enumerable: false,
     });
   }
-  if (managed.$$ngScope !== undefined) {
+  if (scope !== undefined) {
     Object.defineProperty(element, NG_SCOPE, {
       value: undefined,
       writable: true,

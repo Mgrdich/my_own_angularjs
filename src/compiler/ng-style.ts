@@ -103,6 +103,7 @@
  */
 
 import type { DirectiveFactory, DirectiveFactoryReturn, LinkFn } from './directive-types';
+import { isStyleableElement } from './node-guards';
 
 /**
  * Normalized directive name — registration in `ng-module.ts` and the
@@ -233,13 +234,15 @@ function ngStyleFactory(): DirectiveFactoryReturn {
     // this is the styles-preserved guarantee.
     let appliedProps: Set<StyleName> = new Set<StyleName>();
 
-    // `Element` is the directive-link signature — narrow once to
-    // `HTMLElement` for the `.style` access. Comment-restricted
-    // matches never reach `ng-style` (attribute-restricted directive),
-    // so the only non-`HTMLElement` shape that could in principle
-    // appear is an SVG element — which also implements
-    // `ElementCSSInlineStyle` and is structurally compatible.
-    const style = (element as HTMLElement).style;
+    // `Element` is the directive-link signature — narrow once to a
+    // style-bearing element for the `.style` access. Comment-restricted
+    // matches never reach `ng-style` (attribute-restricted directive);
+    // `isStyleableElement` admits both `HTMLElement` and `SVGElement`
+    // since both implement `ElementCSSInlineStyle`.
+    if (!isStyleableElement(element)) {
+      return;
+    }
+    const { style } = element;
 
     scope.$watchCollection(expr, (value: unknown) => {
       const newProps = resolveStyleProps(value);
