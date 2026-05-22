@@ -18,6 +18,8 @@
 import { $CompileProvider } from '@compiler/compile-provider';
 import type { CompileService } from '@compiler/directive-types';
 import {
+  NG_ATTR_NAME,
+  NG_BOOLEAN_ATTR_NAME,
   ngCheckedDirective,
   ngDisabledDirective,
   ngHrefDirective,
@@ -287,9 +289,9 @@ export const ngModule = createModule('ng', [])
       // navigation / network-fetch bug). Priority 99 — load-bearing
       // for AngularJS-1.x parity. See
       // `src/compiler/ng-attribute-aliases.ts`.
-      $compileProvider.directive('ngHref', ngHrefDirective);
-      $compileProvider.directive('ngSrc', ngSrcDirective);
-      $compileProvider.directive('ngSrcset', ngSrcsetDirective);
+      $compileProvider.directive(NG_ATTR_NAME.href, ngHrefDirective);
+      $compileProvider.directive(NG_ATTR_NAME.src, ngSrcDirective);
+      $compileProvider.directive(NG_ATTR_NAME.srcset, ngSrcsetDirective);
       // Spec 025 Slice 2 — boolean attribute alias directives
       // (`ngDisabled`, `ngChecked`, `ngReadonly`, `ngSelected`,
       // `ngOpen`). Each watches a scope expression (NOT an
@@ -299,11 +301,11 @@ export const ngModule = createModule('ng', [])
       // `<button disabled>` per HTML5), falsy → `removeAttribute(name)`.
       // Priority 100 — one notch above the URL aliases at 99, matching
       // AngularJS-1.x parity. See `src/compiler/ng-attribute-aliases.ts`.
-      $compileProvider.directive('ngChecked', ngCheckedDirective);
-      $compileProvider.directive('ngDisabled', ngDisabledDirective);
-      $compileProvider.directive('ngOpen', ngOpenDirective);
-      $compileProvider.directive('ngReadonly', ngReadonlyDirective);
-      $compileProvider.directive('ngSelected', ngSelectedDirective);
+      $compileProvider.directive(NG_BOOLEAN_ATTR_NAME.checked, ngCheckedDirective);
+      $compileProvider.directive(NG_BOOLEAN_ATTR_NAME.disabled, ngDisabledDirective);
+      $compileProvider.directive(NG_BOOLEAN_ATTR_NAME.open, ngOpenDirective);
+      $compileProvider.directive(NG_BOOLEAN_ATTR_NAME.readonly, ngReadonlyDirective);
+      $compileProvider.directive(NG_BOOLEAN_ATTR_NAME.selected, ngSelectedDirective);
       // Spec 026 — native event-binding directives. Eighteen
       // directives, ONE mechanical pattern (register native listener,
       // parse expression once at compile time, evaluate inside

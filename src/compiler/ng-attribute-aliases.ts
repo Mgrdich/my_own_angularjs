@@ -63,7 +63,7 @@ import type { DirectiveFactory, DirectiveFactoryReturn, LinkFn } from './directi
  * parameter so unrelated attribute names (`'class'`, `'style'`) cannot
  * be passed by accident.
  */
-const NG_ATTR_NAME: { readonly href: 'ngHref'; readonly src: 'ngSrc'; readonly srcset: 'ngSrcset' } = {
+export const NG_ATTR_NAME: { readonly href: 'ngHref'; readonly src: 'ngSrc'; readonly srcset: 'ngSrcset' } = {
   href: 'ngHref',
   src: 'ngSrc',
   srcset: 'ngSrcset',
@@ -229,7 +229,7 @@ export const ngSrcsetDirective = createUrlAliasDirective('srcset');
  * are visible as literals, and the type narrows the helper's parameter
  * so only the five supported boolean attributes can be passed.
  */
-const NG_BOOLEAN_ATTR_NAME: {
+export const NG_BOOLEAN_ATTR_NAME: {
   readonly disabled: 'ngDisabled';
   readonly checked: 'ngChecked';
   readonly readonly: 'ngReadonly';
