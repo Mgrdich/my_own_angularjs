@@ -91,6 +91,15 @@ import { flattenClassExpression } from './class-expression';
 import type { DirectiveFactory, DirectiveFactoryReturn, LinkFn } from './directive-types';
 
 /**
+ * Normalized directive names — registrations in `ng-module.ts` and the
+ * `attrs[…]` lookups in this file are tied together via these constants
+ * so a rename touches both sites at once.
+ */
+export const NG_CLASS_NAME = 'ngClass';
+export const NG_CLASS_EVEN_NAME = 'ngClassEven';
+export const NG_CLASS_ODD_NAME = 'ngClassOdd';
+
+/**
  * Gate predicate consumed by {@link installClassWatcher}. Returns `true`
  * to allow the resolved class set through to the DOM, `false` to apply
  * an empty set (which, via the diff, REMOVES any previously-applied
@@ -188,7 +197,7 @@ function installClassWatcher(
 
 function ngClassFactory(): DirectiveFactoryReturn {
   const link: LinkFn = (scope, element, attrs) => {
-    const expr = attrs['ngClass'];
+    const expr = attrs[NG_CLASS_NAME];
     if (typeof expr !== 'string') {
       // Defensive — `attrs['ngClass']` is typed as `string | undefined`
       // through the index signature. If the attribute is missing
@@ -207,7 +216,7 @@ function ngClassFactory(): DirectiveFactoryReturn {
 
 function ngClassEvenFactory(): DirectiveFactoryReturn {
   const link: LinkFn = (scope, element, attrs) => {
-    const expr = attrs['ngClassEven'];
+    const expr = attrs[NG_CLASS_EVEN_NAME];
     if (typeof expr !== 'string') {
       return;
     }
@@ -227,7 +236,7 @@ function ngClassEvenFactory(): DirectiveFactoryReturn {
 
 function ngClassOddFactory(): DirectiveFactoryReturn {
   const link: LinkFn = (scope, element, attrs) => {
-    const expr = attrs['ngClassOdd'];
+    const expr = attrs[NG_CLASS_ODD_NAME];
     if (typeof expr !== 'string') {
       return;
     }

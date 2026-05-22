@@ -68,9 +68,16 @@
 
 import type { DirectiveFactory, DirectiveFactoryReturn, LinkFn } from './directive-types';
 
+/**
+ * Normalized directive name — registration in `ng-module.ts` and the
+ * `attrs[NG_HIDE_NAME]` lookup in this file are tied together via this
+ * constant so a rename touches both at once.
+ */
+export const NG_HIDE_NAME = 'ngHide';
+
 function ngHideFactory(): DirectiveFactoryReturn {
   const link: LinkFn = (scope, element, attrs) => {
-    const expr = attrs['ngHide'];
+    const expr = attrs[NG_HIDE_NAME];
     if (typeof expr !== 'string') {
       // Defensive — `attrs['ngHide']` is typed as `string | undefined`
       // through the index signature. If the attribute is missing

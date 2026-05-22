@@ -56,6 +56,13 @@ import type { Attributes, DirectiveFactory, DirectiveFactoryReturn, LinkFn } fro
 import { NgTranscludeMisuseError, UndeclaredTranscludeSlotError } from './compile-error';
 import { isNgManagedElement, NG_BOUND_TRANSCLUDE } from './element-slots';
 
+/**
+ * Normalized directive name — registration in `ng-module.ts` and the
+ * `attrs[NG_TRANSCLUDE_NAME]` slot-name lookup in this file are tied
+ * together via this constant so a rename touches both at once.
+ */
+export const NG_TRANSCLUDE_NAME = 'ngTransclude';
+
 function findBoundTransclude(element: Element) {
   let cursor: Element | null = element.parentElement;
   while (cursor !== null) {
@@ -71,7 +78,7 @@ function findBoundTransclude(element: Element) {
 }
 
 function resolveSlotName(attrs: Attributes) {
-  const raw = attrs['ngTransclude'];
+  const raw = attrs[NG_TRANSCLUDE_NAME];
   if (typeof raw !== 'string' || raw === '') {
     return null;
   }

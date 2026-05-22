@@ -62,9 +62,16 @@
 
 import type { DirectiveFactory, DirectiveFactoryReturn, LinkFn } from './directive-types';
 
+/**
+ * Normalized directive name — registration in `ng-module.ts` and the
+ * `attrs[NG_BIND_NAME]` lookup in this file are tied together via this
+ * constant so a rename touches both at once.
+ */
+export const NG_BIND_NAME = 'ngBind';
+
 function ngBindFactory(): DirectiveFactoryReturn {
   const link: LinkFn = (scope, element, attrs) => {
-    const expr = attrs['ngBind'];
+    const expr = attrs[NG_BIND_NAME];
     if (typeof expr !== 'string') {
       // Defensive — `attrs['ngBind']` is typed as `string | undefined`
       // through the index signature. If the attribute is missing

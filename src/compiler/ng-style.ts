@@ -105,6 +105,13 @@
 import type { DirectiveFactory, DirectiveFactoryReturn, LinkFn } from './directive-types';
 
 /**
+ * Normalized directive name — registration in `ng-module.ts` and the
+ * `attrs[NG_STYLE_NAME]` lookup in this file are tied together via this
+ * constant so a rename touches both at once.
+ */
+export const NG_STYLE_NAME = 'ngStyle';
+
+/**
  * Compute the set of property names contributed by `value`. Only plain
  * objects (`typeof === 'object'`, non-null, non-array) contribute keys;
  * every other shape — including arrays, primitives, and `null` /
@@ -166,7 +173,7 @@ function clearStyle(style: CSSStyleDeclaration, name: string): void {
 
 function ngStyleFactory(): DirectiveFactoryReturn {
   const link: LinkFn = (scope, element, attrs) => {
-    const expr = attrs['ngStyle'];
+    const expr = attrs[NG_STYLE_NAME];
     if (typeof expr !== 'string') {
       // Defensive — `attrs['ngStyle']` is typed as `string | undefined`
       // through the index signature. If the attribute is missing

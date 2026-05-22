@@ -68,9 +68,16 @@ import type { InterpolateFn, InterpolateService } from '@interpolate/interpolate
 
 import type { DirectiveFactory, DirectiveFactoryReturn, LinkFn } from './directive-types';
 
+/**
+ * Normalized directive name — registration in `ng-module.ts` and the
+ * `attrs[NG_BIND_TEMPLATE_NAME]` lookup in this file are tied together
+ * via this constant so a rename touches both at once.
+ */
+export const NG_BIND_TEMPLATE_NAME = 'ngBindTemplate';
+
 function ngBindTemplateFactory($interpolate: InterpolateService): DirectiveFactoryReturn {
   const link: LinkFn = (scope, element, attrs) => {
-    const template = attrs['ngBindTemplate'];
+    const template = attrs[NG_BIND_TEMPLATE_NAME];
     if (typeof template !== 'string') {
       // Defensive — see ngBind for the same bailout pattern.
       return;
