@@ -1,7 +1,7 @@
 # Functional Specification: Event Directives
 
 - **Roadmap Item:** Phase 2 → Directives & DOM Compilation → Built-in Directives (Mouse + Keyboard + Clipboard/focus/form-lifecycle event subsets — three sub-bullets bundled)
-- **Status:** Draft
+- **Status:** Completed
 - **Author:** Mgrdich
 
 ---
@@ -59,42 +59,42 @@ The eighteen directives, organized by event family:
 
 - **As a template author**, I want to bind a scope expression to a native DOM event on an element, so the expression runs whenever the user triggers that event.
   - **Acceptance Criteria:**
-    - [ ] Each of the eighteen directives, when written as an attribute on an element (e.g. `<button ng-click="save()">`), registers a listener for the corresponding native DOM event on that element.
-    - [ ] When the event fires, the directive evaluates the bound expression with the scope as its context.
-    - [ ] The expression is evaluated **inside `scope.$apply(...)`** — state changes made by the expression trigger a digest, so other parts of the application that watch related state see the update.
-    - [ ] If the expression throws, the error is reported through the framework's exception handler (the digest's standard error-routing path); the listener does not crash the page, and subsequent events still fire correctly.
-    - [ ] The directive only matches **as an attribute** — `<ng-click>` (element form) and class-based forms (`<button class="ng-click: …">`) do not trigger it. This is the AngularJS-canonical restriction.
+    - [x] Each of the eighteen directives, when written as an attribute on an element (e.g. `<button ng-click="save()">`), registers a listener for the corresponding native DOM event on that element.
+    - [x] When the event fires, the directive evaluates the bound expression with the scope as its context.
+    - [x] The expression is evaluated **inside `scope.$apply(...)`** — state changes made by the expression trigger a digest, so other parts of the application that watch related state see the update.
+    - [x] If the expression throws, the error is reported through the framework's exception handler (the digest's standard error-routing path); the listener does not crash the page, and subsequent events still fire correctly.
+    - [x] The directive only matches **as an attribute** — `<ng-click>` (element form) and class-based forms (`<button class="ng-click: …">`) do not trigger it. This is the AngularJS-canonical restriction.
 
 ### 2.2 The `$event` local
 
 - **As a template author**, I want to read properties of the native event (e.g. the pressed key, the target element, the mouse coordinates) inside the handler expression, so I can branch behavior on the event details without writing a separate JavaScript helper.
   - **Acceptance Criteria:**
-    - [ ] Inside the bound expression, the identifier `$event` resolves to the native DOM event object that fired the listener.
-    - [ ] `$event` is **local to the expression evaluation** — it is not assigned to the scope and does not persist beyond that single invocation.
-    - [ ] The expression can pass `$event` to a scope function: `<button ng-click="handle($event)">` calls `scope.handle(theNativeEvent)`.
-    - [ ] The expression can read properties directly: `<input ng-keydown="key = $event.key">` assigns the pressed key to a scope property.
+    - [x] Inside the bound expression, the identifier `$event` resolves to the native DOM event object that fired the listener.
+    - [x] `$event` is **local to the expression evaluation** — it is not assigned to the scope and does not persist beyond that single invocation.
+    - [x] The expression can pass `$event` to a scope function: `<button ng-click="handle($event)">` calls `scope.handle(theNativeEvent)`.
+    - [x] The expression can read properties directly: `<input ng-keydown="key = $event.key">` assigns the pressed key to a scope property.
 
 ### 2.3 Listener cleanup
 
 - **As a framework consumer**, I want event listeners attached by these directives to clean up automatically when the surrounding scope is destroyed, so the application does not leak listeners or fire handlers against destroyed scopes.
   - **Acceptance Criteria:**
-    - [ ] When the element's scope is destroyed (via the standard scope-destruction mechanism), the event listener is removed from the element.
-    - [ ] After scope destruction, a subsequently-fired event on the same element (if any reference to it persists) does not invoke the expression.
+    - [x] When the element's scope is destroyed (via the standard scope-destruction mechanism), the event listener is removed from the element.
+    - [x] After scope destruction, a subsequently-fired event on the same element (if any reference to it persists) does not invoke the expression.
 
 ### 2.4 Multiple event directives on the same element
 
 - **As a template author**, I want to attach multiple event handlers to the same element via different `ng-*` directives, so a single button can respond to clicks, mouseovers, and keyboard focus independently.
   - **Acceptance Criteria:**
-    - [ ] An element with multiple event directives (e.g. `<button ng-click="a()" ng-mouseover="b()" ng-focus="c()">`) registers each as an independent listener.
-    - [ ] Each listener fires only for its own event and runs only its own bound expression.
-    - [ ] The relative order of listener registration matches the order the directives are listed on the element (mirrors AngularJS-canonical).
+    - [x] An element with multiple event directives (e.g. `<button ng-click="a()" ng-mouseover="b()" ng-focus="c()">`) registers each as an independent listener.
+    - [x] Each listener fires only for its own event and runs only its own bound expression.
+    - [x] The relative order of listener registration matches the order the directives are listed on the element (mirrors AngularJS-canonical).
 
 ### 2.5 Module integration
 
 - **As a framework consumer**, I want all eighteen directives available without doing anything special — loading the core framework should make them work.
   - **Acceptance Criteria:**
-    - [ ] All eighteen directives are registered automatically when an app's module declares a dependency on the core framework module.
-    - [ ] A developer can replace any of them via the standard module-DSL mechanisms (`.directive`, `.decorator`) — these are built-ins, not hardcoded behavior.
+    - [x] All eighteen directives are registered automatically when an app's module declares a dependency on the core framework module.
+    - [x] A developer can replace any of them via the standard module-DSL mechanisms (`.directive`, `.decorator`) — these are built-ins, not hardcoded behavior.
 
 ---
 

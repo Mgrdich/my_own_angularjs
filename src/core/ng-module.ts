@@ -32,6 +32,26 @@ import { ngBindHtmlDirective } from '@compiler/ng-bind-html';
 import { ngBindTemplateDirective } from '@compiler/ng-bind-template';
 import { ngClassDirective, ngClassEvenDirective, ngClassOddDirective } from '@compiler/ng-class';
 import { ngCloakDirective } from '@compiler/ng-cloak';
+import {
+  ngBlurDirective,
+  ngClickDirective,
+  ngCopyDirective,
+  ngCutDirective,
+  ngDblclickDirective,
+  ngFocusDirective,
+  ngKeydownDirective,
+  ngKeypressDirective,
+  ngKeyupDirective,
+  ngMousedownDirective,
+  ngMouseenterDirective,
+  ngMouseleaveDirective,
+  ngMousemoveDirective,
+  ngMouseoutDirective,
+  ngMouseoverDirective,
+  ngMouseupDirective,
+  ngPasteDirective,
+  ngSubmitDirective,
+} from '@compiler/ng-event-directives';
 import { ngHideDirective } from '@compiler/ng-hide';
 import { ngNonBindableDirective } from '@compiler/ng-non-bindable';
 import { ngShowDirective } from '@compiler/ng-show';
@@ -277,5 +297,33 @@ export const ngModule = createModule('ng', [])
       $compileProvider.directive('ngOpen', ngOpenDirective);
       $compileProvider.directive('ngReadonly', ngReadonlyDirective);
       $compileProvider.directive('ngSelected', ngSelectedDirective);
+      // Spec 026 — native event-binding directives. Eighteen
+      // directives, ONE mechanical pattern (register native listener,
+      // parse expression once at compile time, evaluate inside
+      // `scope.$apply()` — or `scope.$evalAsync()` when a digest is in
+      // flight — with `$event` exposed as a local, cleanup on
+      // `$destroy`). All eighteen live in a single source file driven
+      // by a module-private `createEventDirective(eventName)` factory
+      // helper; the `eventName` parameter is the 18-member
+      // `EventName` string-literal union derived from the
+      // `EVENT_NAMES` tuple. See `src/compiler/ng-event-directives.ts`.
+      $compileProvider.directive('ngBlur', ngBlurDirective);
+      $compileProvider.directive('ngClick', ngClickDirective);
+      $compileProvider.directive('ngCopy', ngCopyDirective);
+      $compileProvider.directive('ngCut', ngCutDirective);
+      $compileProvider.directive('ngDblclick', ngDblclickDirective);
+      $compileProvider.directive('ngFocus', ngFocusDirective);
+      $compileProvider.directive('ngKeydown', ngKeydownDirective);
+      $compileProvider.directive('ngKeypress', ngKeypressDirective);
+      $compileProvider.directive('ngKeyup', ngKeyupDirective);
+      $compileProvider.directive('ngMousedown', ngMousedownDirective);
+      $compileProvider.directive('ngMouseenter', ngMouseenterDirective);
+      $compileProvider.directive('ngMouseleave', ngMouseleaveDirective);
+      $compileProvider.directive('ngMousemove', ngMousemoveDirective);
+      $compileProvider.directive('ngMouseout', ngMouseoutDirective);
+      $compileProvider.directive('ngMouseover', ngMouseoverDirective);
+      $compileProvider.directive('ngMouseup', ngMouseupDirective);
+      $compileProvider.directive('ngPaste', ngPasteDirective);
+      $compileProvider.directive('ngSubmit', ngSubmitDirective);
     },
   ]);

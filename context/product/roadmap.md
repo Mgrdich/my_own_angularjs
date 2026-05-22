@@ -95,9 +95,9 @@ _The layer that connects the runtime to templates and the DOM._
     - [x] **Binding:** `ng-bind`, `ng-bind-template`, `ng-bind-html` (delegates to `$sce.getTrustedHtml`; falls back to `$sanitize` when `ngSanitize` is loaded), `ng-non-bindable`. _(spec 023 — shipped; bundled with Visibility above.)_
     - [x] **Class / style:** `ng-class`, `ng-class-even`, `ng-class-odd`, `ng-style`. _(spec 024 — shipped.)_
     - [x] **Attribute helpers (interpolation-safe booleans and URLs):** `ng-href`, `ng-src`, `ng-srcset`, `ng-disabled`, `ng-checked`, `ng-readonly`, `ng-selected`, `ng-open`. _(spec 025 — shipped.)_
-    - [ ] **Mouse events:** `ng-click`, `ng-dblclick`, `ng-mousedown`, `ng-mouseup`, `ng-mouseover`, `ng-mouseout`, `ng-mousemove`, `ng-mouseenter`, `ng-mouseleave`. _(spec 026 — drafted; bundled with Keyboard + Clipboard/focus/form-lifecycle below.)_
-    - [ ] **Keyboard events:** `ng-keydown`, `ng-keyup`, `ng-keypress`. _(spec 026 — drafted; bundled above.)_
-    - [ ] **Clipboard / focus / form-lifecycle events:** `ng-copy`, `ng-cut`, `ng-paste`, `ng-focus`, `ng-blur`, `ng-submit`. _(spec 026 — drafted; bundled above.)_
+    - [x] **Mouse events:** `ng-click`, `ng-dblclick`, `ng-mousedown`, `ng-mouseup`, `ng-mouseover`, `ng-mouseout`, `ng-mousemove`, `ng-mouseenter`, `ng-mouseleave`. _(spec 026 — shipped; bundled with Keyboard + Clipboard/focus/form-lifecycle below.)_
+    - [x] **Keyboard events:** `ng-keydown`, `ng-keyup`, `ng-keypress`. _(spec 026 — shipped; bundled above.)_
+    - [x] **Clipboard / focus / form-lifecycle events:** `ng-copy`, `ng-cut`, `ng-paste`, `ng-focus`, `ng-blur`, `ng-submit`. _(spec 026 — shipped; bundled above.)_
     - [ ] **Pluralization / i18n:** `ng-pluralize`. _(separate spec.)_
     - [ ] **CSP / template-cache / element overrides:** `ng-csp` (config-time CSP hint for the compiler), `ng-jq` (opt into a specific jqLite implementation), `ng-ref` (1.7+; publishes a controller reference onto scope), `script` (registers `<script type="text/ng-template">` in `$templateCache`), `a` (empty-`href` guard + target-attribute safety for the anchor element). _(separate spec.)_
 
