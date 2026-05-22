@@ -83,9 +83,9 @@ function compileToWatchFn<T>(
   const wrapper: WatchFn<Record<string, unknown>, T> = (scope: Scope) => {
     const filterLookup = scope.$root.$$filterLookup;
     if (filterLookup === undefined) {
-      return exprFn(scope as unknown as Record<string, unknown>) as T;
+      return exprFn(scope) as T;
     }
-    return exprFn(scope as unknown as Record<string, unknown>, { $$filter: filterLookup }) as T;
+    return exprFn(scope, { $$filter: filterLookup }) as T;
   };
   Object.defineProperties(wrapper, {
     oneTime: { value: exprFn.oneTime, writable: false, enumerable: true, configurable: false },
@@ -469,7 +469,7 @@ export class Scope {
   ): R | undefined {
     if (typeof expr === 'string') {
       const exprFn = parse(expr);
-      return exprFn(this as unknown as Record<string, unknown>, locals as Record<string, unknown> | undefined) as R;
+      return exprFn(this, locals as Record<string, unknown> | undefined) as R;
     }
     if (typeof expr === 'function') {
       return expr(this, locals);
