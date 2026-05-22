@@ -72,11 +72,9 @@
  * ```
  */
 
-function isPlainObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
+import { isPlainObject } from '@core/index';
 
-function collectStringForm(value: string, out: Set<string>): void {
+function collectStringForm(value: string, out: Set<string>) {
   const trimmed = value.trim();
   if (trimmed === '') {
     return;
@@ -88,7 +86,7 @@ function collectStringForm(value: string, out: Set<string>): void {
   }
 }
 
-function collectObjectForm(value: Record<string, unknown>, out: Set<string>): void {
+function collectObjectForm(value: Record<string, unknown>, out: Set<string>) {
   for (const key of Object.keys(value)) {
     if (value[key]) {
       out.add(key);
@@ -96,7 +94,7 @@ function collectObjectForm(value: Record<string, unknown>, out: Set<string>): vo
   }
 }
 
-export function flattenClassExpression(value: unknown): Set<string> {
+export function flattenClassExpression(value: unknown) {
   const result = new Set<string>();
   if (typeof value === 'string') {
     collectStringForm(value, result);

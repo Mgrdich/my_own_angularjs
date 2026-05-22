@@ -295,7 +295,7 @@ describe('parity: nested handler throw routes via `$evalAsync`', () => {
     const { $compile } = compileFromNg();
 
     const scope = Scope.create({ exceptionHandler: exceptionSpy });
-    scope.boom = (): void => {
+    scope.boom = () => {
       throw new Error('intentional');
     };
 
