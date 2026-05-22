@@ -197,7 +197,7 @@ function createEventDirective(eventName: EventName): DirectiveFactory {
         const link: LinkFn = (scope, element) => {
           const handler = (event: Event) => {
             const run = () => {
-              parsed(scope as unknown as Record<string, unknown>, { $event: event });
+              parsed(scope, { $event: event });
             };
             try {
               if (scope.$$phase !== null) {
