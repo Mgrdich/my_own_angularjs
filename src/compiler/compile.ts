@@ -103,6 +103,7 @@ import {
 } from './compile-error';
 import { describeValue } from './describe-value';
 import { collectDirectives } from './directive-collector';
+import { NG_BOUND_TRANSCLUDE, NG_CONTROLLERS, type NgManagedElement } from './element-slots';
 import type { CompileOptions, CompileService, Directive, Linker, LinkFn, Attributes } from './directive-types';
 import { wireIsolateBindings, type NormalizedBindingMap } from './isolate-bindings';
 import { ChangesQueue, flushChangesQueue, hasHook, invokeHook, UNINITIALIZED_VALUE } from './lifecycle';
@@ -147,7 +148,6 @@ type LinkEntry = {
  */
 type NodeLinker = (scope: Scope, cloneMap?: Map<Node, Node>) => void;
 
-const BOUND_TRANSCLUDE_SLOT = '$$ngBoundTransclude';
 
 /**
  * Internal per-`$compile`-call queue carrying the host element + URL +
@@ -185,21 +185,6 @@ interface DeferredTemplateEntry {
   cancelled: boolean;
 }
 
-/**
- * Element augmented with the framework-internal cleanup slots stashed
- * by `cleanup.ts` (spec 017 Slice 10). Used here to detect whether the
- * host has been destroyed between enqueue and template-resolve.
- */
-interface NgManagedElement extends Element {
-  $$ngScope?: Scope;
-  /**
-   * Per-element controller registry (spec 022 Slice 3 — written here;
-   * spec 022 Slice 4 — read by the `require` resolver). Keyed by directive
-   * name; each value is the constructed controller instance for that
-   * directive on this element.
-   */
-  $$ngControllers?: Map<string, unknown>;
-}
 
 /**
  * A scope is "destroyed" when `$destroy()` sets `$$watchers = null`
@@ -264,10 +249,10 @@ function makeSimpleChange(currentValue: unknown, previousValue: unknown, isFirst
  * `require`); Slice 3 only writes.
  */
 function stashController(element: Element, directiveName: string, instance: unknown): void {
-  let map = (element as unknown as { $$ngControllers?: Map<string, unknown> }).$$ngControllers;
+  let map = (element as NgManagedElement)[NG_CONTROLLERS];
   if (map === undefined) {
     map = new Map<string, unknown>();
-    Object.defineProperty(element, '$$ngControllers', {
+    Object.defineProperty(element, NG_CONTROLLERS, {
       value: map,
       writable: true,
       configurable: true,
@@ -1092,7 +1077,7 @@ export function createCompile(options: CompileOptions): CompileService {
             kind: transcludeDecl.kind,
             directiveName: transcludingDirective.name,
           };
-          Object.defineProperty(target, BOUND_TRANSCLUDE_SLOT, {
+          Object.defineProperty(target, NG_BOUND_TRANSCLUDE, {
             value: bound,
             writable: true,
             configurable: true,
@@ -1165,7 +1150,7 @@ export function createCompile(options: CompileOptions): CompileService {
           kind: transcludeDecl.kind,
           directiveName: transcludingDirective.name,
         };
-        Object.defineProperty(target, BOUND_TRANSCLUDE_SLOT, {
+        Object.defineProperty(target, NG_BOUND_TRANSCLUDE, {
           value: bound,
           writable: true,
           configurable: true,
@@ -1626,7 +1611,7 @@ export function createCompile(options: CompileOptions): CompileService {
       // Recover the bound transclude (if any) so directive pre/post
       // link callbacks receive the same `$transclude` they would have
       // received synchronously. Pre-link reads the stash directly.
-      const bound = (element as unknown as Record<string, BoundTranscludeFn | undefined>)[BOUND_TRANSCLUDE_SLOT];
+      const bound = (element as NgManagedElement)[NG_BOUND_TRANSCLUDE];
       const $transclude: TranscludeFn | undefined = bound?.fn;
 
       bindAttrsToScope(attrs, scope, interpolate, exceptionHandler);

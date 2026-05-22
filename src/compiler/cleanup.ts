@@ -33,33 +33,7 @@
 
 import type { Scope } from '@core/index';
 
-/**
- * Element augmented with the framework-internal cleanup slots.
- *
- * The cast through this interface is the controlled choke point for
- * `$$ngScope` / `$$ngCleanupQueue` access — a single narrowly-typed
- * site rather than `(element as any)` everywhere. The properties are
- * declared optional because they're set lazily via
- * `Object.defineProperty` and cleared on teardown.
- */
-interface NgManagedElement extends Element {
-  $$ngScope?: Scope;
-  $$ngCleanupQueue?: (() => void)[];
-  /**
-   * Per-element controller registry (spec 022 Slice 3 — written by the
-   * controller seam; spec 022 Slice 4 — READ by the `require` resolver).
-   * Keyed by directive name; each value is the constructed controller
-   * instance for that directive on this element.
-   *
-   * Non-enumerable + lazily-created. Slice 3 populates this map for every
-   * directive that declares `controller` and is used by `$postLink`
-   * dispatch + (in Slice 4) by `^` / `^^` ancestor walks.
-   */
-  $$ngControllers?: Map<string, unknown>;
-}
-
-const NG_SCOPE = '$$ngScope';
-const NG_CLEANUP_QUEUE = '$$ngCleanupQueue';
+import { NG_CLEANUP_QUEUE, NG_SCOPE, type NgManagedElement } from './element-slots';
 
 /**
  * Stash the child {@link Scope} created for this element on the

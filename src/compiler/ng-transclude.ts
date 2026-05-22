@@ -54,21 +54,12 @@ import { invokeExceptionHandler, type ExceptionHandler } from '@exception-handle
 
 import type { Attributes, DirectiveFactory, DirectiveFactoryReturn, LinkFn } from './directive-types';
 import { NgTranscludeMisuseError, UndeclaredTranscludeSlotError } from './compile-error';
-import type { BoundTranscludeFn } from './transclude-types';
-
-/**
- * Internal narrow view of an Element augmented with the stashed
- * `$$ngBoundTransclude` slot. Mirrors the `NgManagedElement` pattern
- * in `cleanup.ts`.
- */
-interface NgBoundElement extends Element {
-  $$ngBoundTransclude?: BoundTranscludeFn;
-}
+import { NG_BOUND_TRANSCLUDE, type NgManagedElement } from './element-slots';
 
 function findBoundTransclude(element: Element) {
   let cursor: Element | null = element.parentElement;
   while (cursor !== null) {
-    const bound = (cursor as NgBoundElement).$$ngBoundTransclude;
+    const bound = (cursor as NgManagedElement)[NG_BOUND_TRANSCLUDE];
     if (bound !== undefined) {
       return { host: cursor, bound };
     }
