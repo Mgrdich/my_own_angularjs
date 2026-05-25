@@ -62,6 +62,7 @@ import {
   ngSubmitDirective,
 } from '@compiler/ng-event-directives';
 import { NG_HIDE_NAME, ngHideDirective } from '@compiler/ng-hide';
+import { NG_IF_NAME, ngIfDirective } from '@compiler/ng-if';
 import { NG_INIT_NAME, ngInitDirective } from '@compiler/ng-init';
 import { NG_NON_BINDABLE_NAME, ngNonBindableDirective } from '@compiler/ng-non-bindable';
 import { NG_SHOW_NAME, ngShowDirective } from '@compiler/ng-show';
@@ -335,6 +336,21 @@ export const ngModule = createModule('ng', [])
       $compileProvider.directive('ngMouseup', ngMouseupDirective);
       $compileProvider.directive('ngPaste', ngPasteDirective);
       $compileProvider.directive('ngSubmit', ngSubmitDirective);
+      // Spec 027 Slice 3 — `ngIf` is the first structural directive
+      // built on the Slice 2 `transclude: 'element'` foundation. At
+      // compile time the host element is detached and replaced by a
+      // `<!-- ngIf: cond -->` Comment placeholder; a `scope.$watch`
+      // listener on the expression mounts a fresh deep clone of the
+      // host (with a fresh transclusion scope) on each falsy → truthy
+      // transition and tears the active clone + its scope down on
+      // each truthy → falsy transition. Position is preserved
+      // across toggles via `insertBefore(clone, placeholder.nextSibling)`.
+      // The cleanup callback registered via `addElementCleanup(placeholder, …)`
+      // makes a parent `destroyElementScope` reaching the placeholder
+      // still tear the active clone down (Comment nodes have no
+      // `children` HTMLCollection for `destroyElementScope` to walk).
+      // See `src/compiler/ng-if.ts` for the file-level rationale.
+      $compileProvider.directive(NG_IF_NAME, ngIfDirective);
       // Spec 027 Slice 1 — `ngInit` evaluates an expression exactly
       // once at the link-time scope before any binding inside the
       // marked subtree first renders. The directive is wired through
