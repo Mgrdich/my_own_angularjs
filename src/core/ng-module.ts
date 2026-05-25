@@ -62,6 +62,7 @@ import {
   ngSubmitDirective,
 } from '@compiler/ng-event-directives';
 import { NG_HIDE_NAME, ngHideDirective } from '@compiler/ng-hide';
+import { NG_INIT_NAME, ngInitDirective } from '@compiler/ng-init';
 import { NG_NON_BINDABLE_NAME, ngNonBindableDirective } from '@compiler/ng-non-bindable';
 import { NG_SHOW_NAME, ngShowDirective } from '@compiler/ng-show';
 import { NG_STYLE_NAME, ngStyleDirective } from '@compiler/ng-style';
@@ -334,5 +335,18 @@ export const ngModule = createModule('ng', [])
       $compileProvider.directive('ngMouseup', ngMouseupDirective);
       $compileProvider.directive('ngPaste', ngPasteDirective);
       $compileProvider.directive('ngSubmit', ngSubmitDirective);
+      // Spec 027 Slice 1 — `ngInit` evaluates an expression exactly
+      // once at the link-time scope before any binding inside the
+      // marked subtree first renders. The directive is wired through
+      // a `compile` fn that parses the expression once and returns a
+      // `{ pre }` link object; the pre-link callback fires BEFORE the
+      // child directives' link phase descends, so assignment-form
+      // expressions (`user = {name:'Alice'}`) land on scope in time
+      // for `{{user.name}}` to render the initialized value on its
+      // very first paint. No watch, no DOM mutation, no cleanup —
+      // one-shot initializer per mount. Re-fires on each remount
+      // (e.g. via a surrounding `ng-if` retoggling — spec 027 Slice 3).
+      // See `src/compiler/ng-init.ts` for the pre-link-timing rationale.
+      $compileProvider.directive(NG_INIT_NAME, ngInitDirective);
     },
   ]);
