@@ -70,6 +70,7 @@ export {
   createCompile,
   directiveNormalize,
   DuplicateTranscludeSelectorError,
+  // eslint-disable-next-line @typescript-eslint/no-deprecated -- ElementTranscludeNotSupportedError is intentionally re-exported (spec 027 Slice 2) for the one-release deprecation grace period. See @compiler/index.ts for context.
   ElementTranscludeNotSupportedError,
   EmptyTemplateError,
   EmptyTemplateUrlError,

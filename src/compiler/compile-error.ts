@@ -159,16 +159,31 @@ export class InvalidTranscludeValueError extends Error {
 }
 
 /**
- * Thrown by `normalizeDirective` when a directive declares
- * `transclude: 'element'`. This element-transclusion form is the
- * foundation for future structural directives (`ng-if`, `ng-repeat`)
- * and is deliberately deferred in spec 018 so the future addition can
- * land without a silent semantic change.
+ * @deprecated Spec 027 Slice 2 lifted the `transclude: 'element'`
+ * rejection by widening the {@link import('./transclude-types').NormalizedTransclude}
+ * discriminant with a `kind: 'element'` branch. The throw site in
+ * `normalizeTransclude` has been retired; `transclude: 'element'`
+ * directives now register and link successfully via the AngularJS-
+ * canonical "host-detach + Comment-placeholder" mode.
+ *
+ * Retained for ONE release as a deprecation grace period so consumer
+ * code that does `catch (e) { if (e instanceof ElementTranscludeNotSupportedError) … }`
+ * keeps compiling. The class will be removed in a future spec; new
+ * consumers should NOT throw or catch this class. There is no longer
+ * any framework code path that produces an instance.
+ *
+ * Mirrors the spec-022 `IsolateScopeNotSupportedError` precedent
+ * (also `@deprecated`, also retained for one release after the
+ * rejection was lifted).
  *
  * @example
  * ```ts
- * $compileProvider.directive('myDir', () => ({ transclude: 'element' }));
- * // routes ElementTranscludeNotSupportedError via $exceptionHandler('$compile')
+ * // Pre-spec-027 behavior — the framework no longer reaches this branch:
+ * // $compileProvider.directive('myDir', () => ({ transclude: 'element' }));
+ * // // would route ElementTranscludeNotSupportedError via $exceptionHandler('$compile').
+ * //
+ * // Post-spec-027: registration succeeds and the directive's link fn
+ * // receives a Comment placeholder as its `element` argument.
  * ```
  */
 export class ElementTranscludeNotSupportedError extends Error {

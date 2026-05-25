@@ -52,6 +52,7 @@ describe('InvalidTranscludeValueError', () => {
 
 describe('ElementTranscludeNotSupportedError', () => {
   it('formats the message naming the offending directive', () => {
+    // eslint-disable-next-line @typescript-eslint/no-deprecated -- shape test for the spec-018-retired class; the class is exported with @deprecated for a one-release grace period (spec 027 Slice 2)
     const err = new ElementTranscludeNotSupportedError('myDir');
     expect(err.message).toBe(
       `Element transclusion (transclude: 'element') is not yet supported; this spec ships only transclude: true and the multi-slot object form. Directive: myDir`,
@@ -59,11 +60,13 @@ describe('ElementTranscludeNotSupportedError', () => {
   });
 
   it('carries the literal `name` discriminator', () => {
+    // eslint-disable-next-line @typescript-eslint/no-deprecated -- shape test for the spec-018-retired class; the class is exported with @deprecated for a one-release grace period (spec 027 Slice 2)
     const err = new ElementTranscludeNotSupportedError('myDir');
     expect(err.name).toBe('ElementTranscludeNotSupportedError');
   });
 
   it('is an instance of Error (catch-site narrowing works)', () => {
+    // eslint-disable-next-line @typescript-eslint/no-deprecated -- shape test for the spec-018-retired class; the class is exported with @deprecated for a one-release grace period (spec 027 Slice 2)
     expect(new ElementTranscludeNotSupportedError('myDir')).toBeInstanceOf(Error);
   });
 });

@@ -40,7 +40,6 @@ import type { TemplateRequestFn } from '@template/template-types';
 import { createCompile } from './compile';
 import {
   DuplicateTranscludeSelectorError,
-  ElementTranscludeNotSupportedError,
   EmptyTemplateError,
   EmptyTemplateUrlError,
   InvalidComponentDefinitionError,
@@ -463,7 +462,19 @@ function normalizeTransclude(directiveName: string, transclude: unknown): Normal
     return { kind: 'content' };
   }
   if (transclude === 'element') {
-    throw new ElementTranscludeNotSupportedError(directiveName);
+    // Spec 027 Slice 2: element-form transclusion is the AngularJS-canonical
+    // "host-detach + comment-placeholder" mode — the host element itself is
+    // captured into the default bucket and replaced in-place by a Comment
+    // node at compile time. The empty `slots` / `required` / `optional`
+    // arrays satisfy the {@link NormalizedTransclude} discriminated union
+    // (they are never read for `kind: 'element'`) and mirror the shape of
+    // the `'slots'` / `'content'` branches. The capture pipeline routes the
+    // host into `defaultBucket: [host]` (single-element bucket) so the
+    // existing default-bucket linker handles it unchanged. The throw site
+    // that previously rejected this value via `ElementTranscludeNotSupportedError`
+    // (the spec 018 forward-compat seam) is retired; the error class
+    // remains exported as `@deprecated` for a one-release grace period.
+    return { kind: 'element', slots: [], required: [], optional: [] };
   }
   if (typeof transclude === 'object' && transclude !== null && !Array.isArray(transclude)) {
     const slots: TranscludeSlot[] = [];

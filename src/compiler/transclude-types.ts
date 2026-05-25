@@ -183,9 +183,14 @@ export type TranscludeSlotMap = readonly TranscludeSlot[];
  *
  * - `fn` — the bound `$transclude` callable.
  * - `declaredSlots` — the slot map declared on the host directive
- *   (`[]` for `kind: 'content'`).
+ *   (`[]` for `kind: 'content'` and `kind: 'element'`).
  * - `kind` — discriminator: `'content'` for `transclude: true`,
- *   `'slots'` for the multi-slot object form.
+ *   `'slots'` for the multi-slot object form, `'element'` for
+ *   `transclude: 'element'` (spec 027 Slice 2). `ng-transclude` only
+ *   ever finds a stash with `kind: 'content' | 'slots'` because
+ *   element-form placeholders are Comments and `ng-transclude`'s
+ *   parent-element walk skips Comment ancestors; the wider union
+ *   here just reflects the runtime shape.
  * - `directiveName` — the host directive's name (used by
  *   `ng-transclude` Slice 5 in error messages so an undeclared-slot
  *   report cites the host, not the marker).
@@ -193,19 +198,45 @@ export type TranscludeSlotMap = readonly TranscludeSlot[];
 export interface BoundTranscludeFn {
   fn: TranscludeFn;
   declaredSlots: TranscludeSlotMap;
-  kind: 'content' | 'slots';
+  kind: 'content' | 'slots' | 'element';
   directiveName: string;
 }
 
 /**
  * The post-normalize internal shape stored on each
  * {@link import('./directive-types').Directive} when the directive
- * declares `transclude: true | { … }`. Populated by `normalizeDirective`
- * in Slice 2.
+ * declares `transclude: true | 'element' | { … }`. Populated by
+ * `normalizeDirective` in spec 018 Slice 2 (the two original
+ * discriminants) and widened in spec 027 Slice 2 (the third).
+ *
+ * Three discriminants — consumers pattern-matching exhaustively on
+ * `transclude.kind` MUST handle all three branches:
+ *
+ *  - `'content'` — `transclude: true`. The directive captures every
+ *    child node of the host into a single default bucket. The host
+ *    element itself stays in the DOM.
+ *  - `'slots'` — multi-slot object form (`transclude: { … }`). Each
+ *    declared slot routes matching direct-Element children by
+ *    normalized tag name; non-matching children fall into the default
+ *    bucket. The host element itself stays in the DOM.
+ *  - `'element'` — `transclude: 'element'`. The host element ITSELF is
+ *    detached at compile time and replaced by a `<!-- name: value -->`
+ *    Comment placeholder. The host goes into the default bucket as a
+ *    single-element array; the existing default-bucket linker handles
+ *    re-link + deep-clone unchanged. The placeholder is what carries
+ *    `$$ngBoundTransclude`, `$$ngCleanupQueue`, and the matched
+ *    directive's link-time element argument. The empty `slots` /
+ *    `required` / `optional` arrays satisfy the union and are never
+ *    read for `kind: 'element'`. This is the foundation for structural
+ *    directives (`ng-if`, `ng-switch-when`, `ng-include`) shipping in
+ *    spec 027 Slices 3 / 5 / 6.
  *
  * INTERNAL — not re-exported from the public barrel. Directive authors
- * write `transclude: true` or `transclude: { titleSlot: 'card-title' }`
- * on the Directive Definition Object; the validator transforms those
- * into this discriminated-union form.
+ * write `transclude: true | 'element' | { titleSlot: 'card-title' }` on
+ * the Directive Definition Object; the validator transforms those into
+ * this discriminated-union form.
  */
-export type NormalizedTransclude = { kind: 'content' } | { kind: 'slots'; slots: TranscludeSlotMap };
+export type NormalizedTransclude =
+  | { kind: 'content' }
+  | { kind: 'slots'; slots: TranscludeSlotMap }
+  | { kind: 'element'; slots: TranscludeSlotMap; required: readonly string[]; optional: readonly string[] };

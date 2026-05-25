@@ -103,7 +103,13 @@ import {
 } from './compile-error';
 import { describeValue } from './describe-value';
 import { collectDirectives } from './directive-collector';
-import { isNgManagedElement, NG_BOUND_TRANSCLUDE, NG_CONTROLLERS, NG_SCOPE } from './element-slots';
+import {
+  isNgManagedElement,
+  NG_BOUND_TRANSCLUDE,
+  NG_CONTROLLERS,
+  NG_ELEMENT_TRANSCLUDED,
+  NG_SCOPE,
+} from './element-slots';
 import type { CompileOptions, CompileService, Directive, Linker, LinkFn, Attributes } from './directive-types';
 import { wireIsolateBindings, type NormalizedBindingMap } from './isolate-bindings';
 import { ChangesQueue, flushChangesQueue, hasHook, invokeHook, UNINITIALIZED_VALUE } from './lifecycle';
@@ -778,17 +784,45 @@ export function createCompile(options: CompileOptions): CompileService {
       }
     }
 
-    // ----- Spec 018 / Slice 3: transclusion pre-pass -----
+    // ----- Spec 018 / Slice 3 + spec 027 / Slice 2: transclusion pre-pass -----
     //
     // Scan the priority-sorted directive list for entries declaring
     // `transclude`. The FIRST match wins; any second match is reported
     // via `MultipleTranscludeDirectivesError` and its `transclude` is
     // cleared on a LOCAL shallow copy (the shared registered directive
     // object is NOT mutated).
+    //
+    // Spec 027 Slice 2 — re-entrancy guard for element-form. When a
+    // `kind: 'element'` capture detaches the host, the master fragment
+    // is the host itself; `makeInternalLinker([host])` then walks back
+    // through this function recursively. On the SECOND invocation we
+    // skip the same directive's transclude pre-pass so we don't
+    // re-capture infinitely. The first-pass capture stamps the host's
+    // `$$ngElementTranscluded` slot with the directive name; the
+    // second pass reads it and strips `transclude` on a LOCAL shallow
+    // copy of the directive (the registered object is NOT mutated).
+    const alreadyElementTranscluded =
+      isElement(node) && isNgManagedElement(node) ? node[NG_ELEMENT_TRANSCLUDED] : undefined;
     let transcludingDirective: Directive | null = null;
     const effectiveDirectives: Directive[] = [];
     for (const directive of directives) {
       if (directive.transclude !== undefined) {
+        if (
+          alreadyElementTranscluded !== undefined &&
+          alreadyElementTranscluded === directive.name &&
+          directive.transclude.kind === 'element'
+        ) {
+          // Re-entrancy guard: the master fragment's recompile pass
+          // sees the same directive whose `kind: 'element'` capture
+          // already ran. Strip transclude on a LOCAL copy so the
+          // directive's other behavior (compile / link / controller)
+          // still applies to the master, but the capture does NOT
+          // recur. Mirrors AngularJS's `terminalPriority`-based
+          // re-entry guard without introducing a new priority axis.
+          const stripped: Directive = { ...directive, transclude: undefined };
+          effectiveDirectives.push(stripped);
+          continue;
+        }
         if (transcludingDirective === null) {
           transcludingDirective = directive;
           effectiveDirectives.push(directive);
@@ -807,8 +841,19 @@ export function createCompile(options: CompileOptions): CompileService {
     }
 
     // Capture children + compile master fragments when a transcluding
-    // directive matched. Both `kind: 'content'` (Slice 3) and
-    // `kind: 'slots'` (Slice 4) flow through the same pipeline.
+    // directive matched. All three discriminants flow through the same
+    // pipeline:
+    //   - `kind: 'content'` (spec 018 Slice 3): captures host children
+    //     into the default bucket; host stays in the DOM.
+    //   - `kind: 'slots'` (spec 018 Slice 4): routes host children by
+    //     slot selector; host stays in the DOM.
+    //   - `kind: 'element'` (spec 027 Slice 2): detaches the host
+    //     ITSELF into the default bucket (single-element array) and
+    //     leaves a `<!-- directiveName: attrValue -->` Comment
+    //     placeholder in its slot. The local `node` binding is then
+    //     rebound to the placeholder so `$$ngBoundTransclude`,
+    //     `$$ngCleanupQueue`, and the matched directive's link-time
+    //     element argument all hang off the Comment going forward.
     let defaultLinker: Linker | null = null;
     let slotLinkers: Record<string, Linker | null> = {};
     let transcludeDecl: NormalizedTransclude | null = null;
@@ -817,7 +862,30 @@ export function createCompile(options: CompileOptions): CompileService {
     let transcludeUnfilledRequired: string[] = [];
     if (transcludingDirective !== null && transcludingDirective.transclude !== undefined && isElement(node)) {
       transcludeDecl = transcludingDirective.transclude;
-      const buckets = captureChildren(node, transcludeDecl);
+      // Defensively coerce the attribute lookup — `attrs[name]` may be
+      // a non-string runtime value (e.g. a Record from the `$attr`
+      // back-pointer in the typed surface). For element-form
+      // transclusion the value is purely cosmetic (labels the Comment
+      // placeholder for dev-tools inspection), so a defensive empty
+      // string covers both "attribute absent" and "value is non-string"
+      // without affecting behavior.
+      const attrLookup = attrs[transcludingDirective.name];
+      const attrValue = typeof attrLookup === 'string' ? attrLookup : '';
+      // Stamp the host BEFORE handing the bucket to `compileBuckets`
+      // so the recursive master-compile pass reads the marker and
+      // strips its own `transclude` declaration on a local copy. The
+      // stamp lives on the host Element (not the placeholder Comment)
+      // because the master fragment IS the host and that's what the
+      // re-entrant `compileElementOrComment` invocation receives.
+      if (transcludeDecl.kind === 'element') {
+        Object.defineProperty(node, NG_ELEMENT_TRANSCLUDED, {
+          value: transcludingDirective.name,
+          writable: true,
+          configurable: true,
+          enumerable: false,
+        });
+      }
+      const buckets = captureChildren(node, transcludeDecl, transcludingDirective.name, attrValue);
       const compiled = compileBuckets(
         { defaultBucket: buckets.defaultBucket, slotBuckets: buckets.slotBuckets },
         (nodes) => makeInternalLinker(nodes),
@@ -827,6 +895,16 @@ export function createCompile(options: CompileOptions): CompileService {
       transcludeMasters = buckets.defaultBucket;
       transcludeNamedMasters = buckets.slotBuckets;
       transcludeUnfilledRequired = buckets.unfilledRequired;
+      // Spec 027 Slice 2: rebind `node` to the Comment placeholder for
+      // the rest of `compileElementOrComment`. From this point onward
+      // the per-element linker, the child snapshot, the
+      // `$$ngBoundTransclude` stash, and the matched directive's
+      // link-time `element` argument all operate against the Comment
+      // — the original host element lives on only inside the captured
+      // default bucket as a master fragment for deep-clone + re-link.
+      if (buckets.replacementNode !== undefined) {
+        node = buckets.replacementNode;
+      }
     }
 
     // ----- Spec 019 / Slices 5 + 6: template install pre-pass -----
@@ -1122,7 +1200,7 @@ export function createCompile(options: CompileOptions): CompileService {
         return;
       }
 
-      // ----- Spec 018 / Slice 3: build $transclude closure -----
+      // ----- Spec 018 / Slice 3 + spec 027 / Slice 2: build $transclude closure -----
       //
       // The closure captures `parentScope` as the OUTER scope BEFORE
       // the `scope: true` child is created below — FS §2.5 acceptance
@@ -1130,8 +1208,17 @@ export function createCompile(options: CompileOptions): CompileService {
       // host element receives a non-enumerable `$$ngBoundTransclude`
       // stash so the future `ng-transclude` marker (Slice 5) can find
       // it via parent-element walk.
+      //
+      // Spec 027 Slice 2 widens this site to ALSO fire when `target`
+      // is the Comment placeholder produced by `kind: 'element'`
+      // transclusion — the matched directive's link fn needs
+      // `$transclude` as its 5th argument to mount its clone. The
+      // `$$ngBoundTransclude` stash still lands on the Comment, but
+      // `ng-transclude`'s `parentElement` walk skips Comments so the
+      // stash is effectively only consumed by the directive's own
+      // link fn (which receives `$transclude` directly anyway).
       let $transclude: TranscludeFn | undefined;
-      if (transcludingDirective !== null && transcludeDecl !== null && isElement(target)) {
+      if (transcludingDirective !== null && transcludeDecl !== null && (isElement(target) || isComment(target))) {
         const declared: TranscludeSlotMap = transcludeDecl.kind === 'slots' ? transcludeDecl.slots : [];
         const unfilledRequiredSet = new Set<string>(transcludeUnfilledRequired);
         $transclude = buildTranscludeFn({
