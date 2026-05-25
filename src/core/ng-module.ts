@@ -41,6 +41,7 @@ import {
   ngClassOddDirective,
 } from '@compiler/ng-class';
 import { ngCloakDirective } from '@compiler/ng-cloak';
+import { NG_CONTROLLER_NAME, ngControllerDirective } from '@compiler/ng-controller';
 import {
   ngBlurDirective,
   ngClickDirective,
@@ -336,6 +337,22 @@ export const ngModule = createModule('ng', [])
       $compileProvider.directive('ngMouseup', ngMouseupDirective);
       $compileProvider.directive('ngPaste', ngPasteDirective);
       $compileProvider.directive('ngSubmit', ngSubmitDirective);
+      // Spec 027 Slice 4 — `ngController` attaches a registered
+      // controller to a subtree. The directive declares NO `link` fn;
+      // instead its normalized `controller` field is the sentinel
+      // shape `{ __attributeSource: 'ngController' }` recognized by
+      // `runControllerSeam`'s third dispatch branch — the seam reads
+      // the controller name from `attrs.ngController` at link time
+      // and invokes `$controller(name, locals)` with the lifecycle
+      // hooks (`$onInit` / `$postLink` / `$onDestroy`; NOT
+      // `$onChanges` — no isolate bindings), the `$$ngControllers`
+      // stash, the `require` resolution dance, and the `controllerAs`
+      // alias publication all flowing through the existing spec 022
+      // machinery. `scope: true` (fresh child scope per AngularJS
+      // convention) keeps the alias namespace separate from any
+      // surrounding transclusion scope (e.g. `ng-if`'s).
+      // See `src/compiler/ng-controller.ts` for the file-level rationale.
+      $compileProvider.directive(NG_CONTROLLER_NAME, ngControllerDirective);
       // Spec 027 Slice 3 — `ngIf` is the first structural directive
       // built on the Slice 2 `transclude: 'element'` foundation. At
       // compile time the host element is detached and replaced by a

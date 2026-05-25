@@ -87,7 +87,7 @@
  * plus `templateRequest` (Slice 5 — wired ahead of the Slice 6 drain).
  */
 
-import type { ControllerLocals } from '@controller/controller-types';
+import type { ControllerInvokable, ControllerLocals } from '@controller/controller-types';
 import type { Scope } from '@core/index';
 import { invokeExceptionHandler, type ExceptionHandler } from '@exception-handler/index';
 
@@ -243,6 +243,28 @@ function makeSimpleChange(currentValue: unknown, previousValue: unknown, isFirst
     previousValue,
     isFirstChange: () => isFirst,
   };
+}
+
+/**
+ * Spec 027 Slice 4 — attribute-source sentinel detector. Returns `true`
+ * when `controller` is the `{ __attributeSource: string }` shape used
+ * by the built-in `ng-controller` directive (and reserved for any
+ * future structural directive that wants `runControllerSeam` to read
+ * its controller name from `attrs[__attributeSource]` at link time).
+ *
+ * The check is intentionally strict: rejects `null`, arrays, and any
+ * object whose `__attributeSource` is not a string. The detected union
+ * arm is disjoint from `ControllerInvokable` (`string | function |
+ * array`), so the sentinel never collides with the eager- or
+ * bindToController-path inputs.
+ */
+function isAttributeSourceController(controller: unknown): controller is { __attributeSource: string } {
+  return (
+    controller !== null &&
+    typeof controller === 'object' &&
+    !Array.isArray(controller) &&
+    typeof (controller as { __attributeSource?: unknown }).__attributeSource === 'string'
+  );
 }
 
 /**
@@ -429,6 +451,28 @@ export function createCompile(options: CompileOptions): CompileService {
    * parent-expression evaluation when bindings target the instance —
    * matches the spec-022 Slice 1 contract for the scope-target wiring
    * site.
+   *
+   * **Spec 027 Slice 4 — attribute-source sentinel branch.** A third
+   * dispatch is added alongside the existing `bindToController` (deferred-
+   * alias `later: true`) and eager paths. When `directive.controller`
+   * is the sentinel shape `{ __attributeSource: 'ngController' }` (or
+   * any future built-in's attribute-source key), the seam reads the
+   * controller name from `attrs[__attributeSource]` at link time and
+   * invokes `$controller(attrs[…], locals)` with NO separate `ident`
+   * argument — the alias (`'Name as alias'` syntax) is parsed from the
+   * attribute string by `$controller`'s own `parseControllerName`. The
+   * branch runs on the EAGER path (`ng-controller` declares no isolate
+   * bindings, so `bindToController` is absent), so all four lifecycle
+   * hooks (`$onInit`, `$postLink`, `$onDestroy`; NOT `$onChanges` —
+   * matches AngularJS, no isolate bindings to drive change records),
+   * the `$$ngControllers` stash, the `require` resolution dance, and
+   * the `controllerAs` alias publication (handled internally by
+   * `$controller` since `later !== true`) all fire on the same timeline
+   * as the eager path. An empty / undefined / non-string attribute
+   * value causes a clean bail (no instantiation, no error — the
+   * directive matched on an element that supplies no controller name).
+   * The sentinel shape never collides with `ControllerInvokable`
+   * (`string | function | array`) — the union arms are disjoint.
    */
   function runControllerSeam(
     directives: readonly Directive[],
@@ -456,6 +500,39 @@ export function createCompile(options: CompileOptions): CompileService {
       if (directive.controller === undefined) {
         continue;
       }
+
+      // Spec 027 Slice 4 — attribute-source sentinel resolution. When
+      // the directive's normalized `controller` field is the sentinel
+      // shape `{ __attributeSource: 'ngController' }` (a non-callable,
+      // non-array object with a string `__attributeSource` key), read
+      // the controller name from `attrs[__attributeSource]` at this
+      // point. The resolved name flows into the eager-path
+      // `$controller(name, locals, controllerAs)` invocation below
+      // VIA `resolvedControllerArg` (an inner-scoped binding that
+      // shadows `directive.controller` for the rest of this iteration).
+      // An empty / non-string / missing attribute value causes a clean
+      // bail (no instantiation, no error) — the directive matched on
+      // an element that supplies no controller name. The detection is
+      // disjoint from `ControllerInvokable` (`string | function | array`),
+      // so the sentinel never collides with the eager- or
+      // bindToController-path inputs.
+      let resolvedControllerArg: string | ControllerInvokable = directive.controller as
+        | string
+        | ControllerInvokable;
+      if (isAttributeSourceController(directive.controller)) {
+        const attrName = directive.controller.__attributeSource;
+        const attrValue = attrs[attrName];
+        if (typeof attrValue !== 'string' || attrValue.length === 0) {
+          // Clean bail — no instantiation, no error, no entry in the
+          // tracked list. A directive that opts into the sentinel
+          // shape declares no concrete fallback name; an empty /
+          // undefined attribute value at link time is the documented
+          // "no controller to attach" case.
+          continue;
+        }
+        resolvedControllerArg = attrValue;
+      }
+
       const locals: ControllerLocals = {
         $scope: scope,
         $element: element,
@@ -478,7 +555,13 @@ export function createCompile(options: CompileOptions): CompileService {
       let instance: unknown = undefined;
       try {
         if (useBindToController) {
-          const deferred = $controller(directive.controller, locals, directive.controllerAs, true);
+          // `resolvedControllerArg` is identical to `directive.controller`
+          // in the `bindToController` path — the sentinel shape is
+          // reserved for the EAGER path (`ng-controller` declares no
+          // isolate bindings, so it never lands here). Reusing the
+          // resolved local keeps the call signature uniform across both
+          // branches without an `as` cast.
+          const deferred = $controller(resolvedControllerArg, locals, directive.controllerAs, true);
           instance = deferred.instance;
           // Stash on `$$ngControllers` BEFORE binding wiring + lifecycle
           // hooks fire so a `$onInit` (or downstream Slice-4 `require`
@@ -572,7 +655,16 @@ export function createCompile(options: CompileOptions): CompileService {
             invokeHook(instance, '$onChanges', exceptionHandler, initialRecord);
           }
         } else {
-          instance = $controller(directive.controller, locals, directive.controllerAs);
+          // Eager path. When the sentinel sourced the controller name
+          // from `attrs[__attributeSource]` (spec 027 Slice 4), the
+          // resolved string flows through `resolvedControllerArg` and
+          // `$controller`'s own `parseControllerName` handles the
+          // `'Name as alias'` syntax inside the attribute value — no
+          // separate `ident` argument is passed (the sentinel directive
+          // never declares `controllerAs` on its DDO). For the standard
+          // eager path, `resolvedControllerArg === directive.controller`
+          // and `directive.controllerAs` carries any explicit alias.
+          instance = $controller(resolvedControllerArg, locals, directive.controllerAs);
           stashController(element, directive.name, instance);
           // Spec 022 Slice 4 — resolve `require` AFTER stash, BEFORE
           // `$onInit`. Same ordering as the bindToController branch:

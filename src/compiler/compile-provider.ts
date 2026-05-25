@@ -617,7 +617,7 @@ function normalizeController(directiveName: string, rawController: unknown, rawC
   }
 
   // 3. `controller` shape (when present).
-  let controller: string | ControllerInvokable | undefined;
+  let controller: string | ControllerInvokable | { __attributeSource: string } | undefined;
   if (rawController !== undefined) {
     if (typeof rawController === 'string') {
       if (rawController.length === 0) {
@@ -635,12 +635,34 @@ function normalizeController(directiveName: string, rawController: unknown, rawC
         throw new InvalidControllerFactoryError(directiveName, describeValue(rawController));
       }
       controller = rawController as ControllerInvokable;
+    } else if (
+      // Spec 027 Slice 4 — attribute-source sentinel. Reserved for the
+      // built-in `ng-controller` directive (and any future structural
+      // directive that wants the seam to read its controller name from
+      // an attribute at link time). The sentinel is a plain object with
+      // a single non-empty `__attributeSource` string field; any other
+      // object shape falls through to the `InvalidControllerFactoryError`
+      // branch below. The runtime cost of this branch is one `typeof`
+      // and one property read; consumer-facing controller declarations
+      // (the only kind exposed in the public API) never reach it because
+      // a consumer can't easily construct an object whose only key is
+      // `__attributeSource`.
+      typeof rawController === 'object' &&
+      rawController !== null &&
+      !Array.isArray(rawController) &&
+      typeof (rawController as { __attributeSource?: unknown }).__attributeSource === 'string' &&
+      (rawController as { __attributeSource: string }).__attributeSource.length > 0
+    ) {
+      controller = { __attributeSource: (rawController as { __attributeSource: string }).__attributeSource };
     } else {
       throw new InvalidControllerFactoryError(directiveName, describeValue(rawController));
     }
   }
 
-  const result: { controller?: string | ControllerInvokable; controllerAs?: string } = {};
+  const result: {
+    controller?: string | ControllerInvokable | { __attributeSource: string };
+    controllerAs?: string;
+  } = {};
   if (controller !== undefined) {
     result.controller = controller;
   }

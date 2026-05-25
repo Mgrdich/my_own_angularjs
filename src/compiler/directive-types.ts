@@ -372,8 +372,16 @@ export interface DirectiveDefinition {
    *      `controller`. Rejected at directive registration.
    * @see MalformedControllerAliasError — `controllerAs` must match
    *      `IDENT_RE`.
+   *
+   * **Spec 027 Slice 4 — attribute-source sentinel.** A third accepted
+   * shape, `{ __attributeSource: string }`, is reserved for built-in
+   * structural directives (`ng-controller`) whose controller name is
+   * supplied through a DOM attribute rather than baked into the DDO.
+   * `runControllerSeam` dispatches on the sentinel and reads the
+   * controller name from `attrs[__attributeSource]` at link time. NOT
+   * intended for direct consumer use.
    */
-  controller?: string | ControllerInvokable;
+  controller?: string | ControllerInvokable | { __attributeSource: string };
   /**
    * Controller alias (spec 020). Exposes the controller instance on the
    * matched element's scope under this name (or the child scope when
@@ -694,13 +702,28 @@ export interface Directive {
    */
   template?: NormalizedTemplate;
   /**
-   * Post-normalize controller declaration (spec 020). Unset when the
-   * directive declared no controller. Populated by `normalizeDirective`
-   * from the factory's `controller` field. The compiler's per-element
-   * seam reads this slot once per directive and invokes `$controller`
-   * with element-local `$scope` / `$element` / `$attrs` / `$transclude`.
+   * Post-normalize controller declaration (spec 020 / spec 027 Slice 4).
+   * Unset when the directive declared no controller. Populated by
+   * `normalizeDirective` from the factory's `controller` field. The
+   * compiler's per-element seam reads this slot once per directive and
+   * invokes `$controller` with element-local `$scope` / `$element` /
+   * `$attrs` / `$transclude`.
+   *
+   * **Sentinel form `{ __attributeSource: string }` (spec 027 Slice 4).**
+   * The third accepted shape is a small object carrying a single
+   * `__attributeSource` string field. The compiler's `runControllerSeam`
+   * recognizes the sentinel and dispatches to a third branch (alongside
+   * `bindToController` and eager) that reads the controller name from
+   * `attrs[__attributeSource]` at link time and invokes `$controller`
+   * with the resolved string. This shape powers the `ng-controller`
+   * built-in directive (`{ __attributeSource: 'ngController' }`) where
+   * the controller name is supplied through the DOM attribute value at
+   * link time rather than baked into the DDO at registration. It is
+   * NOT intended for direct consumer use — the surface is exposed only
+   * so the built-in `ng-controller` factory can produce it; future
+   * structural directives may consume the same shape.
    */
-  controller?: string | ControllerInvokable;
+  controller?: string | ControllerInvokable | { __attributeSource: string };
   /**
    * Post-normalize `controllerAs` alias (spec 020). Always paired with
    * `controller` — `normalizeDirective` rejects `controllerAs` without
