@@ -64,6 +64,7 @@ import {
 } from '@compiler/ng-event-directives';
 import { NG_HIDE_NAME, ngHideDirective } from '@compiler/ng-hide';
 import { NG_IF_NAME, ngIfDirective } from '@compiler/ng-if';
+import { NG_INCLUDE_NAME, ngIncludeDirective } from '@compiler/ng-include';
 import { NG_INIT_NAME, ngInitDirective } from '@compiler/ng-init';
 import { NG_NON_BINDABLE_NAME, ngNonBindableDirective } from '@compiler/ng-non-bindable';
 import { NG_SHOW_NAME, ngShowDirective } from '@compiler/ng-show';
@@ -376,6 +377,27 @@ export const ngModule = createModule('ng', [])
       // `children` HTMLCollection for `destroyElementScope` to walk).
       // See `src/compiler/ng-if.ts` for the file-level rationale.
       $compileProvider.directive(NG_IF_NAME, ngIfDirective);
+      // Spec 027 Slice 6 — `ngInclude` asynchronously loads another
+      // template by URL and renders it inline. Built on the Slice 2
+      // `transclude: 'element'` foundation (same Comment-placeholder
+      // pattern as `ngIf` / `ngSwitch`-children), with the URL drawn
+      // from `attrs.ngInclude` (attribute form) or `attrs.src`
+      // (element form). The link fn watches the URL expression,
+      // fetches via `$templateRequest` (cache + dedup), compiles the
+      // result against a fresh child scope, and inserts the rendered
+      // subtree as the next sibling of the placeholder. A
+      // closure-local `currentLoadToken` sentinel guards against
+      // stale-fetch installs after destruction or URL change. Three
+      // scope events (`$includeContentRequested` /
+      // `$includeContentLoaded` / `$includeContentError`) emit at the
+      // canonical lifecycle points; an optional `onload="expr"`
+      // modifier evaluates against the PARENT scope after each
+      // successful load. The lazy `$injector.has('$sce')` probe
+      // mirrors `$SceProvider.$get`'s `$sanitize` lookup — no hard
+      // dependency on `$sce`, but cross-origin URLs are gated through
+      // `getTrustedResourceUrl` when `$sce` is reachable. See
+      // `src/compiler/ng-include.ts` for the file-level rationale.
+      $compileProvider.directive(NG_INCLUDE_NAME, ngIncludeDirective);
       // Spec 027 Slice 1 — `ngInit` evaluates an expression exactly
       // once at the link-time scope before any binding inside the
       // marked subtree first renders. The directive is wired through
