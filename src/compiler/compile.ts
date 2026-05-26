@@ -348,7 +348,14 @@ function assignRequireToInstance(
  * `?` marker.
  */
 function resolveRequiredControllersForLinkEntries(
-  element: Element,
+  // Spec 027 Slice 5: widened to `Element | Comment` so a
+  // `transclude: 'element'` directive's link entry (whose host is a
+  // Comment placeholder per Slice 2) can resolve its `require`. The
+  // underlying `resolveRequireForm` reads `parentElement`, which is a
+  // standard DOM property on Comment, so the runtime semantics are
+  // unchanged — the cast to `Element` below is a type-system bridge
+  // only (require-resolver.ts is the canonical signature owner).
+  element: Element | Comment,
   entries: readonly LinkEntry[],
   requireResults: ReadonlyMap<Directive, unknown>,
   exceptionHandler: ExceptionHandler,
@@ -367,7 +374,7 @@ function resolveRequiredControllersForLinkEntries(
       continue;
     }
     try {
-      entry.requiredControllers = resolveRequireForm(element, directive.name, directive.require);
+      entry.requiredControllers = resolveRequireForm(element as Element, directive.name, directive.require);
     } catch (err) {
       invokeExceptionHandler(exceptionHandler, err, '$compile');
     }
@@ -478,7 +485,16 @@ export function createCompile(options: CompileOptions): CompileService {
     directives: readonly Directive[],
     scope: Scope,
     parentScope: Scope,
-    element: Element,
+    // Spec 027 Slice 5: widened to `Element | Comment` so the per-element
+    // link site can invoke the seam for a `transclude: 'element'`
+    // directive's children whose host is a Comment placeholder. The
+    // inner loop body only runs for directives declaring `controller`
+    // (the `directive.controller === undefined` continue below), and
+    // no spec-027 child directive on a Comment host declares one — so
+    // the `stashController(element, …)` / `resolveRequireForm(element, …)`
+    // call sites still pass an `Element` in practice. The `as Element`
+    // bridges below preserve type safety without re-typing those helpers.
+    element: Element | Comment,
     attrs: Attributes,
     $transclude: TranscludeFn | undefined,
     requireResults: Map<Directive, unknown>,
@@ -516,9 +532,7 @@ export function createCompile(options: CompileOptions): CompileService {
       // disjoint from `ControllerInvokable` (`string | function | array`),
       // so the sentinel never collides with the eager- or
       // bindToController-path inputs.
-      let resolvedControllerArg: string | ControllerInvokable = directive.controller as
-        | string
-        | ControllerInvokable;
+      let resolvedControllerArg: string | ControllerInvokable = directive.controller as string | ControllerInvokable;
       if (isAttributeSourceController(directive.controller)) {
         const attrName = directive.controller.__attributeSource;
         const attrValue = attrs[attrName];
@@ -535,7 +549,12 @@ export function createCompile(options: CompileOptions): CompileService {
 
       const locals: ControllerLocals = {
         $scope: scope,
-        $element: element,
+        // `ControllerLocals.$element` is typed `Element` in
+        // controller-types.ts. Spec 027's widening to `Element | Comment`
+        // is only reachable when the directive has no `controller` (the
+        // loop skips above), so this cast is unreachable at runtime for
+        // a Comment host — kept as a type bridge.
+        $element: element as Element,
         $attrs: attrs,
       };
       if ($transclude !== undefined) {
@@ -566,7 +585,7 @@ export function createCompile(options: CompileOptions): CompileService {
           // Stash on `$$ngControllers` BEFORE binding wiring + lifecycle
           // hooks fire so a `$onInit` (or downstream Slice-4 `require`
           // resolution) can find the instance on this element by name.
-          stashController(element, directive.name, instance);
+          stashController(element as Element, directive.name, instance);
           // Spec 022 Slice 4 — resolve `require` AFTER stash, BEFORE
           // binding wiring + `$onInit`. The object-form auto-assignment
           // here is what lets `$onInit` read `this.<alias>` for its
@@ -583,7 +602,7 @@ export function createCompile(options: CompileOptions): CompileService {
           // post-seam link-entry walk knows the seam already handled it.
           if (directive.require !== undefined) {
             try {
-              const resolved = resolveRequireForm(element, directive.name, directive.require);
+              const resolved = resolveRequireForm(element as Element, directive.name, directive.require);
               requireResults.set(directive, resolved);
               assignRequireToInstance(instance, directive.require, resolved);
             } catch (err) {
@@ -665,14 +684,14 @@ export function createCompile(options: CompileOptions): CompileService {
           // eager path, `resolvedControllerArg === directive.controller`
           // and `directive.controllerAs` carries any explicit alias.
           instance = $controller(resolvedControllerArg, locals, directive.controllerAs);
-          stashController(element, directive.name, instance);
+          stashController(element as Element, directive.name, instance);
           // Spec 022 Slice 4 — resolve `require` AFTER stash, BEFORE
           // `$onInit`. Same ordering as the bindToController branch:
           // object-form auto-assignment populates `this.<alias>` so
           // `$onInit` sees its required collaborators on `this`.
           if (directive.require !== undefined) {
             try {
-              const resolved = resolveRequireForm(element, directive.name, directive.require);
+              const resolved = resolveRequireForm(element as Element, directive.name, directive.require);
               requireResults.set(directive, resolved);
               assignRequireToInstance(instance, directive.require, resolved);
             } catch (err) {
@@ -1477,7 +1496,12 @@ export function createCompile(options: CompileOptions): CompileService {
       // `$postLink`.
       const requireResults = new Map<Directive, unknown>();
       let trackedControllers: TrackedController[] = [];
-      if (isElement(target)) {
+      // Spec 027 Slice 5: admit Comment placeholders so a
+      // `transclude: 'element'` directive's children (e.g.
+      // `ng-switch-when` with `require: '^ngSwitch'`) can resolve their
+      // require against the ancestor chain. Mirrors the Slice-2
+      // precedent at the `$$ngBoundTransclude` stash gate above.
+      if (isElement(target) || isComment(target)) {
         trackedControllers = runControllerSeam(
           effectiveDirectives,
           scope,
@@ -1498,7 +1522,11 @@ export function createCompile(options: CompileOptions): CompileService {
       // them on the fly so the 4th-arg contract still holds — this is
       // the canonical AngularJS pattern of a link-only directive
       // consuming a sibling's controller.
-      if (isElement(target)) {
+      //
+      // Spec 027 Slice 5: also admit Comment placeholders so a
+      // `transclude: 'element'` directive's children (e.g.
+      // `ng-switch-when`) get their `require: '^ngSwitch'` populated.
+      if (isElement(target) || isComment(target)) {
         resolveRequiredControllersForLinkEntries(target, effectiveLinkEntries, requireResults, exceptionHandler);
       }
 

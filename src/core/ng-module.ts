@@ -68,6 +68,14 @@ import { NG_INIT_NAME, ngInitDirective } from '@compiler/ng-init';
 import { NG_NON_BINDABLE_NAME, ngNonBindableDirective } from '@compiler/ng-non-bindable';
 import { NG_SHOW_NAME, ngShowDirective } from '@compiler/ng-show';
 import { NG_STYLE_NAME, ngStyleDirective } from '@compiler/ng-style';
+import {
+  NG_SWITCH_DEFAULT_NAME,
+  NG_SWITCH_NAME,
+  NG_SWITCH_WHEN_NAME,
+  ngSwitchDefaultDirective,
+  ngSwitchDirective,
+  ngSwitchWhenDirective,
+} from '@compiler/ng-switch';
 import { NG_TRANSCLUDE_NAME, ngTranscludeDirective } from '@compiler/ng-transclude';
 import { $ControllerProvider } from '@controller/controller-provider';
 import type { ControllerService } from '@controller/controller-types';
@@ -381,5 +389,23 @@ export const ngModule = createModule('ng', [])
       // (e.g. via a surrounding `ng-if` retoggling — spec 027 Slice 3).
       // See `src/compiler/ng-init.ts` for the pre-link-timing rationale.
       $compileProvider.directive(NG_INIT_NAME, ngInitDirective);
+      // Spec 027 Slice 5 — `ngSwitch` + `ngSwitchWhen` + `ngSwitchDefault`
+      // provide value-driven subtree selection. The parent (`ngSwitch`)
+      // owns a `NgSwitchController` controller plus a `scope.$watch`
+      // listener on the switch expression; the two child directives
+      // declare `transclude: 'element'` (so their host element is
+      // replaced at compile time by a Comment placeholder per Slice 2)
+      // and `require: '^ngSwitch'` (so they can register their
+      // `{ transclude, placeholder }` pair into the parent's `cases`
+      // map). The parent's listener orchestrates every transition:
+      // teardown of the active set, lookup of the new set via
+      // `String(value)` exact-match (with `'?'` fallback for the
+      // default block), and mounting of fresh deep clones next to each
+      // matching child's own placeholder. Multiple matching siblings
+      // mount in document order. See `src/compiler/ng-switch.ts` for
+      // the parent-controller + child-registration architecture rationale.
+      $compileProvider.directive(NG_SWITCH_NAME, ngSwitchDirective);
+      $compileProvider.directive(NG_SWITCH_DEFAULT_NAME, ngSwitchDefaultDirective);
+      $compileProvider.directive(NG_SWITCH_WHEN_NAME, ngSwitchWhenDirective);
     },
   ]);

@@ -37,12 +37,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { MultipleTranscludeDirectivesError } from '@compiler/compile-error';
-import type {
-  DirectiveFactory,
-  DirectiveFactoryReturn,
-  LinkFn,
-  TranscludeFn,
-} from '@compiler/directive-types';
+import type { DirectiveFactory, DirectiveFactoryReturn, LinkFn, TranscludeFn } from '@compiler/directive-types';
 import { Scope } from '@core/index';
 
 import { bootstrapNgModule, compileWith } from './test-helpers';
@@ -204,7 +199,7 @@ describe('transclude: "element" foundation — link-arg handoff (spec 027 Slice 
     bootstrapNgModule();
   });
 
-  it("the link fn receives the Comment placeholder as its `element` argument (not the original host)", () => {
+  it('the link fn receives the Comment placeholder as its `element` argument (not the original host)', () => {
     const capture: LinkArgsCapture = { invocations: 0 };
     const $compile = compileWith(($cp) => {
       $cp.directive('myElement', ddoFactory(makeCaptureDirective(capture)));

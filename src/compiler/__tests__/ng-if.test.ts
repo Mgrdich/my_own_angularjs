@@ -312,7 +312,7 @@ describe('ngIf — toggle lifecycle (FS §2.1)', () => {
 });
 
 describe('ngIf — position preservation across toggles (FS §2.1)', () => {
-  it('the placeholder Comment occupies the host\'s original index in parent.childNodes', () => {
+  it("the placeholder Comment occupies the host's original index in parent.childNodes", () => {
     const b = bootstrap();
     const scope = Scope.create();
     scope.show = true;
