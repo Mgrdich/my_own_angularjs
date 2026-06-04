@@ -1455,9 +1455,10 @@ directive with `transclude: 'element'`, the capture pass in
 
 The matched directive's `link` fn then receives the placeholder
 Comment as its `element` argument (typed `Element` on the public
-surface, but a `Comment` at runtime — directives author with the
-canonical `element as unknown as Comment` cast, see `ng-if.ts` for
-the pattern) and a callable `$transclude` as its 5th argument.
+surface, but a `Comment` at runtime — directives verify with the
+`isComment(element)` guard from `node-guards.ts` and throw on
+mismatch rather than casting blindly, see `ng-if.ts` for the
+pattern) and a callable `$transclude` as its 5th argument.
 
 **Deep-clone + re-link mechanic.** Each `$transclude(cloneAttachFn)`
 call invokes `Node.cloneNode(true)` on the master host element,

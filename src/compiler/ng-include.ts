@@ -166,6 +166,7 @@ import type { TemplateRequestFn } from '@template/template-types';
 
 import { addElementCleanup } from './cleanup';
 import type { CompileService, DirectiveFactory, DirectiveFactoryReturn, LinkFn } from './directive-types';
+import { isComment } from './node-guards';
 import { parseTemplate } from './template-parse';
 
 /**
@@ -201,10 +202,14 @@ function ngIncludeFactory(
   const link: LinkFn = (scope, element, attrs) => {
     // The runtime `element` is the Comment placeholder Slice 2 installed
     // in place of the host element. The public LinkFn types it as
-    // `Element`; cast through `unknown` to surface the real runtime
-    // shape without resorting to `// @ts-expect-error`. Matches the
-    // spec 027 Slice 3 / Slice 5 precedent.
-    const placeholder = element as unknown as Comment;
+    // `Element`, but the Slice 2 `transclude: 'element'` foundation
+    // guarantees a `Comment` at runtime — verify with the existing
+    // guard and throw on mismatch rather than casting through
+    // `unknown`. Matches the spec 027 Slice 3 / Slice 5 precedent.
+    if (!isComment(element)) {
+      throw new Error(`ngInclude: expected placeholder to be a Comment, got nodeType ${String(element.nodeType)}`);
+    }
+    const placeholder = element;
 
     // URL source dispatch: prefer `attrs.ngInclude` (attribute form),
     // fall back to `attrs.src` (element form). Both forms invoke this

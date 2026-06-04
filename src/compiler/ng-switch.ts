@@ -129,7 +129,7 @@
 import type { Scope } from '@core/index';
 
 import type { DirectiveFactory, DirectiveFactoryReturn, LinkFn } from './directive-types';
-import { isElement } from './node-guards';
+import { isComment, isElement } from './node-guards';
 import type { TranscludeFn } from './transclude-types';
 
 /**
@@ -388,10 +388,14 @@ function createSwitchChildLink(keyFor: (attrs: Record<string, string | undefined
 
     // The runtime `element` is the Comment placeholder Slice 2 inserted
     // in place of the host element. The public LinkFn types it as
-    // `Element`; cast through `unknown` to surface the real runtime
-    // shape without resorting to `// @ts-expect-error`. Matches the
-    // spec 027 Slice 3 `ng-if` precedent.
-    const placeholder = element as unknown as Comment;
+    // `Element`, but the Slice 2 `transclude: 'element'` foundation
+    // guarantees a `Comment` at runtime — verify with the existing
+    // guard and throw on mismatch rather than casting through
+    // `unknown`. Matches the spec 027 Slice 3 `ng-if` precedent.
+    if (!isComment(element)) {
+      throw new Error(`ngSwitch: expected placeholder to be a Comment, got nodeType ${String(element.nodeType)}`);
+    }
+    const placeholder = element;
 
     // Snapshot the attribute view so the closure-local `attrs` object
     // satisfies the `keyFor` callback's `Record<string, string | undefined>`

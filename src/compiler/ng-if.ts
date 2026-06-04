@@ -126,7 +126,7 @@ import type { Scope } from '@core/index';
 
 import { addElementCleanup, destroyElementScope } from './cleanup';
 import type { DirectiveFactory, DirectiveFactoryReturn, LinkFn } from './directive-types';
-import { isElement } from './node-guards';
+import { isComment, isElement } from './node-guards';
 
 /**
  * Normalized directive name — registration in `src/core/ng-module.ts`
@@ -150,8 +150,15 @@ function ngIfFactory(): DirectiveFactoryReturn {
   const link: LinkFn = (_scope, element, attrs, _ctrls, $transclude) => {
     // The placeholder Comment is `element` for the entire lifetime of
     // this link invocation; the host element it replaced is the
-    // master fragment that `$transclude` clones on every call.
-    const placeholder = element as unknown as Comment;
+    // master fragment that `$transclude` clones on every call. The
+    // public LinkFn types `element` as `Element`, but the Slice 2
+    // `transclude: 'element'` foundation guarantees a `Comment` at
+    // runtime — verify with the existing guard and throw on mismatch
+    // rather than casting through `unknown`.
+    if (!isComment(element)) {
+      throw new Error(`ngIf: expected placeholder to be a Comment, got nodeType ${String(element.nodeType)}`);
+    }
+    const placeholder = element;
     const scope = _scope;
 
     let clonedRoot: Element | null = null;
