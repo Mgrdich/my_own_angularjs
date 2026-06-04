@@ -129,6 +129,7 @@
 import type { Scope } from '@core/index';
 
 import type { DirectiveFactory, DirectiveFactoryReturn, LinkFn } from './directive-types';
+import { isElement } from './node-guards';
 import type { TranscludeFn } from './transclude-types';
 
 /**
@@ -297,7 +298,16 @@ function ngSwitchFactory(): DirectiveFactoryReturn {
             // so `clone[0]` is always defined in practice.
             return;
           }
-          const cloneElement = head as Element;
+          if (!isElement(head)) {
+            // Invariant — for `transclude: 'element'`, the default
+            // bucket is `[host]` where `host` is the original Element
+            // the matched `ng-switch-when` / `ng-switch-default`
+            // declared on. A runtime mismatch means the transclude
+            // machinery's contract has broken; surface it rather than
+            // silently casting through `unknown`.
+            throw new Error(`ngSwitch: expected cloned host to be an Element, got nodeType ${String(head.nodeType)}`);
+          }
+          const cloneElement = head;
           entry.placeholder.parentNode?.insertBefore(cloneElement, entry.placeholder.nextSibling);
           ctrl.selectedTranscludes.push(entry.transclude);
           ctrl.selectedScopes.push(transcludedScope);

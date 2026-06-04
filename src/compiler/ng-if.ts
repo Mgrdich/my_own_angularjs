@@ -126,6 +126,7 @@ import type { Scope } from '@core/index';
 
 import { addElementCleanup, destroyElementScope } from './cleanup';
 import type { DirectiveFactory, DirectiveFactoryReturn, LinkFn } from './directive-types';
+import { isElement } from './node-guards';
 
 /**
  * Normalized directive name — registration in `src/core/ng-module.ts`
@@ -198,7 +199,16 @@ function ngIfFactory(): DirectiveFactoryReturn {
               // null `clonedRoot` (which would block future toggles).
               return;
             }
-            clonedRoot = head as Element;
+            if (!isElement(head)) {
+              // Invariant — for `transclude: 'element'`, the default
+              // bucket is `[host]` where `host` is the original Element
+              // the directive matched on, so `clone[0]` is always an
+              // Element. A runtime mismatch here means the transclude
+              // machinery's contract has broken; surface it rather
+              // than silently casting through `unknown`.
+              throw new Error(`ngIf: expected cloned host to be an Element, got nodeType ${String(head.nodeType)}`);
+            }
+            clonedRoot = head;
             cloneScope = transcludedScope;
             // Position preservation: insert the clone as the next
             // sibling of the placeholder. `insertBefore(node, null)`
