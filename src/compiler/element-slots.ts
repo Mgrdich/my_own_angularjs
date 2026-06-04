@@ -38,6 +38,19 @@ export const NG_SCOPE = '$$ngScope' as const;
 export const NG_CLEANUP_QUEUE = '$$ngCleanupQueue' as const;
 export const NG_CONTROLLERS = '$$ngControllers' as const;
 export const NG_BOUND_TRANSCLUDE = '$$ngBoundTransclude' as const;
+/**
+ * Marker stashed on a host Element after spec 027 Slice 2's
+ * `kind: 'element'` capture detaches it. When the master fragment is
+ * re-compiled inside `makeInternalLinker([host])`, the second
+ * `compileElementOrComment` invocation reads this slot and SKIPS the
+ * transclude pre-pass for the marked directive — otherwise an
+ * `transclude: 'element'` directive would re-fire transclude capture
+ * recursively on the master clone and never terminate. The value is
+ * the matched directive's name so two SIBLING `transclude: 'element'`
+ * directives at the same priority (a future spec scenario) can still
+ * fire independently.
+ */
+export const NG_ELEMENT_TRANSCLUDED = '$$ngElementTranscluded' as const;
 
 /**
  * Element augmented with every framework-internal slot the compiler may
@@ -52,6 +65,20 @@ export interface NgManagedElement extends Element {
   [NG_SCOPE]?: Scope;
   [NG_CLEANUP_QUEUE]?: (() => void)[];
   [NG_CONTROLLERS]?: Map<string, unknown>;
+  [NG_BOUND_TRANSCLUDE]?: BoundTranscludeFn;
+  [NG_ELEMENT_TRANSCLUDED]?: string;
+}
+
+/**
+ * Comment placeholder augmented with the subset of framework-internal
+ * slots that may appear on a `transclude: 'element'` placeholder
+ * (spec 027 Slice 2). Today only `$$ngCleanupQueue` and
+ * `$$ngBoundTransclude` are valid; `$$ngScope` and `$$ngControllers`
+ * are Element-only because no scope-having or controller-bearing
+ * directive ever hosts itself on a Comment node.
+ */
+export interface NgManagedComment extends Comment {
+  [NG_CLEANUP_QUEUE]?: (() => void)[];
   [NG_BOUND_TRANSCLUDE]?: BoundTranscludeFn;
 }
 
@@ -80,5 +107,20 @@ export interface NgManagedElement extends Element {
  * ```
  */
 export function isNgManagedElement(el: Element): el is NgManagedElement {
-  return NG_SCOPE in el || NG_CLEANUP_QUEUE in el || NG_CONTROLLERS in el || NG_BOUND_TRANSCLUDE in el;
+  return (
+    NG_SCOPE in el ||
+    NG_CLEANUP_QUEUE in el ||
+    NG_CONTROLLERS in el ||
+    NG_BOUND_TRANSCLUDE in el ||
+    NG_ELEMENT_TRANSCLUDED in el
+  );
+}
+
+/**
+ * Variant of {@link isNgManagedElement} that accepts a Comment node —
+ * spec 027 Slice 2's `transclude: 'element'` placeholder. Same
+ * `in`-operator runtime semantics; narrows to {@link NgManagedComment}.
+ */
+export function isNgManagedComment(el: Comment): el is NgManagedComment {
+  return NG_CLEANUP_QUEUE in el || NG_BOUND_TRANSCLUDE in el;
 }

@@ -1,6 +1,7 @@
 export { directiveNormalize } from './directive-normalize';
 export {
   DuplicateTranscludeSelectorError,
+  // eslint-disable-next-line @typescript-eslint/no-deprecated -- ElementTranscludeNotSupportedError is intentionally re-exported (spec 027 Slice 2) for the one-release deprecation grace period. The throw site has been removed but the class stays exported so consumers catching via `instanceof` keep compiling.
   ElementTranscludeNotSupportedError,
   EmptyTemplateError,
   EmptyTemplateUrlError,

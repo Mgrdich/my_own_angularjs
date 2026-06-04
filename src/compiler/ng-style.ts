@@ -154,28 +154,37 @@ function isKebabName(name: StyleName): name is KebabCssKey {
 }
 
 /**
- * Compute the set of property names contributed by `value`. Only plain
- * objects (`typeof === 'object'`, non-null, non-array) contribute keys;
- * every other shape — including arrays, primitives, and `null` /
- * `undefined` — collapses to the empty set. Arrays are deliberately
- * REJECTED even though `Object.keys([1, 2])` yields `['0', '1']`:
- * `ng-style` accepts plain objects only, so an array-typed expression
- * value clears any directive-applied styles rather than spraying
- * numeric-name properties onto `element.style`.
+ * Compute the property-name set AND the narrowed record from `value`.
+ * Only plain objects (`typeof === 'object'`, non-null, non-array)
+ * contribute keys; every other shape — including arrays, primitives,
+ * and `null` / `undefined` — collapses to `{ props: empty, record:
+ * null }`. Arrays are deliberately REJECTED even though
+ * `Object.keys([1, 2])` yields `['0', '1']`: `ng-style` accepts plain
+ * objects only, so an array-typed expression value clears any
+ * directive-applied styles rather than spraying numeric-name
+ * properties onto `element.style`.
+ *
+ * Returning the narrowed record alongside the keys lets the caller
+ * read property values without a follow-up `value as Record<string,
+ * unknown>` cast — the narrowing established here is preserved
+ * through the return type.
  *
  * The `Object.keys(...) as StyleName[]` cast is the single boundary
  * narrowing in the file: it expresses the `ng-style` contract that
  * object keys are CSS property names (camelCase IDL or kebab-case
  * CSSOM). Downstream consumers (`applyStyle` / `clearStyle` / the diff
- * loop) operate on `StyleName` end-to-end with no further casts.
+ * loop) operate on `StyleName` end-to-end with no further casts. The
+ * cast itself is the TS-canonical workaround for `Object.keys`'s
+ * specified `string[]` return type and cannot be replaced by a guard.
  *
  * @internal
  */
-function resolveStyleProps(value: unknown): Set<StyleName> {
+function resolveStyleProps(value: unknown): { props: Set<StyleName>; record: Record<string, unknown> | null } {
   if (value === null || typeof value !== 'object' || Array.isArray(value)) {
-    return new Set<StyleName>();
+    return { props: new Set<StyleName>(), record: null };
   }
-  return new Set<StyleName>(Object.keys(value) as StyleName[]);
+  const record = value as Record<string, unknown>;
+  return { props: new Set<StyleName>(Object.keys(record) as StyleName[]), record };
 }
 
 /**
@@ -245,7 +254,7 @@ function ngStyleFactory(): DirectiveFactoryReturn {
     const { style } = element;
 
     scope.$watchCollection(expr, (value: unknown) => {
-      const newProps = resolveStyleProps(value);
+      const { props: newProps, record } = resolveStyleProps(value);
 
       // Diff (1) — clear properties WE applied that the new value no
       // longer names. Properties on the element that are NOT in
@@ -262,11 +271,13 @@ function ngStyleFactory(): DirectiveFactoryReturn {
       // no-op digests for unchanged collections). String coercion via
       // `String(...)` matches `ng-bind`'s contract and CSS-value
       // conventions; non-string values (numbers, booleans) stringify
-      // the canonical JS way.
-      if (newProps.size > 0) {
-        const props = value as Record<string, unknown>;
+      // the canonical JS way. `record` is non-null whenever
+      // `newProps.size > 0` (both flow from the same plain-object
+      // narrowing inside `resolveStyleProps`), so the typeof check
+      // here is unreachable but kept for type-narrowing.
+      if (newProps.size > 0 && record !== null) {
         for (const propName of newProps) {
-          applyStyle(style, propName, String(props[propName]));
+          applyStyle(style, propName, String(record[propName]));
         }
       }
 

@@ -33,7 +33,8 @@
 
 import type { Scope } from '@core/index';
 
-import { isNgManagedElement, NG_CLEANUP_QUEUE, NG_SCOPE } from './element-slots';
+import { isNgManagedComment, isNgManagedElement, NG_CLEANUP_QUEUE, NG_SCOPE } from './element-slots';
+import { isComment } from './node-guards';
 
 /**
  * Stash the child {@link Scope} created for this element on the
@@ -78,6 +79,16 @@ export function getElementScope(element: Element): Scope | undefined {
  * in INSERTION order during {@link destroyElementScope}, BEFORE the
  * element's child scope (if any) is `$destroy()`-ed.
  *
+ * Spec 027 Slice 2 widens the accepted host type to `Element | Comment`
+ * — the Comment branch supports the `transclude: 'element'`
+ * placeholder. The Comment branch does not have an associated
+ * `$$ngScope`, and `destroyElementScope` does not walk into Comment
+ * nodes via the standard child-walk (Comments are not in
+ * `parent.children`'s HTMLCollection). Structural directives that
+ * register cleanups against the Comment placeholder are responsible
+ * for invoking the queue themselves (typically by stashing a teardown
+ * on a sibling Element's cleanup queue).
+ *
  * @example
  * ```ts
  * const handler = () => doStuff();
@@ -85,9 +96,13 @@ export function getElementScope(element: Element): Scope | undefined {
  * addElementCleanup(element, () => element.removeEventListener('click', handler));
  * ```
  */
-export function addElementCleanup(element: Element, fn: () => void): void {
+export function addElementCleanup(element: Element | Comment, fn: () => void): void {
   let queue: (() => void)[] | undefined;
-  if (isNgManagedElement(element)) {
+  if (isComment(element)) {
+    if (isNgManagedComment(element)) {
+      queue = element[NG_CLEANUP_QUEUE];
+    }
+  } else if (isNgManagedElement(element)) {
     queue = element[NG_CLEANUP_QUEUE];
   }
   if (queue === undefined) {

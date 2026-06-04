@@ -87,7 +87,7 @@
  * plus `templateRequest` (Slice 5 — wired ahead of the Slice 6 drain).
  */
 
-import type { ControllerLocals } from '@controller/controller-types';
+import type { ControllerInvokable, ControllerLocals } from '@controller/controller-types';
 import type { Scope } from '@core/index';
 import { invokeExceptionHandler, type ExceptionHandler } from '@exception-handler/index';
 
@@ -103,7 +103,13 @@ import {
 } from './compile-error';
 import { describeValue } from './describe-value';
 import { collectDirectives } from './directive-collector';
-import { isNgManagedElement, NG_BOUND_TRANSCLUDE, NG_CONTROLLERS, NG_SCOPE } from './element-slots';
+import {
+  isNgManagedElement,
+  NG_BOUND_TRANSCLUDE,
+  NG_CONTROLLERS,
+  NG_ELEMENT_TRANSCLUDED,
+  NG_SCOPE,
+} from './element-slots';
 import type { CompileOptions, CompileService, Directive, Linker, LinkFn, Attributes } from './directive-types';
 import { wireIsolateBindings, type NormalizedBindingMap } from './isolate-bindings';
 import { ChangesQueue, flushChangesQueue, hasHook, invokeHook, UNINITIALIZED_VALUE } from './lifecycle';
@@ -240,6 +246,28 @@ function makeSimpleChange(currentValue: unknown, previousValue: unknown, isFirst
 }
 
 /**
+ * Spec 027 Slice 4 — attribute-source sentinel detector. Returns `true`
+ * when `controller` is the `{ __attributeSource: string }` shape used
+ * by the built-in `ng-controller` directive (and reserved for any
+ * future structural directive that wants `runControllerSeam` to read
+ * its controller name from `attrs[__attributeSource]` at link time).
+ *
+ * The check is intentionally strict: rejects `null`, arrays, and any
+ * object whose `__attributeSource` is not a string. The detected union
+ * arm is disjoint from `ControllerInvokable` (`string | function |
+ * array`), so the sentinel never collides with the eager- or
+ * bindToController-path inputs.
+ */
+function isAttributeSourceController(controller: unknown): controller is { __attributeSource: string } {
+  return (
+    controller !== null &&
+    typeof controller === 'object' &&
+    !Array.isArray(controller) &&
+    typeof (controller as { __attributeSource?: unknown }).__attributeSource === 'string'
+  );
+}
+
+/**
  * Stash `instance` on `element.$$ngControllers` under `directiveName`.
  * Creates the map lazily on first call. Non-enumerable so it does not
  * appear in `for..in` traversals.
@@ -320,7 +348,14 @@ function assignRequireToInstance(
  * `?` marker.
  */
 function resolveRequiredControllersForLinkEntries(
-  element: Element,
+  // Spec 027 Slice 5: widened to `Element | Comment` so a
+  // `transclude: 'element'` directive's link entry (whose host is a
+  // Comment placeholder per Slice 2) can resolve its `require`. The
+  // underlying `resolveRequireForm` reads `parentElement`, which is a
+  // standard DOM property on Comment, so the runtime semantics are
+  // unchanged — the cast to `Element` below is a type-system bridge
+  // only (require-resolver.ts is the canonical signature owner).
+  element: Element | Comment,
   entries: readonly LinkEntry[],
   requireResults: ReadonlyMap<Directive, unknown>,
   exceptionHandler: ExceptionHandler,
@@ -339,7 +374,7 @@ function resolveRequiredControllersForLinkEntries(
       continue;
     }
     try {
-      entry.requiredControllers = resolveRequireForm(element, directive.name, directive.require);
+      entry.requiredControllers = resolveRequireForm(element as Element, directive.name, directive.require);
     } catch (err) {
       invokeExceptionHandler(exceptionHandler, err, '$compile');
     }
@@ -423,12 +458,43 @@ export function createCompile(options: CompileOptions): CompileService {
    * parent-expression evaluation when bindings target the instance —
    * matches the spec-022 Slice 1 contract for the scope-target wiring
    * site.
+   *
+   * **Spec 027 Slice 4 — attribute-source sentinel branch.** A third
+   * dispatch is added alongside the existing `bindToController` (deferred-
+   * alias `later: true`) and eager paths. When `directive.controller`
+   * is the sentinel shape `{ __attributeSource: 'ngController' }` (or
+   * any future built-in's attribute-source key), the seam reads the
+   * controller name from `attrs[__attributeSource]` at link time and
+   * invokes `$controller(attrs[…], locals)` with NO separate `ident`
+   * argument — the alias (`'Name as alias'` syntax) is parsed from the
+   * attribute string by `$controller`'s own `parseControllerName`. The
+   * branch runs on the EAGER path (`ng-controller` declares no isolate
+   * bindings, so `bindToController` is absent), so all four lifecycle
+   * hooks (`$onInit`, `$postLink`, `$onDestroy`; NOT `$onChanges` —
+   * matches AngularJS, no isolate bindings to drive change records),
+   * the `$$ngControllers` stash, the `require` resolution dance, and
+   * the `controllerAs` alias publication (handled internally by
+   * `$controller` since `later !== true`) all fire on the same timeline
+   * as the eager path. An empty / undefined / non-string attribute
+   * value causes a clean bail (no instantiation, no error — the
+   * directive matched on an element that supplies no controller name).
+   * The sentinel shape never collides with `ControllerInvokable`
+   * (`string | function | array`) — the union arms are disjoint.
    */
   function runControllerSeam(
     directives: readonly Directive[],
     scope: Scope,
     parentScope: Scope,
-    element: Element,
+    // Spec 027 Slice 5: widened to `Element | Comment` so the per-element
+    // link site can invoke the seam for a `transclude: 'element'`
+    // directive's children whose host is a Comment placeholder. The
+    // inner loop body only runs for directives declaring `controller`
+    // (the `directive.controller === undefined` continue below), and
+    // no spec-027 child directive on a Comment host declares one — so
+    // the `stashController(element, …)` / `resolveRequireForm(element, …)`
+    // call sites still pass an `Element` in practice. The `as Element`
+    // bridges below preserve type safety without re-typing those helpers.
+    element: Element | Comment,
     attrs: Attributes,
     $transclude: TranscludeFn | undefined,
     requireResults: Map<Directive, unknown>,
@@ -450,9 +516,51 @@ export function createCompile(options: CompileOptions): CompileService {
       if (directive.controller === undefined) {
         continue;
       }
+
+      // Spec 027 Slice 4 — attribute-source sentinel resolution. When
+      // the directive's normalized `controller` field is the sentinel
+      // shape `{ __attributeSource: 'ngController' }` (a non-callable,
+      // non-array object with a string `__attributeSource` key), read
+      // the controller name from `attrs[__attributeSource]` at this
+      // point. The resolved name flows into the eager-path
+      // `$controller(name, locals, controllerAs)` invocation below
+      // VIA `resolvedControllerArg` (an inner-scoped binding that
+      // shadows `directive.controller` for the rest of this iteration).
+      // An empty / non-string / missing attribute value causes a clean
+      // bail (no instantiation, no error) — the directive matched on
+      // an element that supplies no controller name. The detection is
+      // disjoint from `ControllerInvokable` (`string | function | array`),
+      // so the sentinel never collides with the eager- or
+      // bindToController-path inputs.
+      let resolvedControllerArg: string | ControllerInvokable;
+      if (isAttributeSourceController(directive.controller)) {
+        const attrName = directive.controller.__attributeSource;
+        const attrValue = attrs[attrName];
+        if (typeof attrValue !== 'string' || attrValue.length === 0) {
+          // Clean bail — no instantiation, no error, no entry in the
+          // tracked list. A directive that opts into the sentinel
+          // shape declares no concrete fallback name; an empty /
+          // undefined attribute value at link time is the documented
+          // "no controller to attach" case.
+          continue;
+        }
+        resolvedControllerArg = attrValue;
+      } else {
+        // The guard narrows `directive.controller` to
+        // `string | ControllerInvokable` here — the sentinel and
+        // `undefined` branches have both been ruled out, so no cast
+        // is needed.
+        resolvedControllerArg = directive.controller;
+      }
+
       const locals: ControllerLocals = {
         $scope: scope,
-        $element: element,
+        // `ControllerLocals.$element` is typed `Element` in
+        // controller-types.ts. Spec 027's widening to `Element | Comment`
+        // is only reachable when the directive has no `controller` (the
+        // loop skips above), so this cast is unreachable at runtime for
+        // a Comment host — kept as a type bridge.
+        $element: element as Element,
         $attrs: attrs,
       };
       if ($transclude !== undefined) {
@@ -472,12 +580,18 @@ export function createCompile(options: CompileOptions): CompileService {
       let instance: unknown = undefined;
       try {
         if (useBindToController) {
-          const deferred = $controller(directive.controller, locals, directive.controllerAs, true);
+          // `resolvedControllerArg` is identical to `directive.controller`
+          // in the `bindToController` path — the sentinel shape is
+          // reserved for the EAGER path (`ng-controller` declares no
+          // isolate bindings, so it never lands here). Reusing the
+          // resolved local keeps the call signature uniform across both
+          // branches without an `as` cast.
+          const deferred = $controller(resolvedControllerArg, locals, directive.controllerAs, true);
           instance = deferred.instance;
           // Stash on `$$ngControllers` BEFORE binding wiring + lifecycle
           // hooks fire so a `$onInit` (or downstream Slice-4 `require`
           // resolution) can find the instance on this element by name.
-          stashController(element, directive.name, instance);
+          stashController(element as Element, directive.name, instance);
           // Spec 022 Slice 4 — resolve `require` AFTER stash, BEFORE
           // binding wiring + `$onInit`. The object-form auto-assignment
           // here is what lets `$onInit` read `this.<alias>` for its
@@ -494,7 +608,7 @@ export function createCompile(options: CompileOptions): CompileService {
           // post-seam link-entry walk knows the seam already handled it.
           if (directive.require !== undefined) {
             try {
-              const resolved = resolveRequireForm(element, directive.name, directive.require);
+              const resolved = resolveRequireForm(element as Element, directive.name, directive.require);
               requireResults.set(directive, resolved);
               assignRequireToInstance(instance, directive.require, resolved);
             } catch (err) {
@@ -566,15 +680,24 @@ export function createCompile(options: CompileOptions): CompileService {
             invokeHook(instance, '$onChanges', exceptionHandler, initialRecord);
           }
         } else {
-          instance = $controller(directive.controller, locals, directive.controllerAs);
-          stashController(element, directive.name, instance);
+          // Eager path. When the sentinel sourced the controller name
+          // from `attrs[__attributeSource]` (spec 027 Slice 4), the
+          // resolved string flows through `resolvedControllerArg` and
+          // `$controller`'s own `parseControllerName` handles the
+          // `'Name as alias'` syntax inside the attribute value — no
+          // separate `ident` argument is passed (the sentinel directive
+          // never declares `controllerAs` on its DDO). For the standard
+          // eager path, `resolvedControllerArg === directive.controller`
+          // and `directive.controllerAs` carries any explicit alias.
+          instance = $controller(resolvedControllerArg, locals, directive.controllerAs);
+          stashController(element as Element, directive.name, instance);
           // Spec 022 Slice 4 — resolve `require` AFTER stash, BEFORE
           // `$onInit`. Same ordering as the bindToController branch:
           // object-form auto-assignment populates `this.<alias>` so
           // `$onInit` sees its required collaborators on `this`.
           if (directive.require !== undefined) {
             try {
-              const resolved = resolveRequireForm(element, directive.name, directive.require);
+              const resolved = resolveRequireForm(element as Element, directive.name, directive.require);
               requireResults.set(directive, resolved);
               assignRequireToInstance(instance, directive.require, resolved);
             } catch (err) {
@@ -778,17 +901,45 @@ export function createCompile(options: CompileOptions): CompileService {
       }
     }
 
-    // ----- Spec 018 / Slice 3: transclusion pre-pass -----
+    // ----- Spec 018 / Slice 3 + spec 027 / Slice 2: transclusion pre-pass -----
     //
     // Scan the priority-sorted directive list for entries declaring
     // `transclude`. The FIRST match wins; any second match is reported
     // via `MultipleTranscludeDirectivesError` and its `transclude` is
     // cleared on a LOCAL shallow copy (the shared registered directive
     // object is NOT mutated).
+    //
+    // Spec 027 Slice 2 — re-entrancy guard for element-form. When a
+    // `kind: 'element'` capture detaches the host, the master fragment
+    // is the host itself; `makeInternalLinker([host])` then walks back
+    // through this function recursively. On the SECOND invocation we
+    // skip the same directive's transclude pre-pass so we don't
+    // re-capture infinitely. The first-pass capture stamps the host's
+    // `$$ngElementTranscluded` slot with the directive name; the
+    // second pass reads it and strips `transclude` on a LOCAL shallow
+    // copy of the directive (the registered object is NOT mutated).
+    const alreadyElementTranscluded =
+      isElement(node) && isNgManagedElement(node) ? node[NG_ELEMENT_TRANSCLUDED] : undefined;
     let transcludingDirective: Directive | null = null;
     const effectiveDirectives: Directive[] = [];
     for (const directive of directives) {
       if (directive.transclude !== undefined) {
+        if (
+          alreadyElementTranscluded !== undefined &&
+          alreadyElementTranscluded === directive.name &&
+          directive.transclude.kind === 'element'
+        ) {
+          // Re-entrancy guard: the master fragment's recompile pass
+          // sees the same directive whose `kind: 'element'` capture
+          // already ran. Strip transclude on a LOCAL copy so the
+          // directive's other behavior (compile / link / controller)
+          // still applies to the master, but the capture does NOT
+          // recur. Mirrors AngularJS's `terminalPriority`-based
+          // re-entry guard without introducing a new priority axis.
+          const stripped: Directive = { ...directive, transclude: undefined };
+          effectiveDirectives.push(stripped);
+          continue;
+        }
         if (transcludingDirective === null) {
           transcludingDirective = directive;
           effectiveDirectives.push(directive);
@@ -807,8 +958,19 @@ export function createCompile(options: CompileOptions): CompileService {
     }
 
     // Capture children + compile master fragments when a transcluding
-    // directive matched. Both `kind: 'content'` (Slice 3) and
-    // `kind: 'slots'` (Slice 4) flow through the same pipeline.
+    // directive matched. All three discriminants flow through the same
+    // pipeline:
+    //   - `kind: 'content'` (spec 018 Slice 3): captures host children
+    //     into the default bucket; host stays in the DOM.
+    //   - `kind: 'slots'` (spec 018 Slice 4): routes host children by
+    //     slot selector; host stays in the DOM.
+    //   - `kind: 'element'` (spec 027 Slice 2): detaches the host
+    //     ITSELF into the default bucket (single-element array) and
+    //     leaves a `<!-- directiveName: attrValue -->` Comment
+    //     placeholder in its slot. The local `node` binding is then
+    //     rebound to the placeholder so `$$ngBoundTransclude`,
+    //     `$$ngCleanupQueue`, and the matched directive's link-time
+    //     element argument all hang off the Comment going forward.
     let defaultLinker: Linker | null = null;
     let slotLinkers: Record<string, Linker | null> = {};
     let transcludeDecl: NormalizedTransclude | null = null;
@@ -817,7 +979,30 @@ export function createCompile(options: CompileOptions): CompileService {
     let transcludeUnfilledRequired: string[] = [];
     if (transcludingDirective !== null && transcludingDirective.transclude !== undefined && isElement(node)) {
       transcludeDecl = transcludingDirective.transclude;
-      const buckets = captureChildren(node, transcludeDecl);
+      // Defensively coerce the attribute lookup — `attrs[name]` may be
+      // a non-string runtime value (e.g. a Record from the `$attr`
+      // back-pointer in the typed surface). For element-form
+      // transclusion the value is purely cosmetic (labels the Comment
+      // placeholder for dev-tools inspection), so a defensive empty
+      // string covers both "attribute absent" and "value is non-string"
+      // without affecting behavior.
+      const attrLookup = attrs[transcludingDirective.name];
+      const attrValue = typeof attrLookup === 'string' ? attrLookup : '';
+      // Stamp the host BEFORE handing the bucket to `compileBuckets`
+      // so the recursive master-compile pass reads the marker and
+      // strips its own `transclude` declaration on a local copy. The
+      // stamp lives on the host Element (not the placeholder Comment)
+      // because the master fragment IS the host and that's what the
+      // re-entrant `compileElementOrComment` invocation receives.
+      if (transcludeDecl.kind === 'element') {
+        Object.defineProperty(node, NG_ELEMENT_TRANSCLUDED, {
+          value: transcludingDirective.name,
+          writable: true,
+          configurable: true,
+          enumerable: false,
+        });
+      }
+      const buckets = captureChildren(node, transcludeDecl, transcludingDirective.name, attrValue);
       const compiled = compileBuckets(
         { defaultBucket: buckets.defaultBucket, slotBuckets: buckets.slotBuckets },
         (nodes) => makeInternalLinker(nodes),
@@ -827,6 +1012,16 @@ export function createCompile(options: CompileOptions): CompileService {
       transcludeMasters = buckets.defaultBucket;
       transcludeNamedMasters = buckets.slotBuckets;
       transcludeUnfilledRequired = buckets.unfilledRequired;
+      // Spec 027 Slice 2: rebind `node` to the Comment placeholder for
+      // the rest of `compileElementOrComment`. From this point onward
+      // the per-element linker, the child snapshot, the
+      // `$$ngBoundTransclude` stash, and the matched directive's
+      // link-time `element` argument all operate against the Comment
+      // — the original host element lives on only inside the captured
+      // default bucket as a master fragment for deep-clone + re-link.
+      if (buckets.replacementNode !== undefined) {
+        node = buckets.replacementNode;
+      }
     }
 
     // ----- Spec 019 / Slices 5 + 6: template install pre-pass -----
@@ -1122,7 +1317,7 @@ export function createCompile(options: CompileOptions): CompileService {
         return;
       }
 
-      // ----- Spec 018 / Slice 3: build $transclude closure -----
+      // ----- Spec 018 / Slice 3 + spec 027 / Slice 2: build $transclude closure -----
       //
       // The closure captures `parentScope` as the OUTER scope BEFORE
       // the `scope: true` child is created below — FS §2.5 acceptance
@@ -1130,8 +1325,17 @@ export function createCompile(options: CompileOptions): CompileService {
       // host element receives a non-enumerable `$$ngBoundTransclude`
       // stash so the future `ng-transclude` marker (Slice 5) can find
       // it via parent-element walk.
+      //
+      // Spec 027 Slice 2 widens this site to ALSO fire when `target`
+      // is the Comment placeholder produced by `kind: 'element'`
+      // transclusion — the matched directive's link fn needs
+      // `$transclude` as its 5th argument to mount its clone. The
+      // `$$ngBoundTransclude` stash still lands on the Comment, but
+      // `ng-transclude`'s `parentElement` walk skips Comments so the
+      // stash is effectively only consumed by the directive's own
+      // link fn (which receives `$transclude` directly anyway).
       let $transclude: TranscludeFn | undefined;
-      if (transcludingDirective !== null && transcludeDecl !== null && isElement(target)) {
+      if (transcludingDirective !== null && transcludeDecl !== null && (isElement(target) || isComment(target))) {
         const declared: TranscludeSlotMap = transcludeDecl.kind === 'slots' ? transcludeDecl.slots : [];
         const unfilledRequiredSet = new Set<string>(transcludeUnfilledRequired);
         $transclude = buildTranscludeFn({
@@ -1298,7 +1502,12 @@ export function createCompile(options: CompileOptions): CompileService {
       // `$postLink`.
       const requireResults = new Map<Directive, unknown>();
       let trackedControllers: TrackedController[] = [];
-      if (isElement(target)) {
+      // Spec 027 Slice 5: admit Comment placeholders so a
+      // `transclude: 'element'` directive's children (e.g.
+      // `ng-switch-when` with `require: '^ngSwitch'`) can resolve their
+      // require against the ancestor chain. Mirrors the Slice-2
+      // precedent at the `$$ngBoundTransclude` stash gate above.
+      if (isElement(target) || isComment(target)) {
         trackedControllers = runControllerSeam(
           effectiveDirectives,
           scope,
@@ -1319,7 +1528,11 @@ export function createCompile(options: CompileOptions): CompileService {
       // them on the fly so the 4th-arg contract still holds — this is
       // the canonical AngularJS pattern of a link-only directive
       // consuming a sibling's controller.
-      if (isElement(target)) {
+      //
+      // Spec 027 Slice 5: also admit Comment placeholders so a
+      // `transclude: 'element'` directive's children (e.g.
+      // `ng-switch-when`) get their `require: '^ngSwitch'` populated.
+      if (isElement(target) || isComment(target)) {
         resolveRequiredControllersForLinkEntries(target, effectiveLinkEntries, requireResults, exceptionHandler);
       }
 

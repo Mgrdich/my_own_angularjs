@@ -41,6 +41,7 @@ import {
   ngClassOddDirective,
 } from '@compiler/ng-class';
 import { ngCloakDirective } from '@compiler/ng-cloak';
+import { NG_CONTROLLER_NAME, ngControllerDirective } from '@compiler/ng-controller';
 import {
   ngBlurDirective,
   ngClickDirective,
@@ -62,9 +63,20 @@ import {
   ngSubmitDirective,
 } from '@compiler/ng-event-directives';
 import { NG_HIDE_NAME, ngHideDirective } from '@compiler/ng-hide';
+import { NG_IF_NAME, ngIfDirective } from '@compiler/ng-if';
+import { NG_INCLUDE_NAME, ngIncludeDirective } from '@compiler/ng-include';
+import { NG_INIT_NAME, ngInitDirective } from '@compiler/ng-init';
 import { NG_NON_BINDABLE_NAME, ngNonBindableDirective } from '@compiler/ng-non-bindable';
 import { NG_SHOW_NAME, ngShowDirective } from '@compiler/ng-show';
 import { NG_STYLE_NAME, ngStyleDirective } from '@compiler/ng-style';
+import {
+  NG_SWITCH_DEFAULT_NAME,
+  NG_SWITCH_NAME,
+  NG_SWITCH_WHEN_NAME,
+  ngSwitchDefaultDirective,
+  ngSwitchDirective,
+  ngSwitchWhenDirective,
+} from '@compiler/ng-switch';
 import { NG_TRANSCLUDE_NAME, ngTranscludeDirective } from '@compiler/ng-transclude';
 import { $ControllerProvider } from '@controller/controller-provider';
 import type { ControllerService } from '@controller/controller-types';
@@ -334,5 +346,88 @@ export const ngModule = createModule('ng', [])
       $compileProvider.directive('ngMouseup', ngMouseupDirective);
       $compileProvider.directive('ngPaste', ngPasteDirective);
       $compileProvider.directive('ngSubmit', ngSubmitDirective);
+      // Spec 027 Slice 4 — `ngController` attaches a registered
+      // controller to a subtree. The directive declares NO `link` fn;
+      // instead its normalized `controller` field is the sentinel
+      // shape `{ __attributeSource: 'ngController' }` recognized by
+      // `runControllerSeam`'s third dispatch branch — the seam reads
+      // the controller name from `attrs.ngController` at link time
+      // and invokes `$controller(name, locals)` with the lifecycle
+      // hooks (`$onInit` / `$postLink` / `$onDestroy`; NOT
+      // `$onChanges` — no isolate bindings), the `$$ngControllers`
+      // stash, the `require` resolution dance, and the `controllerAs`
+      // alias publication all flowing through the existing spec 022
+      // machinery. `scope: true` (fresh child scope per AngularJS
+      // convention) keeps the alias namespace separate from any
+      // surrounding transclusion scope (e.g. `ng-if`'s).
+      // See `src/compiler/ng-controller.ts` for the file-level rationale.
+      $compileProvider.directive(NG_CONTROLLER_NAME, ngControllerDirective);
+      // Spec 027 Slice 3 — `ngIf` is the first structural directive
+      // built on the Slice 2 `transclude: 'element'` foundation. At
+      // compile time the host element is detached and replaced by a
+      // `<!-- ngIf: cond -->` Comment placeholder; a `scope.$watch`
+      // listener on the expression mounts a fresh deep clone of the
+      // host (with a fresh transclusion scope) on each falsy → truthy
+      // transition and tears the active clone + its scope down on
+      // each truthy → falsy transition. Position is preserved
+      // across toggles via `insertBefore(clone, placeholder.nextSibling)`.
+      // The cleanup callback registered via `addElementCleanup(placeholder, …)`
+      // makes a parent `destroyElementScope` reaching the placeholder
+      // still tear the active clone down (Comment nodes have no
+      // `children` HTMLCollection for `destroyElementScope` to walk).
+      // See `src/compiler/ng-if.ts` for the file-level rationale.
+      $compileProvider.directive(NG_IF_NAME, ngIfDirective);
+      // Spec 027 Slice 6 — `ngInclude` asynchronously loads another
+      // template by URL and renders it inline. Built on the Slice 2
+      // `transclude: 'element'` foundation (same Comment-placeholder
+      // pattern as `ngIf` / `ngSwitch`-children), with the URL drawn
+      // from `attrs.ngInclude` (attribute form) or `attrs.src`
+      // (element form). The link fn watches the URL expression,
+      // fetches via `$templateRequest` (cache + dedup), compiles the
+      // result against a fresh child scope, and inserts the rendered
+      // subtree as the next sibling of the placeholder. A
+      // closure-local `currentLoadToken` sentinel guards against
+      // stale-fetch installs after destruction or URL change. Three
+      // scope events (`$includeContentRequested` /
+      // `$includeContentLoaded` / `$includeContentError`) emit at the
+      // canonical lifecycle points; an optional `onload="expr"`
+      // modifier evaluates against the PARENT scope after each
+      // successful load. The lazy `$injector.has('$sce')` probe
+      // mirrors `$SceProvider.$get`'s `$sanitize` lookup — no hard
+      // dependency on `$sce`, but cross-origin URLs are gated through
+      // `getTrustedResourceUrl` when `$sce` is reachable. See
+      // `src/compiler/ng-include.ts` for the file-level rationale.
+      $compileProvider.directive(NG_INCLUDE_NAME, ngIncludeDirective);
+      // Spec 027 Slice 1 — `ngInit` evaluates an expression exactly
+      // once at the link-time scope before any binding inside the
+      // marked subtree first renders. The directive is wired through
+      // a `compile` fn that parses the expression once and returns a
+      // `{ pre }` link object; the pre-link callback fires BEFORE the
+      // child directives' link phase descends, so assignment-form
+      // expressions (`user = {name:'Alice'}`) land on scope in time
+      // for `{{user.name}}` to render the initialized value on its
+      // very first paint. No watch, no DOM mutation, no cleanup —
+      // one-shot initializer per mount. Re-fires on each remount
+      // (e.g. via a surrounding `ng-if` retoggling — spec 027 Slice 3).
+      // See `src/compiler/ng-init.ts` for the pre-link-timing rationale.
+      $compileProvider.directive(NG_INIT_NAME, ngInitDirective);
+      // Spec 027 Slice 5 — `ngSwitch` + `ngSwitchWhen` + `ngSwitchDefault`
+      // provide value-driven subtree selection. The parent (`ngSwitch`)
+      // owns a `NgSwitchController` controller plus a `scope.$watch`
+      // listener on the switch expression; the two child directives
+      // declare `transclude: 'element'` (so their host element is
+      // replaced at compile time by a Comment placeholder per Slice 2)
+      // and `require: '^ngSwitch'` (so they can register their
+      // `{ transclude, placeholder }` pair into the parent's `cases`
+      // map). The parent's listener orchestrates every transition:
+      // teardown of the active set, lookup of the new set via
+      // `String(value)` exact-match (with `'?'` fallback for the
+      // default block), and mounting of fresh deep clones next to each
+      // matching child's own placeholder. Multiple matching siblings
+      // mount in document order. See `src/compiler/ng-switch.ts` for
+      // the parent-controller + child-registration architecture rationale.
+      $compileProvider.directive(NG_SWITCH_NAME, ngSwitchDirective);
+      $compileProvider.directive(NG_SWITCH_DEFAULT_NAME, ngSwitchDefaultDirective);
+      $compileProvider.directive(NG_SWITCH_WHEN_NAME, ngSwitchWhenDirective);
     },
   ]);

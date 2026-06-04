@@ -22,7 +22,6 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { $CompileProvider } from '@compiler/compile-provider';
 import {
   DuplicateTranscludeSelectorError,
-  ElementTranscludeNotSupportedError,
   InvalidTranscludeSelectorError,
   InvalidTranscludeSlotNameError,
   InvalidTranscludeValueError,
@@ -243,8 +242,15 @@ describe('normalizeDirective — transclude validation (spec 018 Slice 2)', () =
     });
   });
 
-  describe('transclude: "element" — explicit forward-compat rejection (FS §2.1)', () => {
-    it("routes ElementTranscludeNotSupportedError via $exceptionHandler('$compile'); sibling directives keep registering normally", () => {
+  describe('transclude: "element" — accepts element-form (spec 027 Slice 2)', () => {
+    it("registers a transclude: 'element' directive with no $exceptionHandler call; sibling directives keep resolving normally", () => {
+      // Spec 027 Slice 2 INVERTED this assertion. Previously (spec 018)
+      // a directive declaring `transclude: 'element'` was rejected at
+      // registration time, with `ElementTranscludeNotSupportedError`
+      // routed via `$exceptionHandler('$compile')`. The class is now
+      // `@deprecated` and the throw site has been retired — see
+      // `transclude-element-foundation.test.ts` for the positive
+      // end-to-end coverage of the new behavior.
       const { handler, register } = buildSpyHarness();
       const injector = register(($cp) => {
         $cp.directive(
@@ -255,7 +261,10 @@ describe('normalizeDirective — transclude validation (spec 018 Slice 2)', () =
           }),
         );
         // A second directive under a DIFFERENT name still resolves
-        // normally — the registration time error is per-directive.
+        // normally — preserves the original sibling-independence
+        // assertion (the pre-spec-027 surface guaranteed this even
+        // when the element-form throw fired; the post-spec-027 surface
+        // continues to guarantee it now that the throw is gone).
         $cp.directive(
           'siblingDir',
           ddoFactory({
@@ -266,17 +275,23 @@ describe('normalizeDirective — transclude validation (spec 018 Slice 2)', () =
       const elementDirectives = injector.get<Directive[]>('elementDirDirective');
       const siblingDirectives = injector.get<Directive[]>('siblingDirDirective');
 
-      // The bad directive is dropped from its array.
-      expect(elementDirectives).toHaveLength(0);
-      // The sibling registers and resolves unaffected.
+      // (a) Element-form directive registered successfully (NOT dropped).
+      expect(elementDirectives).toHaveLength(1);
+      expect(elementDirectives[0]?.name).toBe('elementDir');
+      // The normalized `transclude` field carries the new
+      // `kind: 'element'` discriminant.
+      expect(elementDirectives[0]?.transclude).toEqual({
+        kind: 'element',
+        slots: [],
+        required: [],
+        optional: [],
+      });
+
+      // (b) Sibling registers and resolves unaffected.
       expect(siblingDirectives).toHaveLength(1);
 
-      expect(handler).toHaveBeenCalledTimes(1);
-      const [err, cause] = handler.mock.calls[0] ?? [];
-      expect(err).toBeInstanceOf(ElementTranscludeNotSupportedError);
-      expect(cause).toBe('$compile');
-      expect((err as Error).message).toContain('elementDir');
-      expect((err as Error).message).toMatch(/Element transclusion/);
+      // (c) NO exception routed — the rejection branch is gone.
+      expect(handler).not.toHaveBeenCalled();
     });
   });
 

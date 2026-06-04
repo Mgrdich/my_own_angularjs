@@ -1391,6 +1391,275 @@ through `'$compile'` via the existing factory `try/catch` in
 `$$buildDirectiveArrayProvider`. `EXCEPTION_HANDLER_CAUSES.length`
 stays at 10.
 
+## Structural directives (spec 027)
+
+Spec 027 ships the **structural / flow-control** batch — seven
+directives that mount, swap, and tear down DOM subtrees based on
+scope state. All seven are registered on the `'ng'` module's
+existing `$compileProvider` config block (the same one that holds
+the spec 023 / 024 / 025 / 026 directives); apps that declare
+`'ng'` in their dependency chain get them for free. Each is also a
+plain `module.directive('<name>', …)` away from being overridden or
+decorated — these are built-ins, not hardcoded behavior.
+
+Like the prior `ngModule`-registered batches, the seven ship as DI
+registrations only — there are NO new exports from
+`@compiler/index`. The factory functions are file-local exports
+in `src/compiler/ng-init.ts`, `src/compiler/ng-if.ts`,
+`src/compiler/ng-controller.ts`, `src/compiler/ng-switch.ts`, and
+`src/compiler/ng-include.ts`, reachable exclusively via
+`injector.get('<name>Directive')`.
+
+### The seven directives
+
+| Directive | Priority | Restrict | Purpose |
+| --- | --- | --- | --- |
+| `ng-init` | 450 | `AC` | Evaluate an assignment expression ONCE pre-link to seed scope state. |
+| `ng-if` | 600 | `A` | Render the marked subtree only while an expression is truthy. |
+| `ng-controller` | 500 | `A` | Attach a registered controller (by name) to a subtree. |
+| `ng-switch` | 1200 | `EA` | Pick at most one child subtree based on the stringified value of an expression. |
+| `ng-switch-when` | 1200 | `EA` | Sibling-rendered candidate inside an `ng-switch`. Inert without a parent. |
+| `ng-switch-default` | 1200 | `EA` | Fallback inside `ng-switch` when no `ng-switch-when` matches. |
+| `ng-include` | 400 | `ECA` | Fetch a template by URL and render it inline. |
+
+`ng-if`, the two `ng-switch` helpers, and `ng-include` all declare
+`transclude: 'element'` — the load-bearing foundation Slice 2
+introduced. `ng-controller` and `ng-init` do not — they are
+non-structural and operate on the host element directly.
+
+### The `transclude: 'element'` foundation
+
+Before spec 027, `transclude: 'element'` was REJECTED at registration
+via `ElementTranscludeNotSupportedError`. Slice 2 deleted that
+rejection branch in
+[`src/compiler/compile-provider.ts`](compile-provider.ts) and lit up
+a third `NormalizedTransclude` discriminant (alongside `'content'`
+and `'slots'`):
+
+```ts
+| { kind: 'element'; slots: NormalizedTranscludeSlot[]; required: string[]; optional: string[] }
+```
+
+The slot arrays stay empty — `kind: 'element'` reuses the existing
+default-bucket linker from spec 018 with a single-element bucket
+`defaultBucket: [host]`.
+
+**Comment-placeholder DOM model.** When the compiler encounters a
+directive with `transclude: 'element'`, the capture pass in
+[`src/compiler/transclude-capture.ts`](transclude-capture.ts):
+
+1. Builds `placeholder = document.createComment(\` ${directiveName}: ${attrValue} \`)` (AngularJS-canonical leading/trailing spaces).
+2. `host.parentNode.insertBefore(placeholder, host)`.
+3. `host.parentNode.removeChild(host)` — the host element is fully detached from the live DOM.
+4. Returns the captured master with `defaultBucket: [host]` — the detached host is the master fragment that subsequent `$transclude(...)` calls deep-clone.
+
+The matched directive's `link` fn then receives the placeholder
+Comment as its `element` argument (typed `Element` on the public
+surface, but a `Comment` at runtime — directives verify with the
+`isComment(element)` guard from `node-guards.ts` and throw on
+mismatch rather than casting blindly, see `ng-if.ts` for the
+pattern) and a callable `$transclude` as its 5th argument.
+
+**Deep-clone + re-link mechanic.** Each `$transclude(cloneAttachFn)`
+call invokes `Node.cloneNode(true)` on the master host element,
+creates a fresh transclusion scope as a child of the OUTER scope
+(the scope the directive was linked against, not whatever scope the
+host was originally compiled in — preserved from spec 018), and
+re-links the clone through the cloneMap indirection. Multiple
+`$transclude(...)` calls produce independent clones with
+independent scopes; the spec-018 multi-clone contract is preserved
+unchanged.
+
+**Single-element default-bucket reuse.** Because the bucket is
+`[host]`, the existing default-bucket linker handles element-form
+transclusion without a new branch — the linker walks a single
+top-level node, no slot routing, exactly the behavior the
+spec-018 default bucket already provided for content transclusion.
+
+**Re-entrancy guard via `$$ngElementTranscluded`.** A non-enumerable
+stamp on the master host prevents the inner `compileBuckets([host])`
+from re-firing capture on the same host. Without it, recompiling
+the master would infinite-loop. The recompile pass also strips
+`transclude` from the directive's normalized form so the second
+walk treats the host as a plain element. The `terminal` flag is
+intentionally NOT stripped — `ng-if` retains its `terminal: true`
+on recompile so the same-element terminal cutoff fires both
+passes. (A known consequence: `<div ng-if="show" ng-controller="…">`
+silently drops `ng-controller` from the recompile pass. See the
+"Known gap" callout below.)
+
+### The `runControllerSeam` widening
+
+`ng-controller` declares NO `link` fn. Instead, it sets the
+normalized `controller` field on the DDO to a sentinel:
+
+```ts
+controller: { __attributeSource: 'ngController' }
+```
+
+Spec 027 Slice 4 widened
+[`runControllerSeam`](compile.ts) in `src/compiler/compile.ts` with
+a third dispatch branch — keyed on the sentinel shape detected via
+the file-local `isAttributeSourceController` type guard. When the
+seam encounters this shape, it reads the controller name from
+`attrs[__attributeSource]` (= `attrs.ngController`) at LINK time
+and invokes `$controller(attrs.ngController, locals)` — no separate
+`ident` arg, `$controller`'s own `parseControllerName` handles the
+`'Name as alias'` syntax inside the attribute value.
+
+The two existing branches stay unchanged:
+
+1. **`bindToController: {…}` deferred-alias path** — uses
+   `$controller(name, locals, ident, /* later */ true)` to defer
+   the alias publication until after `require` resolution and
+   binding wiring.
+2. **Eager path** — `$controller(directive.controller, locals)` for
+   directives with a non-sentinel controller (a function /
+   array-form / class reference).
+
+The widening is **non-invasive** — for non-sentinel directives, the
+new resolution step (`resolvedControllerArg = directive.controller`)
+is a no-op; the seam's downstream code paths are byte-identical to
+their pre-spec-027 behavior. The `Directive.controller` field's
+type union widened to
+`ControllerInvokable | { __attributeSource: string }` to keep the
+sentinel from leaking into the rest of the compiler.
+
+```ts
+// src/compiler/ng-controller.ts (paraphrased)
+function ngControllerFactory(): DirectiveFactoryReturn {
+  return {
+    restrict: 'A',
+    priority: 500,
+    scope: true,
+    controller: { __attributeSource: 'ngController' },
+  };
+}
+```
+
+No `link` fn. The seam handles instantiation, lifecycle hook
+ordering (`$onInit` → preLink → child link → postLink → `$postLink`),
+`$$ngControllers` stash, `require` resolution, and the `controllerAs`
+alias publication via the existing spec 022 machinery. `$onChanges`
+does NOT fire on `ng-controller`-attached controllers (there are no
+isolate bindings to record change records from — matches AngularJS).
+
+### The lazy `$sce` probe in `ng-include`
+
+`ng-include` declares its DI dependencies as
+`['$templateRequest', '$compile', '$injector', '$exceptionHandler', factory]`
+— note `'$injector'`, not `'$sce'`. The trust check is gated on a
+runtime lookup:
+
+```ts
+const trustedSrc = $injector.has('$sce')
+  ? $injector.get('$sce').getTrustedResourceUrl(rawSrc)
+  : rawSrc;
+```
+
+This mirrors the spec-013 `$SceProvider.$get` lazy `$sanitize`
+lookup pattern: `$sce` is registered on `ngModule` so it is always
+reachable when `ngInclude` is, but a stripped-down injector
+lacking `$sce` (hypothetical SSR / Node environment) still
+resolves `ngInclude` and treats URLs as pass-through. The factory
+declares no hard dependency on `$sce`, so removing `$sce` from a
+custom injector does not break `ng-include` registration.
+
+When `$sce` IS reachable, cross-origin URLs that fail the
+trusted-resource-URL safelist throw from inside
+`getTrustedResourceUrl`. The throw is caught and routed via
+`$exceptionHandler('$compile')`; the `$includeContentError` event
+is emitted, and the slot is cleared.
+
+### Two structural directives on the same element
+
+The "two `transclude: 'element'` directives on the same host" rule
+reuses **`MultipleTranscludeDirectivesError`** from spec 018 — no
+new error class, no new cause token. When the capture pass in
+[`src/compiler/transclude-capture.ts`](transclude-capture.ts)
+detects two element-form transcludes on the same element
+(`<div ng-if="a" ng-include="'…'">`), it throws
+`MultipleTranscludeDirectivesError` routed via
+`$exceptionHandler('$compile')` at compile time.
+
+**Known gap.** Spec-017's same-element terminal cutoff in
+[`src/compiler/directive-collector.ts`](directive-collector.ts)
+fires BEFORE spec-018's transclude detection. So two structural
+directives on the same element where one is `terminal: true` (like
+`ng-if` at priority 600) silently drops the lower-priority one
+instead of producing the documented `MultipleTranscludeDirectivesError`.
+The canonical FS §2.6 example `<div ng-if="show" ng-controller="…">`
+is therefore non-functional as-written — `ng-controller` is dropped
+by the cutoff. The supported pattern is to NEST `ng-controller`
+inside `ng-if`'s subtree:
+
+```html
+<div ng-if="show">
+  <div ng-controller="MyCtrl as vm">
+    {{ vm.greeting }}
+  </div>
+</div>
+```
+
+A future spec slice should re-order the passes to detect the
+multi-structural conflict before the terminal cutoff fires.
+
+### `ElementTranscludeNotSupportedError` deprecation grace
+
+The class itself stays exported from `@compiler/index` and the root
+barrel for a one-release deprecation grace period so consumers
+catching it via `instanceof ElementTranscludeNotSupportedError`
+keep compiling without a sudden `ReferenceError`. The two
+re-export sites carry inline
+`eslint-disable @typescript-eslint/no-deprecated -- one-release grace period for spec 027`
+justifications. This matches the spec-022
+`IsolateScopeNotSupportedError` retirement precedent. A future
+spec may remove the class outright. Use
+`MultipleTranscludeDirectivesError` for two-structural-on-same-element
+conflicts; `transclude: 'element'` itself is now a supported value,
+not an error case.
+
+### Cleanup contract — `addElementCleanup(placeholder, …)`
+
+Each of the three structural directives (`ng-if`, the `ng-switch`
+children, `ng-include`) MUST register a cleanup callback against
+its placeholder Comment on every successful `$transclude(...)`
+install. Comment nodes have no `children` HTMLCollection for
+`destroyElementScope` to walk, so a parent `destroyElementScope`
+reaching the placeholder cannot tear the active clone down unless
+the directive itself registered the callback. The callback closes
+over the closure-local clone / scope refs so it always tears down
+the currently-active clone (not whatever was active when the
+registration ran).
+
+`addElementCleanup` was widened in Slice 2 to accept
+`Element | Comment` directly — no cast needed at the call site.
+
+### Errors and cause tokens
+
+No new error classes. No new `EXCEPTION_HANDLER_CAUSES` token. The
+tuple stays at 10. Every error site reuses existing surfaces:
+
+- **Fetch failure inside `ng-include`** — `$templateRequest`
+  rejection (404, network failure, SCE-rejection on
+  `getTrustedResourceUrl` throw) routes via
+  `$exceptionHandler('$compile')`. The slot is cleared and
+  `$includeContentError` is emitted.
+- **Orphaned `ng-switch-when` / `ng-switch-default`** —
+  `MissingRequiredControllerError` via the spec-022 Slice-4
+  `require: '^ngSwitch'` resolver, routed by the per-element
+  controller seam through `$exceptionHandler('$compile')`.
+- **Unknown `ng-controller` name** — `UnknownControllerError` from
+  the seam's `$controller(name, locals)` invocation, routed via
+  `$exceptionHandler('$compile')` through the existing factory
+  `try/catch`.
+- **Two structural directives on the same element** —
+  `MultipleTranscludeDirectivesError` from spec 018, routed via
+  `$exceptionHandler('$compile')` at compile time.
+- **Throwing `$watch` listeners** (`ng-if`'s expression watcher,
+  `ng-switch`'s parent watcher, `ng-include`'s URL watcher) route
+  via the digest's existing `'watchListener'` cause.
+
 ## Deferred items
 
 Spec 017 deliberately stops at the compiler core. The following are
@@ -1405,8 +1674,11 @@ do not produce observable behavior in this spec:
 - **Transclusion** (`transclude: true`, multi-slot, `$transclude`,
   `<ng-transclude>`) shipped with spec 018 — see the
   [Transclusion](#transclusion) section above. `transclude: 'element'`
-  (the whole-element form, foundation for structural directives) is
-  REJECTED at registration via `ElementTranscludeNotSupportedError`.
+  (the whole-element form, foundation for structural directives)
+  shipped with spec 027 — see
+  [Structural directives (spec 027)](#structural-directives-spec-027)
+  above. `ElementTranscludeNotSupportedError` is kept exported as
+  `@deprecated` for one-release grace.
 - **Template loading** (`template`, `templateUrl`,
   `<script type="text/ng-template">`) — `template` (inline string or
   function) and `templateUrl` (async string or function) shipped with
@@ -1434,9 +1706,12 @@ do not produce observable behavior in this spec:
   `ng-mouseover`, `ng-mouseout`, `ng-mousemove`, `ng-mouseenter`,
   `ng-mouseleave`, `ng-keydown`, `ng-keyup`, `ng-keypress`, `ng-copy`,
   `ng-cut`, `ng-paste`, `ng-focus`, `ng-blur`, `ng-submit` — see
-  "Event built-ins" above). The remaining built-ins (`ng-if`,
-  `ng-repeat`, `ng-model`, and the rest) ship under their own
-  roadmap items.
+  "Event built-ins" above). **Structural / flow-control subset
+  shipped in spec 027** (`ng-init`, `ng-if`, `ng-controller`,
+  `ng-switch`, `ng-switch-when`, `ng-switch-default`, `ng-include`
+  — see "Structural directives (spec 027)" above). The remaining
+  built-ins (`ng-repeat`, `ng-model`, and the rest) ship under
+  their own roadmap items.
 - **Multi-element directives** (`multiElement: true`, `*-start` /
   `*-end` pairs) — deferred; lands alongside `ng-repeat`.
 - **Module DSL `.directive(...)` shorthand** on `createModule` —

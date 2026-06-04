@@ -51,7 +51,16 @@ export interface BuildTranscludeFnArgs {
   declaredSlots: TranscludeSlotMap;
   unfilledRequired: Set<string>;
   outerScope: Scope;
-  hostElement: Element;
+  /**
+   * The host the transclusion scope's lifetime is bound to. Element
+   * for `kind: 'content' | 'slots'` (the original host); Comment for
+   * `kind: 'element'` (the spec-027 placeholder that replaced the
+   * detached host). The host is passed verbatim to
+   * `addElementCleanup` — which itself accepts `Element | Comment` —
+   * so the transclusion scope is `$destroy()`-ed when the host's
+   * cleanup queue drains.
+   */
+  hostElement: Element | Comment;
   exceptionHandler: ExceptionHandler;
   masterFragments: { default: Node[]; named: Record<string, Node[]> };
   directiveName: string;
