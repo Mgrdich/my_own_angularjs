@@ -532,7 +532,7 @@ export function createCompile(options: CompileOptions): CompileService {
       // disjoint from `ControllerInvokable` (`string | function | array`),
       // so the sentinel never collides with the eager- or
       // bindToController-path inputs.
-      let resolvedControllerArg: string | ControllerInvokable = directive.controller as string | ControllerInvokable;
+      let resolvedControllerArg: string | ControllerInvokable;
       if (isAttributeSourceController(directive.controller)) {
         const attrName = directive.controller.__attributeSource;
         const attrValue = attrs[attrName];
@@ -545,6 +545,12 @@ export function createCompile(options: CompileOptions): CompileService {
           continue;
         }
         resolvedControllerArg = attrValue;
+      } else {
+        // The guard narrows `directive.controller` to
+        // `string | ControllerInvokable` here — the sentinel and
+        // `undefined` branches have both been ruled out, so no cast
+        // is needed.
+        resolvedControllerArg = directive.controller;
       }
 
       const locals: ControllerLocals = {
