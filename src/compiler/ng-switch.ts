@@ -128,7 +128,7 @@
 
 import type { Scope } from '@core/index';
 
-import type { DirectiveFactory, DirectiveFactoryReturn, LinkFn } from './directive-types';
+import type { Attributes, DirectiveFactory, DirectiveFactoryReturn, LinkFn } from './directive-types';
 import { isComment, isElement } from './node-guards';
 import type { TranscludeFn } from './transclude-types';
 
@@ -194,6 +194,29 @@ interface NgSwitchControllerShape {
 }
 
 /**
+ * Structural type guard for the `require`-resolved controller value.
+ * Public `LinkFn.controllers` is typed `unknown` (widened in spec 022
+ * Slice 4), so consumers bridging to a known shape need either a cast
+ * or a guard. We pick the guard so a future regression in the require
+ * resolver (returning the wrong instance, an unrelated object, etc.)
+ * surfaces at the seam instead of silently falling through to the
+ * `null` defensive path. The check verifies the four mutable slots
+ * exist with the expected runtime kinds.
+ */
+function isNgSwitchController(value: unknown): value is NgSwitchControllerShape {
+  if (value === null || typeof value !== 'object') {
+    return false;
+  }
+  const candidate = value as Record<string, unknown>;
+  return (
+    candidate.cases instanceof Map &&
+    Array.isArray(candidate.selectedTranscludes) &&
+    Array.isArray(candidate.selectedScopes) &&
+    Array.isArray(candidate.selectedClones)
+  );
+}
+
+/**
  * Shared parent controller — owns the orchestration state for ONE
  * `<div ng-switch>` instance. Each parent element gets a fresh
  * controller (via `runControllerSeam`'s per-element instantiation).
@@ -252,16 +275,14 @@ function ngSwitchFactory(): DirectiveFactoryReturn {
   const link: LinkFn = (scope, _element, attrs, controllers) => {
     // The 4th argument is the resolved `require: 'ngSwitch'` —
     // self-require, so `controllers` is the same `NgSwitchController`
-    // instance the seam stashed against this element. The require-
-    // resolver returns `null` for an optional miss (not applicable
-    // here — the spec is non-optional) and a populated instance
-    // otherwise. We treat anything non-shape-conforming as a no-op so
-    // a hypothetical future seam change cannot null-deref the closure
-    // below.
-    const ctrl = controllers as NgSwitchControllerShape | null;
-    if (ctrl === null) {
+    // instance the seam stashed against this element. `LinkFn.controllers`
+    // is typed `unknown` at the public signature (widened in spec 022
+    // Slice 4); narrow with the structural guard so a future regression
+    // in the resolver surfaces here instead of silently no-opping.
+    if (!isNgSwitchController(controllers)) {
       return;
     }
+    const ctrl = controllers;
 
     const expr = attrs[NG_SWITCH_NAME];
     if (typeof expr !== 'string') {
@@ -368,15 +389,17 @@ export const ngSwitchDirective: DirectiveFactory = [ngSwitchFactory];
  * attribute string), while `ngSwitchDefault` always registers under the
  * literal `'?'` key (no attribute read).
  */
-function createSwitchChildLink(keyFor: (attrs: Record<string, string | undefined>) => string | undefined): LinkFn {
+function createSwitchChildLink(keyFor: (attrs: Attributes) => string | undefined): LinkFn {
   return (_scope, element, attrs, controllers, $transclude) => {
-    const ctrl = controllers as NgSwitchControllerShape | null;
-    if (ctrl === null) {
-      // Defensive — `require: '^ngSwitch'` is non-optional, so the
-      // seam would have already thrown `MissingRequiredControllerError`
-      // before the link fn runs. Belt-and-braces guard.
+    // `require: '^ngSwitch'` is non-optional, so the seam would have
+    // already thrown `MissingRequiredControllerError` before the link
+    // fn runs. The structural guard is a belt-and-braces verification
+    // of the seam's invariant — narrows `controllers: unknown` to the
+    // known shape without a blind cast.
+    if (!isNgSwitchController(controllers)) {
       return;
     }
+    const ctrl = controllers;
 
     if ($transclude === undefined) {
       // Defensive — `transclude: 'element'` on the DDO guarantees the
@@ -397,12 +420,12 @@ function createSwitchChildLink(keyFor: (attrs: Record<string, string | undefined
     }
     const placeholder = element;
 
-    // Snapshot the attribute view so the closure-local `attrs` object
-    // satisfies the `keyFor` callback's `Record<string, string | undefined>`
-    // contract without leaking the wider `Attributes` index signature
-    // (which includes `$set` / `$observe` callable slots).
-    const attrSnapshot: Record<string, string | undefined> = attrs as unknown as Record<string, string | undefined>;
-    const key = keyFor(attrSnapshot);
+    // `keyFor` consumes the directive's `Attributes` view directly —
+    // the callback narrows the wider index-signature union via the
+    // standard `typeof raw === 'string'` check, so no snapshot or
+    // cast is required. The callable `$set` / `$observe` slots on
+    // `Attributes` are simply ignored by the callback.
+    const key = keyFor(attrs);
     if (key === undefined) {
       // No key resolved — bail cleanly. For `ngSwitchWhen` this
       // happens when `attrs.ngSwitchWhen` is undefined (the directive
