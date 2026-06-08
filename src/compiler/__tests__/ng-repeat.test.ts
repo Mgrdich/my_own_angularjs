@@ -694,25 +694,12 @@ describe('ngRepeat — non-iterable values (FS §2.7)', () => {
     expect(relevantHandlerCalls(handler)).toEqual([]);
   });
 
-  it('Slice 3: a plain object value clears rows (object iteration is deferred to Slice 5)', () => {
-    // The Slice 3 implementation treats anything that is NOT `Array.isArray`
-    // as "non-iterable" and tears rows down without error. Slice 5 will
-    // detect the object branch and normalize via `Object.keys(obj).sort()`.
-    const handler = vi.fn<ExceptionHandler>();
-    const b = bootstrap({ exceptionHandler: handler });
-    const scope = Scope.create();
-    scope.items = ['A', 'B'];
-
-    const { parent, host } = makeRepeatHost('it in items', 'it');
-    b.$compile(host)(scope);
-    scope.$digest();
-    expect(rowsOf(parent).length).toBe(2);
-
-    scope.items = { a: 1, b: 2 };
-    scope.$digest();
-    expect(rowsOf(parent).length).toBe(0);
-    expect(relevantHandlerCalls(handler)).toEqual([]);
-  });
+  // Note: the earlier Slice 3 test asserting "a plain object value
+  // clears rows (object iteration is deferred to Slice 5)" was deleted
+  // when Slice 5 landed. Plain objects are now iterable; the new
+  // contract is covered in the "ngRepeat — object iteration" describe
+  // block below (FS §2.2). The function-value bail above still pins the
+  // `typeof === 'function'` disjointness from the object branch.
 });
 
 // ---------------------------------------------------------------------------
@@ -1236,5 +1223,330 @@ describe('ngRepeat — tracked identity change rebuilds the row (FS §2.9)', () 
     expect(oldRow ? parent.contains(oldRow) : false).toBe(false);
     // The new row reflects the new item's text.
     expect(after[0]?.textContent).toBe('A');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 10. Object iteration: (key, value) in object (FS §2.2 — spec 028 Slice 5)
+// ---------------------------------------------------------------------------
+
+describe('ngRepeat — object iteration: (key, value) in object (FS §2.2)', () => {
+  /**
+   * Helper for the object-iteration shape — the row template carries a
+   * `<span ng-bind>` formatting "name = age" (or whatever expression
+   * the test wants) so we can read the rendered text per row.
+   *
+   * We can't fully share `makeRepeatHost` because most object-iteration
+   * tests need to dereference both the key and the value alias in the
+   * bind expression (e.g. `name + ' = ' + age`); the existing helper
+   * accepts an arbitrary bind expression so it actually IS shareable
+   * here — we keep using it directly.
+   */
+
+  it('renders one row per property with both bindings populated (FS §2.2 baseline)', () => {
+    const b = bootstrap();
+    const scope = Scope.create();
+    scope.people = { alice: 30, bob: 25 };
+
+    const { parent, host } = makeRepeatHost('(name, age) in people', "name + '=' + age");
+    b.$compile(host)(scope);
+    scope.$digest();
+
+    const rows = rowsOf(parent);
+    expect(rows.length).toBe(2);
+    // Alphabetical-string key order: alice → bob.
+    expect(rows.map((r) => r.textContent)).toEqual(['alice=30', 'bob=25']);
+  });
+
+  it('keys visited in alphabetical-string order (FS §2.2 AC2.1 — "10" before "2")', () => {
+    // The AngularJS-canonical `Object.keys(obj).sort()` uses Array.prototype.sort
+    // (default lexicographic string compare), so numeric-looking keys
+    // sort as STRINGS: "1" < "10" < "2".
+    const b = bootstrap();
+    const scope = Scope.create();
+    scope.bag = { '10': 'a', '2': 'b', '1': 'c' };
+
+    const { parent, host } = makeRepeatHost('(k, v) in bag', "k + ':' + v");
+    b.$compile(host)(scope);
+    scope.$digest();
+
+    const rows = rowsOf(parent);
+    expect(rows.length).toBe(3);
+    expect(rows.map((r) => r.textContent)).toEqual(['1:c', '10:a', '2:b']);
+  });
+
+  it('adding a property inserts a row in sorted position (FS §2.2 AC2.2)', () => {
+    // `$watchCollection` shallow-watches object own keys, so a direct
+    // property mutation (no reassignment) DOES fire the listener. We
+    // exercise both the in-place add path AND the reassignment path
+    // below.
+    const b = bootstrap();
+    const scope = Scope.create();
+    scope.bag = { alice: 1, charlie: 3 } as Record<string, number>;
+
+    const { parent, host } = makeRepeatHost('(k, v) in bag', "k + ':' + v");
+    b.$compile(host)(scope);
+    scope.$digest();
+
+    expect(rowsOf(parent).map((r) => r.textContent)).toEqual(['alice:1', 'charlie:3']);
+
+    // In-place property add — fires the watcher.
+    (scope.bag as Record<string, number>).bob = 2;
+    scope.$digest();
+
+    expect(rowsOf(parent).map((r) => r.textContent)).toEqual(['alice:1', 'bob:2', 'charlie:3']);
+  });
+
+  it('removing a property removes only its row (FS §2.2 AC2.3)', () => {
+    const b = bootstrap();
+    const scope = Scope.create();
+    scope.bag = { alice: 1, bob: 2, charlie: 3 } as Record<string, number>;
+
+    const { parent, host } = makeRepeatHost('(k, v) in bag', "k + ':' + v");
+    b.$compile(host)(scope);
+    scope.$digest();
+    expect(rowsOf(parent).map((r) => r.textContent)).toEqual(['alice:1', 'bob:2', 'charlie:3']);
+
+    delete (scope.bag as Record<string, number>).bob;
+    scope.$digest();
+
+    expect(rowsOf(parent).map((r) => r.textContent)).toEqual(['alice:1', 'charlie:3']);
+  });
+
+  it("changing a property's value rebuilds that row (default identity is `key:k|value-identity`)", () => {
+    // The Slice 5 documented contract — for default identity tracking
+    // the formula is `'key:${objKey}|${identityTracker.getIdentity(value)}'`.
+    // When the value identity changes, the row is torn down and a fresh
+    // one is built (DOM-node identity is NOT preserved). `track by` is
+    // the escape hatch if the author wants in-place update.
+    const b = bootstrap();
+    const scope = Scope.create();
+    scope.bag = { alice: 30 } as Record<string, number>;
+
+    const { parent, host } = makeRepeatHost('(k, v) in bag', "k + ':' + v");
+    b.$compile(host)(scope);
+    scope.$digest();
+
+    const initialRow = rowsOf(parent)[0];
+    expect(initialRow?.textContent).toBe('alice:30');
+
+    (scope.bag as Record<string, number>).alice = 31;
+    scope.$digest();
+
+    const after = rowsOf(parent);
+    expect(after.length).toBe(1);
+    expect(after[0]?.textContent).toBe('alice:31');
+    // DOM-node identity NOT preserved — the row was rebuilt, not updated
+    // in place. Documented contract: identity formula includes the
+    // value, so changing the value changes the identity → rebuild.
+    expect(after[0]).not.toBe(initialRow);
+  });
+
+  it("track by the key keeps DOM-node identity stable across value changes (`track by k`)", () => {
+    // `track by k` makes the row identity depend on the OBJECT KEY only,
+    // so changing the value while the key stays the same reuses the row.
+    const b = bootstrap();
+    const scope = Scope.create();
+    scope.bag = { alice: 30, bob: 25 } as Record<string, number>;
+
+    const { parent, host } = makeRepeatHost('(k, v) in bag track by k', "k + ':' + v");
+    b.$compile(host)(scope);
+    scope.$digest();
+
+    const initial = rowsOf(parent);
+    const aliceRow = initial[0];
+    const bobRow = initial[1];
+    expect(initial.map((r) => r.textContent)).toEqual(['alice:30', 'bob:25']);
+
+    (scope.bag as Record<string, number>).alice = 31;
+    scope.$digest();
+
+    const after = rowsOf(parent);
+    expect(after.map((r) => r.textContent)).toEqual(['alice:31', 'bob:25']);
+    // Same DOM node references — track by key reuses across value changes.
+    expect(after[0]).toBe(aliceRow);
+    expect(after[1]).toBe(bobRow);
+  });
+
+  it('track by a nested field works (`track by v.id`)', () => {
+    // FS §2.3 AC3.3 — any expression the framework can evaluate is
+    // accepted for `track by`, including property paths reaching INTO
+    // the per-row value alias. The track-by closure exposes both `k`
+    // and `v` as locals (the `(k, v)` LHS form).
+    const b = bootstrap();
+    const scope = Scope.create();
+    scope.bag = {
+      a: { id: 1, t: 'A' },
+      b: { id: 2, t: 'B' },
+    } as Record<string, { id: number; t: string }>;
+
+    const { parent, host } = makeRepeatHost('(k, v) in bag track by v.id', "k + ':' + v.t");
+    b.$compile(host)(scope);
+    scope.$digest();
+
+    const initial = rowsOf(parent);
+    expect(initial.map((r) => r.textContent)).toEqual(['a:A', 'b:B']);
+    const rowA = initial[0];
+    const rowB = initial[1];
+
+    // Reassign to a fresh object with same `v.id` values but fresh
+    // wrappers — track by `v.id` reuses both rows.
+    scope.bag = {
+      a: { id: 1, t: 'A2' },
+      b: { id: 2, t: 'B2' },
+    };
+    scope.$digest();
+
+    const after = rowsOf(parent);
+    expect(after.map((r) => r.textContent)).toEqual(['a:A2', 'b:B2']);
+    expect(after[0]).toBe(rowA);
+    expect(after[1]).toBe(rowB);
+  });
+
+  it('collection-shape flip (array → object → array) does not crash', () => {
+    // The Slice 5 doc claims the natural diff handles shape-flips
+    // because the identity key spaces are disjoint (`'number:1'` vs
+    // `'key:a|number:1'`). Exercise it: every row from the previous
+    // shape is torn down, every row for the new shape is freshly built.
+    const handler = vi.fn<ExceptionHandler>();
+    const b = bootstrap({ exceptionHandler: handler });
+    const scope = Scope.create();
+    scope.coll = [1, 2];
+
+    // The `it in coll` form binds only `valueIdent`; for the array
+    // branch `it` is the entry, for the object branch `it` is the
+    // property value.
+    const { parent, host } = makeRepeatHost('it in coll', 'it');
+    b.$compile(host)(scope);
+    scope.$digest();
+    expect(rowsOf(parent).map((r) => r.textContent)).toEqual(['1', '2']);
+
+    // Flip to object — every previous row torn down, new rows built.
+    scope.coll = { a: 10 };
+    scope.$digest();
+    expect(rowsOf(parent).map((r) => r.textContent)).toEqual(['10']);
+
+    // Flip back to array — same teardown + rebuild dance.
+    scope.coll = [3, 4, 5];
+    scope.$digest();
+    expect(rowsOf(parent).map((r) => r.textContent)).toEqual(['3', '4', '5']);
+
+    expect(relevantHandlerCalls(handler)).toEqual([]);
+  });
+
+  it('single-iterator form over an object renders values in alphabetical-key order (only `item` bound on scope)', () => {
+    // The AngularJS-canonical fall-back: `item in {a, b, c}` (no key
+    // alias) iterates the object's values in alphabetical-key order
+    // with ONLY the value-alias published on the per-row scope. The key
+    // is not exposed under any name because `parsed.keyIdent === null`.
+    //
+    // Verify by inspecting the per-row scope POST-DIGEST (via a probe
+    // directive that captures the scope into a side-channel and lets
+    // the test interrogate it later — capturing inside `link` would be
+    // too early because `ng-repeat` sets the per-row bindings inside
+    // its `cloneAttachFn`, which runs AFTER the cloned subtree's
+    // linkers have already executed).
+    const capturedScopes: Scope[] = [];
+    const b = bootstrap({
+      register: (_app, $cp) => {
+        $cp.directive(
+          'rowProbe',
+          ddoFactory({
+            restrict: 'A',
+            link: ((s) => {
+              capturedScopes.push(s);
+            }) as LinkFn,
+          }),
+        );
+      },
+    });
+    const scope = Scope.create();
+    scope.bag = { '10': 'a', '2': 'b', '1': 'c' };
+
+    const parent = document.createElement('div');
+    const host = document.createElement('li');
+    host.setAttribute('ng-repeat', 'value in bag');
+    const inner = document.createElement('span');
+    inner.setAttribute('ng-bind', 'value');
+    inner.setAttribute('row-probe', '');
+    host.appendChild(inner);
+    parent.appendChild(host);
+
+    b.$compile(host)(scope);
+    scope.$digest();
+
+    const rows = rowsOf(parent);
+    expect(rows.length).toBe(3);
+    // Values in alphabetical-key order: '1' → 'c', '10' → 'a', '2' → 'b'.
+    expect(rows.map((r) => r.textContent)).toEqual(['c', 'a', 'b']);
+    // The per-row scope binds ONLY the value alias (here named `value`).
+    // It does NOT publish a `name` / `key` binding because `parsed.keyIdent`
+    // is null in the single-iterator form. Verified by inspecting each
+    // captured row scope as a plain record AFTER bindings have been
+    // populated by the directive's `cloneAttachFn`.
+    expect(capturedScopes.length).toBe(3);
+    for (const rs of capturedScopes) {
+      const rec = rs as unknown as Record<string, unknown>;
+      // `value` is set on the per-row scope as an own property.
+      expect(Object.prototype.hasOwnProperty.call(rec, 'value')).toBe(true);
+      // Neither `name` nor `key` is set — the single-iterator form does
+      // not publish a key alias.
+      expect(Object.prototype.hasOwnProperty.call(rec, 'name')).toBe(false);
+      expect(Object.prototype.hasOwnProperty.call(rec, 'key')).toBe(false);
+    }
+  });
+
+  it('two distinct keys carrying the same value render as two separate rows (key:value identity formula)', () => {
+    // The Slice 5 identity formula `'key:${objKey}|${valueIdentity}'`
+    // ensures the same value under two keys does NOT falsely collapse
+    // into a duplicate-key throw. Verify directly.
+    const handler = vi.fn<ExceptionHandler>();
+    const b = bootstrap({ exceptionHandler: handler });
+    const scope = Scope.create();
+    scope.bag = { a: 'x', b: 'x' };
+
+    const { parent, host } = makeRepeatHost('(k, v) in bag', "k + ':' + v");
+    b.$compile(host)(scope);
+    scope.$digest();
+
+    const rows = rowsOf(parent);
+    expect(rows.length).toBe(2);
+    expect(rows.map((r) => r.textContent)).toEqual(['a:x', 'b:x']);
+    // No duplicate-key throw. We filter out the incidental "expected
+    // placeholder to be a Comment" routings that fire when the
+    // `transclude: 'element'` master clone is re-linked (see
+    // `relevantHandlerCalls` docstring above — this is a pre-existing
+    // framework artifact unrelated to spec 028).
+    const compileCalls = relevantHandlerCalls(handler).filter((c) => c[1] === '$compile');
+    expect(compileCalls.length).toBe(0);
+  });
+
+  it('empty object renders zero rows (placeholder only)', () => {
+    const b = bootstrap();
+    const scope = Scope.create();
+    scope.bag = {} as Record<string, unknown>;
+
+    const { parent, host } = makeRepeatHost('(k, v) in bag', "k + ':' + v");
+    b.$compile(host)(scope);
+    scope.$digest();
+
+    expect(rowsOf(parent).length).toBe(0);
+    expect(parent.childNodes.length).toBe(1);
+    expect(parent.childNodes[0]?.nodeType).toBe(Node.COMMENT_NODE);
+  });
+
+  it('per-row $index reflects the row position in alphabetical-key order', () => {
+    // The six per-row locals still apply to object iteration. `$index`
+    // is the 0-based row position AFTER alphabetical-key sorting.
+    const b = bootstrap();
+    const scope = Scope.create();
+    scope.bag = { charlie: 'c', alice: 'a', bob: 'b' };
+
+    const { parent, host } = makeRepeatHost('(k, v) in bag', "$index + ':' + k");
+    b.$compile(host)(scope);
+    scope.$digest();
+
+    const rows = rowsOf(parent);
+    expect(rows.map((r) => r.textContent)).toEqual(['0:alice', '1:bob', '2:charlie']);
   });
 });

@@ -1,114 +1,136 @@
 /**
- * `ngRepeat` — list iteration directive (spec 028 Slice 4 / FS §2.1
- * §2.3 §2.6 §2.7 §2.8 §2.9, technical-considerations §2.3 §2.4).
+ * `ngRepeat` — list iteration directive (spec 028 Slice 5 / FS §2.1
+ * §2.2 §2.3 §2.6 §2.7 §2.8 §2.9, technical-considerations §2.3 §2.4).
  *
  * `<li ng-repeat="todo in todos">{{ todo.title }}</li>` renders one
  * copy of the host element per item in the bound collection. Built on
  * the `transclude: 'element'` foundation from spec 027 Slice 2: at
  * compile time the host element is detached and replaced by a
  * `<!-- ngRepeat: todo in todos -->` Comment placeholder; for each
- * item in the bound array a fresh deep clone of the captured master is
- * linked against a per-item child scope and inserted in document order
- * after the placeholder.
+ * item in the bound array (OR each property of the bound object —
+ * Slice 5) a fresh deep clone of the captured master is linked against
+ * a per-item child scope and inserted in document order after the
+ * placeholder.
  *
- * **Slice 4 scope.** Custom identity via `track by EXPR` AND true row
- * reuse on identity match. The Slice 3 "tear down all + rebuild"
- * simplification is replaced with the proper diff / move / fresh-build
- * / survivor-teardown algorithm documented in
- * technical-considerations §2.3. Two capabilities remain deferred:
- * Slice 5 (`(key, value) in object` iteration — plain objects today
- * take the non-iterable bail branch) and Slice 6 (`as alias`
- * parent-scope publication — the parser validates the alias name but
- * the reconciler does not yet write to `parentScope[aliasIdent]`).
+ * **Slice 5 scope.** Object iteration via `(key, value) in object` is
+ * supported alongside the existing array iteration. Both shapes flow
+ * through the same diff machinery after a normalization step that
+ * collapses each input into a uniform `NormalizedItem[]` list. One
+ * capability remains deferred: Slice 6 (`as alias` parent-scope
+ * publication — the parser validates the alias name but the reconciler
+ * does not yet write to `parentScope[aliasIdent]`).
  *
- * **The row-reuse contract (FS §2.9).** On each watch fire the
- * reconciler computes an identity key for every incoming item, then
- * walks the new identity list in collection order:
+ * **Collection-shape dispatch (FS §2.2).** `normalizeCollection`
+ * triages the runtime value:
+ *
+ *   - `Array.isArray(coll)` → array branch. Each entry becomes
+ *     `{ key: i, value: coll[i] }` where `key` is the numeric index.
+ *     The per-row scope binds `parsed.valueIdent` to the item; if the
+ *     author also wrote `(k, v) in arr`, `parsed.keyIdent` is bound to
+ *     the index (AngularJS-canonical — arrays expose `$index` AND the
+ *     optional explicit key alias).
+ *   - `coll !== null && typeof coll === 'object'` → object branch.
+ *     Keys taken in alphabetical-string order via
+ *     `Object.keys(coll).sort()` (AngularJS-canonical). Each entry
+ *     becomes `{ key, value: coll[key] }`. The per-row scope binds
+ *     `parsed.keyIdent` (when non-null) AND `parsed.valueIdent`;
+ *     `item in obj` (`keyIdent === null`) exposes only the value.
+ *   - Anything else (`null`, `undefined`, primitives, functions) →
+ *     non-iterable bail: tear down current rows and return. Matches
+ *     FS §2.7. Functions take the non-iterable path even though
+ *     `Object.keys(fn)` would succeed, matching the Slice 3 contract
+ *     pinned by the test suite.
+ *
+ * **Identity-with-key formula for object items.** Default identity on
+ * object collections MUST include the object key — the same value can
+ * legitimately appear under multiple keys (`{a: 1, b: 1}`), and a
+ * value-only identity would falsely flag those as duplicates. The
+ * formula is `key:${objKey}|${identityTracker.getIdentity(value)}`.
+ * The `key:` prefix + `|` separator are disjoint from every
+ * default-tracker output (`'object:N'`, `'string:…'`, `'number:…'`
+ * etc. — none contain a `|`). When the author supplies `track by EXPR`
+ * the expression is the identity source (same as array iteration) and
+ * the key-injection step is skipped.
+ *
+ * **Collection-shape flip across digests is naturally safe.** Flipping
+ * `scope.collection` from `[1, 2, 3]` to `{a: 1}` between digests
+ * produces a fully disjoint identity key space (array entries use
+ * primitive sentinels like `'number:1'`; object entries use
+ * `'key:a|number:1'`), so the natural diff tears down every old row
+ * and builds every new row — no special-case code needed.
+ *
+ * **Row-reuse contract (FS §2.9).** On each watch fire the reconciler
+ * computes an identity for every incoming entry, then walks the new
+ * list in order:
  *
  *   - Identity present in the previous `currentRows` map → REUSE: the
- *     row's existing per-row scope and `cloneRoot` Element are
- *     retained, the six per-row locals are updated to the new
- *     position, the item binding is rewritten, and the `cloneRoot` is
- *     MOVED in the DOM via `parentNode.insertBefore(cloneRoot,
- *     anchor.nextSibling)`. DOM-node identity is preserved across
- *     digests so state inside (input focus, form values) survives.
+ *     existing per-row scope and `cloneRoot` are retained, the six
+ *     per-row locals are updated, the item / key bindings are
+ *     rewritten, and the `cloneRoot` is MOVED via
+ *     `parentNode.insertBefore(cloneRoot, anchor.nextSibling)` — DOM
+ *     identity is preserved so input focus / form values inside the
+ *     row survive.
  *   - Identity not in the previous map → FRESH BUILD: a new
- *     `$transclude(...)` clone is produced, populated with the
- *     per-row locals + item binding BEFORE DOM insertion, and
- *     inserted after the anchor.
+ *     `$transclude(...)` clone is produced, locals + bindings are
+ *     populated BEFORE DOM insertion, then inserted after the anchor.
  *
- * After the walk, entries left in the previous map (identities that
- * disappeared) are torn down: each survivor's scope is `$destroy()`-ed
- * and its `cloneRoot` is removed. Same order as
- * `tearDownAllRows`'s teardown.
+ * Entries left in the previous map after the walk (disappeared
+ * identities) are torn down: scope `$destroy()`-ed before `cloneRoot`
+ * removal, matching the `tearDownAllRows` order.
  *
- * **The `track by EXPR` evaluation surface.** When `parsed.trackByExpr`
- * is non-null, the reconciler evaluates it against the parent scope
- * via the `ExpressionFn`'s `(scope, locals)` arity, with a transient
- * locals object exposing `$index` AND the per-row item binding under
- * `parsed.valueIdent` (so `track by todo.id` resolves `todo` even
- * though no per-row scope exists at identity-computation time). The
- * result is coerced via `String(...)` to normalize numeric / boolean /
- * null identity values into the `Map<string, …>` key space. When
+ * **`track by EXPR` evaluation surface.** When `parsed.trackByExpr` is
+ * non-null, evaluation runs against the parent scope via the
+ * `ExpressionFn`'s `(scope, locals)` arity, with a transient locals
+ * object exposing `$index`, the per-row item binding under
+ * `parsed.valueIdent`, AND (for the `(k, v)` LHS form) the key binding
+ * under `parsed.keyIdent`. The result is coerced via `String(...)` to
+ * normalize numeric / boolean / null identity values. When
  * `parsed.trackByExpr === null` the reconciler falls back to the
- * closure-local `identityTracker` from Slice 2.
+ * closure-local `identityTracker` from Slice 2 (with the
+ * key-injection step for object collections).
  *
  * **DDO shape.** `restrict: 'A'`, `priority: 1000`, `terminal: true`,
  * `transclude: 'element'`. The priority makes `ngRepeat` win
- * same-element conflicts against `ngIf` (600) and `ngInclude` (400);
- * `terminal: true` provides the same-element cutoff (the descendant-
- * walk cutoff is NOT engaged — spec-023 gates that narrowing on
- * `directive.name === 'ngNonBindable'`).
+ * same-element conflicts against `ngIf` (600) and `ngInclude` (400).
  *
- * **The duplicate-key contract.** Two items resolving to the same
+ * **Duplicate-key contract.** Two entries resolving to the same
  * identity throws {@link NgRepeatDuplicateKeyError}. The directive
  * wraps the reconciliation block in a `try/catch` that routes via
  * `invokeExceptionHandler($exceptionHandler, err, '$compile')`, NOT
- * through the digest's `'watchListener'` path. On a throw the catch
- * branch calls `tearDownAllRows()` so no half-rendered tree remains.
+ * via the digest's `'watchListener'` path. On a throw the catch branch
+ * calls `tearDownAllRows()` so no half-rendered tree remains.
  *
- * **Cleanup contract.** A single `addElementCleanup(placeholder,
+ * **Cleanup contract.** `addElementCleanup(placeholder,
  * tearDownAllRows)` runs at link time so a parent
  * `destroyElementScope` reaching the placeholder still cascades
- * teardown to every active row. A second path —
- * `scope.$on('$destroy', tearDownAllRows)` — covers parent-scope
- * destruction without DOM teardown. Both paths converge on the same
- * idempotent helper.
- *
- * **Non-iterable values bail cleanly (FS §2.7).** When the resolved
- * collection is not an array (`null`, `undefined`, a number, a string,
- * a function, OR a plain object — Slice 5), `reconcile` tears down
- * any current rows and returns without rendering. No error, no
- * console noise, no half-mounted DOM.
+ * teardown to every active row; `scope.$on('$destroy',
+ * tearDownAllRows)` covers parent-scope destruction without DOM
+ * teardown. Both converge on the same idempotent helper.
  *
  * @example Basic array iteration with row reuse on push / reorder
  * ```html
  * <ul>
  *   <li ng-repeat="todo in todos">{{ todo.title }}</li>
  * </ul>
- * <!-- Pushing a new item appends one <li>; existing rows are reused
- *      (not rebuilt). Reordering the array moves the existing <li>
- *      nodes in place — focus / form-state inside survives. -->
  * ```
  *
  * @example Custom identity via `track by`
  * ```html
  * <li ng-repeat="todo in todos track by todo.id">{{ todo.title }}</li>
- * <!-- Replacing scope.todos with a fresh array whose items have the
- *      SAME `.id` values as the previous array reuses every row by
- *      identity. `track by $index` is the documented escape hatch for
- *      lists whose item values legitimately repeat. -->
  * ```
  *
  * @example Duplicate-key detection
  * ```html
  * <li ng-repeat="n in [1, 2, 2, 3]">{{ n }}</li>
- * <!-- Without `track by`, the default tracker assigns
- *      'number:1' / 'number:2' / 'number:2' / 'number:3' — the second
- *      '2' duplicates the first. Reconciliation throws
- *      NgRepeatDuplicateKeyError; the directive catches and routes
- *      via $exceptionHandler('$compile'); all rows are torn down. The
- *      fix: use `track by $index` or deduplicate the input. -->
+ * <!-- Throws NgRepeatDuplicateKeyError; fix: `track by $index`. -->
+ * ```
+ *
+ * @example Object iteration with alphabetical key order
+ * ```html
+ * <li ng-repeat="(name, age) in {alice: 30, bob: 25}">
+ *   {{ name }} → {{ age }}
+ * </li>
+ * <!-- Two rows: "alice → 30" then "bob → 25". -->
  * ```
  */
 
@@ -130,26 +152,35 @@ import { isComment, isElement } from './node-guards';
 export const NG_REPEAT_NAME = 'ngRepeat';
 
 /**
- * Per-row bookkeeping carried in the directive's closure-local
- * `currentRows` map. Keyed by identity string (default tracker OR the
- * `String(...)`-coerced value of the evaluated `track by` expression).
- * `key` is reserved for Slice 5's `(key, value) in object` iteration.
+ * Per-row bookkeeping in the directive's closure-local `currentRows`
+ * map. Keyed by identity string (default tracker OR `String(...)`-
+ * coerced `track by` result). `key` is the numeric index for array
+ * iteration and the property name for object iteration (Slice 5) —
+ * both flow through the same `NormalizedItem` shape.
  */
 interface RowEntry {
   scope: Scope;
   cloneRoot: Element;
   index: number;
   value: unknown;
-  key?: string;
+  key: string | number;
+}
+
+/**
+ * Uniform per-item shape produced by `normalizeCollection`. The diff
+ * body walks this list shape-agnostically — array vs object dispatch
+ * happens once during normalization and never again.
+ */
+interface NormalizedItem {
+  key: string | number;
+  value: unknown;
 }
 
 /**
  * Mutate the per-row scope's six framework-published locals to reflect
- * the row's new position. Used from both the reuse branch (existing
- * row whose `$index` changed) and the fresh-build branch (new row
- * needs locals populated before DOM insertion). The cast through
- * `Record<string, unknown>` matches the `compile.ts` precedent for
- * dynamic scope writes.
+ * the row's new position. Used from both reuse and fresh-build
+ * branches. The `Record<string, unknown>` cast matches the `compile.ts`
+ * precedent for dynamic scope writes.
  */
 function updatePerRowLocals(scope: Scope, index: number, totalCount: number): void {
   const lastIndex = totalCount - 1;
@@ -167,26 +198,22 @@ function updatePerRowLocals(scope: Scope, index: number, totalCount: number): vo
 /**
  * Factory — depends ONLY on `$exceptionHandler` so duplicate-key
  * throws route via `'$compile'` from the directive's own try/catch
- * (not via the digest's `'watchListener'` path). The canonical
- * array-form DI shape from the spec 018 `ngTransclude` precedent.
- * `track by` evaluation reuses the `ExpressionFn` returned by
- * Slice 1's {@link parseIteratorExpression} via its `(scope, locals)`
- * arity — no additional parse seam is needed.
+ * (not via the digest's `'watchListener'` path). `track by` evaluation
+ * reuses the `ExpressionFn` returned by Slice 1's
+ * {@link parseIteratorExpression} via its `(scope, locals)` arity.
  */
 function ngRepeatFactory($exceptionHandler: ExceptionHandler): DirectiveFactoryReturn {
   const link: LinkFn = (scope, element, attrs, _controllers, $transclude) => {
-    // Verify the runtime placeholder shape — for `transclude: 'element'`
-    // the foundation guarantees a Comment at runtime, but the public
-    // `LinkFn` types `element` as `Element`. Matches the spec 027
-    // hardening precedent.
+    // Verify the runtime placeholder shape — `transclude: 'element'`
+    // guarantees a Comment but the public `LinkFn` types `element` as
+    // `Element`. Matches the spec 027 hardening precedent.
     if (!isComment(element)) {
       throw new Error(`ngRepeat: expected placeholder to be a Comment, got nodeType ${String(element.nodeType)}`);
     }
     const placeholder = element;
 
-    // Defensive — the DDO sets `transclude: 'element'`, so the compiler
-    // always wires `$transclude`; the guard keeps a hypothetical seam
-    // change from null-dereffing. Mirrors ngIf / ngSwitch / ngInclude.
+    // Defensive — DDO sets `transclude: 'element'` so $transclude is
+    // always wired; mirrors ngIf / ngSwitch / ngInclude.
     if ($transclude === undefined) {
       return;
     }
@@ -194,50 +221,55 @@ function ngRepeatFactory($exceptionHandler: ExceptionHandler): DirectiveFactoryR
 
     const rawAttrValue = attrs[NG_REPEAT_NAME];
     if (typeof rawAttrValue !== 'string') {
-      // Defensive — index-signature widens to a union; bail rather
-      // than pass a non-string into `parseIteratorExpression`.
       return;
     }
-    // Narrowed `const` so nested closures see `string` (TS does not
+    // Narrowed const so nested closures see `string` (TS does not
     // propagate flow narrowing into nested function scopes).
     const rawExpression: string = rawAttrValue;
 
-    // Parse once per link invocation. A throw from the Slice 1 parser
-    // (NgRepeatBadIteratorExpressionError / NgRepeatBadIdentifierError
-    // / NgRepeatBadAliasError) bubbles up through the factory's
-    // try/catch in `$$buildDirectiveArrayProvider`, routed via
-    // `$exceptionHandler('$compile')`.
+    // Parse once per link invocation. Parser throws (NgRepeatBad*) flow
+    // through the factory's try/catch in $$buildDirectiveArrayProvider
+    // and route via $exceptionHandler('$compile').
     const parsed = parseIteratorExpression(rawExpression);
 
-    // Fresh identity tracker per directive instance. The WeakMap is
-    // module-private; two `ngRepeat` instances over the same
-    // collection produce independent identity namespaces.
+    // Fresh identity tracker per directive instance — two `ngRepeat`
+    // instances over the same collection produce independent namespaces.
     const identityTracker = createIdentityTracker();
 
     // Closure-local row state, rebound by `reconcile` on each fire.
     let currentRows: Map<string, RowEntry> = new Map();
 
     /**
-     * Identity for a single item at a given index. When `track by EXPR`
-     * was supplied, evaluates the parsed expression against the parent
-     * scope with a transient locals object exposing `$index` AND the
-     * per-row item binding under `parsed.valueIdent` (so
-     * `track by todo.id` resolves `todo` even though no per-row scope
-     * exists at identity-computation time), then coerces via
-     * `String(...)`. Otherwise falls back to the closure-local
-     * `identityTracker` (Slice 2 — WeakMap for objects, type-prefix
-     * sentinels for primitives).
+     * Identity for a normalized entry. With `track by EXPR`, evaluates
+     * against the parent scope with locals `{ $index, valueIdent: v,
+     * (keyIdent: k)? }` then `String(...)`-coerces. Without, falls back
+     * to `identityTracker`; for object collections (`isObjectCollection
+     * === true`) the result is prefixed with `'key:${k}|'` so the same
+     * value under two distinct keys does not falsely collide.
      */
-    function identityFor(item: unknown, index: number): string {
+    function identityFor(entry: NormalizedItem, index: number, isObjectCollection: boolean): string {
       if (parsed.trackByExpr !== null) {
         const locals: Record<string, unknown> = {
           $index: index,
-          [parsed.valueIdent]: item,
+          [parsed.valueIdent]: entry.value,
         };
+        if (parsed.keyIdent !== null) {
+          locals[parsed.keyIdent] = entry.key;
+        }
         const scopeLocals = scope as unknown as Record<string, unknown>;
         return String(parsed.trackByExpr(scopeLocals, locals));
       }
-      return identityTracker.getIdentity(item);
+      const valueIdentity = identityTracker.getIdentity(entry.value);
+      if (isObjectCollection) {
+        // Prefix with the property key so `{a: x, b: x}` (same value
+        // under two keys) does not collapse to a single duplicate-key
+        // throw. The `'key:'` prefix + `|` separator is disjoint from
+        // every default-tracker output shape (`'object:N'`,
+        // `'string:…'`, etc. — none contain a `|`), so the namespace
+        // does not collide.
+        return `key:${String(entry.key)}|${valueIdentity}`;
+      }
+      return valueIdentity;
     }
 
     /**
@@ -259,35 +291,75 @@ function ngRepeatFactory($exceptionHandler: ExceptionHandler): DirectiveFactoryR
     }
 
     /**
-     * Reconcile rendered rows against a new collection (Slice 4):
+     * Normalize the runtime collection into a uniform
+     * `NormalizedItem[]` shape OR `null` for non-iterable values:
      *
-     *   1. Non-iterable → `tearDownAllRows()` and return (FS §2.7).
-     *   2. Compute identity keys via `identityFor`; throw
-     *      {@link NgRepeatDuplicateKeyError} on duplicates.
-     *   3. Walk in order — reuse on identity match (move + update
-     *      locals), fresh-build via `$transclude(...)` otherwise.
-     *   4. Tear down entries left in the previous map (disappeared
-     *      identities). Rebind `currentRows`.
+     *   - `Array.isArray` → array branch, `{ key: i, value: arr[i] }`.
+     *   - `value !== null && typeof === 'object'` → object branch,
+     *     keys taken via `Object.keys(...).sort()` (AngularJS-canonical
+     *     alphabetical-string order). Functions never reach this
+     *     branch because `typeof === 'object'` and `typeof ===
+     *     'function'` are disjoint primitive type tags, so they take
+     *     the non-iterable bail — matches the Slice 3 contract pinned
+     *     by the test suite.
+     *   - Anything else → `null` (non-iterable bail, FS §2.7).
+     *
+     * The check ordering (`!== null` BEFORE `typeof === 'object'`) is
+     * non-optional because `typeof null === 'object'` in JavaScript.
+     */
+    function normalizeCollection(value: unknown): { items: NormalizedItem[]; isObject: boolean } | null {
+      if (Array.isArray(value)) {
+        const arr: unknown[] = value;
+        const items: NormalizedItem[] = arr.map((v, i) => ({ key: i, value: v }));
+        return { items, isObject: false };
+      }
+      if (value !== null && typeof value === 'object') {
+        const obj = value as Record<string, unknown>;
+        const keys = Object.keys(obj).sort();
+        const items: NormalizedItem[] = keys.map((k) => ({ key: k, value: obj[k] }));
+        return { items, isObject: true };
+      }
+      return null;
+    }
+
+    /**
+     * Reconcile rendered rows against a new collection (Slice 5):
+     * normalize, compute identities (throw {@link
+     * NgRepeatDuplicateKeyError} on duplicates), walk in order reusing
+     * on identity match (move + update locals + value/key bindings) or
+     * fresh-building via `$transclude(...)`, then tear down entries
+     * left in the previous map. Array vs object dispatch is collapsed
+     * into `normalizeCollection` so the diff body is shape-agnostic.
      */
     function reconcile(newCollection: unknown): void {
-      if (!Array.isArray(newCollection)) {
+      const normalized = normalizeCollection(newCollection);
+      if (normalized === null) {
         tearDownAllRows();
         return;
       }
-      // `Array.isArray` narrows to `any[]`; widen to `unknown[]` so
-      // element access is strictly typed.
-      const items: unknown[] = newCollection;
+      const { items, isObject } = normalized;
 
       // Compute identity keys + detect duplicates in a single pass.
       // `newKeyToIndex` lets the diagnostic name BOTH offending items.
       const newKeys: string[] = [];
       const newKeyToIndex = new Map<string, number>();
       for (let i = 0; i < items.length; i++) {
-        const item = items[i];
-        const key = identityFor(item, i);
+        const entry = items[i];
+        if (entry === undefined) {
+          // Defensive — `noUncheckedIndexedAccess` widens; built 1:1
+          // with `items.length` above, so this is unreachable in
+          // practice. Treat as a no-op rather than panic.
+          continue;
+        }
+        const key = identityFor(entry, i, isObject);
         const existingIndex = newKeyToIndex.get(key);
         if (existingIndex !== undefined) {
-          throw new NgRepeatDuplicateKeyError(rawExpression, key, items[existingIndex], item);
+          const prior = items[existingIndex];
+          // Same defensive index-access narrowing — the `prior`
+          // lookup is paired with `newKeyToIndex.set(key, i)` below so
+          // a hit means the slot is populated.
+          const priorValue = prior === undefined ? undefined : prior.value;
+          throw new NgRepeatDuplicateKeyError(rawExpression, key, priorValue, entry.value);
         }
         newKeys.push(key);
         newKeyToIndex.set(key, i);
@@ -305,40 +377,40 @@ function ngRepeatFactory($exceptionHandler: ExceptionHandler): DirectiveFactoryR
       let anchor: Node = placeholder;
 
       for (let i = 0; i < totalCount; i++) {
-        const item = items[i];
+        const entry = items[i];
         const key = newKeys[i];
-        if (key === undefined) {
-          // Defensive — `noUncheckedIndexedAccess` widens to
-          // `string | undefined`. Built 1:1 with `items` above; treat
-          // a phantom miss as a no-op rather than a panic.
+        if (entry === undefined || key === undefined) {
+          // Defensive — both arrays are built 1:1 with `totalCount`.
           continue;
         }
         const existing = previousRows.get(key);
         if (existing !== undefined) {
           // REUSE — scope, watchers, listeners, and DOM tree kept
-          // intact; only per-row locals + item binding + DOM position
-          // are touched.
+          // intact; only per-row locals + item bindings + DOM position
+          // are touched. Object-iteration rebinds the key alias too
+          // when `parsed.keyIdent !== null`.
           previousRows.delete(key);
           updatePerRowLocals(existing.scope, i, totalCount);
           const reusedScope = existing.scope as unknown as Record<string, unknown>;
-          reusedScope[parsed.valueIdent] = item;
+          reusedScope[parsed.valueIdent] = entry.value;
+          if (parsed.keyIdent !== null) {
+            reusedScope[parsed.keyIdent] = entry.key;
+          }
           existing.index = i;
-          existing.value = item;
+          existing.value = entry.value;
+          existing.key = entry.key;
           placeholder.parentNode?.insertBefore(existing.cloneRoot, anchor.nextSibling);
           anchor = existing.cloneRoot;
           nextRows.set(key, existing);
           continue;
         }
 
-        // FRESH BUILD — `$transclude` deep-clones the captured master
-        // and links the clone against a fresh transclusion scope.
+        // FRESH BUILD — `$transclude` deep-clones the captured master.
         // `clone[0]` is the cloned host for the element-form default
         // bucket.
         transclude((clone, transcludedScope) => {
           const head = clone[0];
           if (head === undefined) {
-            // Defensive — the element-form default bucket is `[host]`;
-            // bail rather than stash a row with no DOM.
             return;
           }
           if (!isElement(head)) {
@@ -346,11 +418,13 @@ function ngRepeatFactory($exceptionHandler: ExceptionHandler): DirectiveFactoryR
           }
           const cloneRoot = head;
 
-          // Populate locals + item binding BEFORE DOM insertion so
-          // first-render watchers fire with correct values. The cast
-          // mirrors `compile.ts`'s `bindAlias`-path scope write.
+          // Populate locals + bindings BEFORE DOM insertion so
+          // first-render watchers fire with correct values.
           const rowScope = transcludedScope as unknown as Record<string, unknown>;
-          rowScope[parsed.valueIdent] = item;
+          rowScope[parsed.valueIdent] = entry.value;
+          if (parsed.keyIdent !== null) {
+            rowScope[parsed.keyIdent] = entry.key;
+          }
           updatePerRowLocals(transcludedScope, i, totalCount);
 
           placeholder.parentNode?.insertBefore(cloneRoot, anchor.nextSibling);
@@ -360,16 +434,14 @@ function ngRepeatFactory($exceptionHandler: ExceptionHandler): DirectiveFactoryR
             scope: transcludedScope,
             cloneRoot,
             index: i,
-            value: item,
+            value: entry.value,
+            key: entry.key,
           });
         });
       }
 
-      // Tear down identities that disappeared from the new
-      // collection. The `previousRows` map at this point holds ONLY
-      // the entries that weren't reused above. Same order as
-      // `tearDownAllRows`: destroy the scope before removing from the
-      // DOM.
+      // Tear down identities that disappeared. `previousRows` holds
+      // only the unreused entries. Same order as `tearDownAllRows`.
       for (const entry of previousRows.values()) {
         entry.scope.$destroy();
         entry.cloneRoot.remove();
@@ -378,49 +450,27 @@ function ngRepeatFactory($exceptionHandler: ExceptionHandler): DirectiveFactoryR
       currentRows = nextRows;
     }
 
-    // Install the collection watcher. `$watchCollection` accepts both
-    // the function-form `ExpressionFn` (what `parse()` returns) and
-    // string expressions; we pass the pre-parsed function so the
-    // watcher does NOT re-parse on each install. The listener wraps
-    // the reconciliation in a try/catch so a duplicate-key throw is
-    // captured BEFORE the digest's `'watchListener'` path sees it —
-    // the cause token observed by application-side
-    // `$exceptionHandler` overrides is `'$compile'`, NOT
-    // `'watchListener'` (the duplicate-key contract is documented as
-    // `$compile`-cause-routed). On a throw the catch clears all rows
-    // so the offending collection does not leave a half-rendered
-    // tree.
+    // Collection watcher. Wrap reconcile in try/catch so a
+    // duplicate-key throw routes via `'$compile'` (NOT the digest's
+    // `'watchListener'` path) and any partial state is cleared first.
     scope.$watchCollection(parsed.collectionExpr, (newCollection) => {
       try {
         reconcile(newCollection);
       } catch (err: unknown) {
-        // Clear any rows that survived the partial pass before
-        // routing — a duplicate detected mid-collection would leave
-        // earlier-validated rows un-built (we tear down BEFORE
-        // re-mounting), so the only state to clear is the bookkeeping
-        // map plus any rows from the previous SUCCESSFUL reconcile.
-        // `tearDownAllRows` is idempotent.
         tearDownAllRows();
         invokeExceptionHandler($exceptionHandler, err, '$compile');
       }
     });
 
-    // Register cleanup on the placeholder Comment so a parent
-    // `destroyElementScope` reaching this slot still tears every
-    // active row down. The `addElementCleanup` widening from spec
-    // 027 Slice 2 accepts `Element | Comment` directly — no cast
-    // needed.
+    // Placeholder cleanup — parent `destroyElementScope` reaching the
+    // Comment cascades teardown to every active row. `addElementCleanup`
+    // accepts `Element | Comment` directly (spec 027 Slice 2).
     addElementCleanup(placeholder, () => {
       tearDownAllRows();
     });
 
-    // The scope-destroy path covers the "parent scope destroyed
-    // without DOM teardown" branch — without this `$on`, an outer
-    // `scope.$destroy()` would leave the rows mounted (their parent
-    // scope still references them) but their watcher tree would be
-    // attached to a torn-down parent, leaking digest work. Both
-    // cleanup paths converge on `tearDownAllRows`; subsequent
-    // invocations are idempotent no-ops.
+    // Scope-destroy path covers "parent scope destroyed without DOM
+    // teardown". Both paths converge on the idempotent helper.
     scope.$on('$destroy', () => {
       tearDownAllRows();
     });
