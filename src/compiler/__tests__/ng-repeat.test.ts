@@ -221,7 +221,7 @@ describe('ngRepeat — basic `item in list` iteration (FS §2.1)', () => {
     expect(rows[2]?.textContent).toBe('C');
   });
 
-  it('installs a Comment placeholder in the host element\'s slot', () => {
+  it("installs a Comment placeholder in the host element's slot", () => {
     const b = bootstrap();
     const scope = Scope.create();
     scope.todos = [{ title: 'A' }];
@@ -398,7 +398,7 @@ describe('ngRepeat — six per-row locals (FS §2.6)', () => {
     expect(rows[3]?.textContent).toBe('true');
   });
 
-  it('$index updates to reflect a row\'s new position after a list mutation', () => {
+  it("$index updates to reflect a row's new position after a list mutation", () => {
     // Slice 3 rebuilds rows on every digest, but the per-row locals
     // MUST reflect the new positions — that contract is stable from
     // Slice 3 onward (Slice 4 adds reuse on top, preserving the same
@@ -1122,10 +1122,7 @@ describe('ngRepeat — `track by EXPR` + row reuse (FS §2.3 / §2.9)', () => {
       { metadata: { id: 3 }, t: 'C' },
     ];
 
-    const { parent, host } = makeRepeatHost(
-      'item in items track by item.metadata.id',
-      'item.t',
-    );
+    const { parent, host } = makeRepeatHost('item in items track by item.metadata.id', 'item.t');
     b.$compile(host)(scope);
     scope.$digest();
 
@@ -1345,7 +1342,7 @@ describe('ngRepeat — object iteration: (key, value) in object (FS §2.2)', () 
     expect(after[0]).not.toBe(initialRow);
   });
 
-  it("track by the key keeps DOM-node identity stable across value changes (`track by k`)", () => {
+  it('track by the key keeps DOM-node identity stable across value changes (`track by k`)', () => {
     // `track by k` makes the row identity depend on the OBJECT KEY only,
     // so changing the value while the key stays the same reuses the row.
     const b = bootstrap();
@@ -1848,10 +1845,7 @@ describe('ngRepeat — as alias filtered-list publication (FS §2.4)', () => {
       { id: 2, t: 'B' },
     ];
 
-    const { parent, host } = makeRepeatHost(
-      'todo in todos as visible track by todo.id',
-      'todo.t',
-    );
+    const { parent, host } = makeRepeatHost('todo in todos as visible track by todo.id', 'todo.t');
     b.$compile(host)(scope);
     scope.$digest();
 
@@ -1908,10 +1902,7 @@ describe('ngRepeat — as alias filtered-list publication (FS §2.4)', () => {
     });
     scope.bag = { alice: 30, bob: 25 };
 
-    const { parent, host } = makeRepeatHost(
-      '(k, v) in bag as visible track by k',
-      "k + ':' + v",
-    );
+    const { parent, host } = makeRepeatHost('(k, v) in bag as visible track by k', "k + ':' + v");
     b.$compile(host)(scope);
     scope.$digest();
 

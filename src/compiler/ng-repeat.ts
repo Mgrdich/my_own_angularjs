@@ -299,7 +299,10 @@ function ngRepeatFactory($exceptionHandler: ExceptionHandler): DirectiveFactoryR
      * Per-shape value contract documented in the file-level TSDoc.
      * No-op when `parsed.aliasIdent === null`.
      */
-    function publishAlias(rawCollection: unknown, normalized: { items: NormalizedItem[]; isObject: boolean } | null): void {
+    function publishAlias(
+      rawCollection: unknown,
+      normalized: { items: NormalizedItem[]; isObject: boolean } | null,
+    ): void {
       if (parsed.aliasIdent === null) {
         return;
       }
