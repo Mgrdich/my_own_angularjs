@@ -23,6 +23,7 @@ export {
   NgRepeatBadAliasError,
   NgRepeatBadIdentifierError,
   NgRepeatBadIteratorExpressionError,
+  NgRepeatDuplicateKeyError,
   NgTranscludeMisuseError,
   ReplaceTrueNotSupportedError,
   RequiredTranscludeSlotUnfilledError,

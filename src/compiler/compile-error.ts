@@ -841,3 +841,83 @@ export class NgRepeatBadAliasError extends Error {
     );
   }
 }
+
+/**
+ * Format an arbitrary collection item for inclusion in the
+ * {@link NgRepeatDuplicateKeyError} message. Prefers `JSON.stringify` so
+ * structural values render readably (`{"id":1}`, `[1,2]`, `"hello"`),
+ * falling back to `String(item)` if stringification throws (circular
+ * references, getters that throw, `BigInt`, etc.). The output is for
+ * diagnostic display only; tests should assert on the duplicate-key
+ * portion of the message, not on the rendered item descriptors.
+ */
+function describeRepeatItem(item: unknown): string {
+  try {
+    // `JSON.stringify` is typed to return `string` for the
+    // single-arg overload that accepts `any`, but the runtime actually
+    // returns `string | undefined` (the value-is-undefined / value-is-symbol
+    // case yields `undefined`). The cast through `string | undefined`
+    // surfaces that wider runtime shape so the fallback gate works.
+    const rendered = JSON.stringify(item) as string | undefined;
+    if (rendered !== undefined) {
+      return rendered;
+    }
+    // `JSON.stringify(undefined)` and `JSON.stringify(<symbol>)` both
+    // return `undefined`. Fall through to the `String()` path so those
+    // values still produce a useful descriptor.
+  } catch {
+    // `JSON.stringify` throws on circular references and on `BigInt`.
+    // Fall through to the `String()` path.
+  }
+  try {
+    // `String(symbol)` is safe (`'Symbol(x)'`). `String({})` yields
+    // `'[object Object]'` — acceptable as a fallback diagnostic.
+    return String(item);
+  } catch {
+    // `String()` would only throw if the value carries a throwing
+    // `Symbol.toPrimitive` or `toString`. Surface a stable fallback.
+    return '[unprintable]';
+  }
+}
+
+/**
+ * Thrown by `ngRepeat`'s reconciliation engine (spec 028 Slice 3) when
+ * two items in the bound collection resolve to the same identity key.
+ * Without a `track by` clause the default identity tracker (spec 028
+ * Slice 2) maps each item to a stable string; duplicates in the input
+ * therefore produce duplicate identities and the reconciler cannot
+ * distinguish two rows that "are the same item" from two rows that
+ * "happen to look alike". The author either deduplicates the input or
+ * supplies a `track by` expression (`track by $index` is the canonical
+ * escape hatch for lists whose item values legitimately repeat).
+ *
+ * Routed at watch-listener time via the directive's own try/catch
+ * through `$exceptionHandler('$compile')` — NOT through the digest's
+ * `'watchListener'` path, because the directive captures the throw
+ * before the watcher's caller does. No new `EXCEPTION_HANDLER_CAUSES`
+ * cause token; the tuple stays at 10.
+ *
+ * The list does not render until the author resolves the duplicate;
+ * the rows from the previous (valid) state are torn down by the
+ * routing branch in `ng-repeat.ts`'s `reconcile` so the offending
+ * collection does not leave a half-rendered tree behind.
+ *
+ * @example
+ * ```ts
+ * // Duplicate primitives without `track by`:
+ * // <li ng-repeat="n in [1, 2, 2, 3]">{{n}}</li>
+ * // → NgRepeatDuplicateKeyError routed via $exceptionHandler('$compile')
+ * //
+ * // Fix: add `track by $index`
+ * // <li ng-repeat="n in [1, 2, 2, 3] track by $index">{{n}}</li>
+ * ```
+ */
+export class NgRepeatDuplicateKeyError extends Error {
+  readonly name = 'NgRepeatDuplicateKeyError' as const;
+
+  constructor(rawExpression: string, duplicateKey: string, itemA: unknown, itemB: unknown) {
+    super(
+      `ngRepeat: duplicate identity "${duplicateKey}" for items ${describeRepeatItem(itemA)}, ${describeRepeatItem(itemB)} in expression "${rawExpression}". Use "track by" to provide unique identities.`,
+    );
+  }
+}

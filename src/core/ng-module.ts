@@ -67,6 +67,7 @@ import { NG_IF_NAME, ngIfDirective } from '@compiler/ng-if';
 import { NG_INCLUDE_NAME, ngIncludeDirective } from '@compiler/ng-include';
 import { NG_INIT_NAME, ngInitDirective } from '@compiler/ng-init';
 import { NG_NON_BINDABLE_NAME, ngNonBindableDirective } from '@compiler/ng-non-bindable';
+import { NG_REPEAT_NAME, ngRepeatDirective } from '@compiler/ng-repeat';
 import { NG_SHOW_NAME, ngShowDirective } from '@compiler/ng-show';
 import { NG_STYLE_NAME, ngStyleDirective } from '@compiler/ng-style';
 import {
@@ -411,6 +412,27 @@ export const ngModule = createModule('ng', [])
       // (e.g. via a surrounding `ng-if` retoggling — spec 027 Slice 3).
       // See `src/compiler/ng-init.ts` for the pre-link-timing rationale.
       $compileProvider.directive(NG_INIT_NAME, ngInitDirective);
+      // Spec 028 Slice 3 — `ngRepeat` is the list-iteration
+      // structural directive. Built on the spec 027 Slice 2
+      // `transclude: 'element'` foundation (host detached at compile
+      // time and replaced by a `<!-- ngRepeat: ITERATOR -->` Comment
+      // placeholder); on each `$watchCollection` fire the directive
+      // reconciles its rendered rows against the new collection,
+      // mounting one deep-clone of the master per item with a fresh
+      // per-row child scope carrying the six framework-published
+      // locals (`$index`, `$first`, `$last`, `$middle`, `$even`,
+      // `$odd`) and the item binding (`scope[parsed.valueIdent] =
+      // item`). Duplicate identity keys without `track by` throw
+      // `NgRepeatDuplicateKeyError` routed via
+      // `$exceptionHandler('$compile')` from the directive's own
+      // try/catch (NOT via the digest's `'watchListener'` path).
+      // `priority: 1000` makes `ngRepeat` win same-element conflicts
+      // against `ngIf` (600) and `ngInclude` (400). Slice 3 ships
+      // arrays only + default identity tracking; Slices 4–6 extend
+      // this file with `track by` reuse, object iteration, and `as
+      // alias` parent-scope publication. See
+      // `src/compiler/ng-repeat.ts` for the file-level rationale.
+      $compileProvider.directive(NG_REPEAT_NAME, ngRepeatDirective);
       // Spec 027 Slice 5 — `ngSwitch` + `ngSwitchWhen` + `ngSwitchDefault`
       // provide value-driven subtree selection. The parent (`ngSwitch`)
       // owns a `NgSwitchController` controller plus a `scope.$watch`

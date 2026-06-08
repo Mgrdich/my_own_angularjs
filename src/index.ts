@@ -92,6 +92,7 @@ export {
   NgRepeatBadAliasError,
   NgRepeatBadIdentifierError,
   NgRepeatBadIteratorExpressionError,
+  NgRepeatDuplicateKeyError,
   NgTranscludeMisuseError,
   parseBindingSpec,
   parseIsolateBindings,
