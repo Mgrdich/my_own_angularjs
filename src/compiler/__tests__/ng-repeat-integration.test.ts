@@ -10,23 +10,18 @@
  * structural directives in the same subtree, AND scenarios where
  * teardown propagates through nested structural layers at once.
  *
- * **Implementation gap surfaced (spec 028 Slice 7).** Several of the
- * nested combinations in this file hit a single underlying gap: a
+ * **Nested `transclude: 'element'` composition.** Originally these
+ * combinations hit a master-clone re-link gap — a
  * `transclude: 'element'` directive nested INSIDE another
- * `transclude: 'element'` directive's transclusion subtree does NOT
- * re-fire its `link` / watch wiring when the outer's per-iteration
- * clone is linked. Concretely, `ng-if` / `ng-include` / nested
- * `ng-repeat` mounted INSIDE an outer `ng-repeat` row install their
- * Comment placeholders correctly but never render their cloned
- * sub-rows; symmetrically, `ng-repeat` mounted INSIDE an `ng-if`
- * transclusion subtree installs the `ng-repeat` placeholder but does
- * not render rows.
- *
- * This is the parallel of the spec-027 "ng-include under ng-if" gap
- * (documented in `structural-integration.test.ts:122-131`). The
- * affected combinations are pinned with `it.skip(…)` carrying inline
- * justifications; a future spec slice that hardens the master-clone
- * re-link path will turn the skips into active assertions.
+ * `transclude: 'element'` directive's transclusion subtree mounted its
+ * Comment placeholder but never rendered cloned rows because the
+ * outer's clone-time `cloneMap` keyed the inner subtree by the
+ * pre-capture original host (now an orphaned reference) instead of the
+ * post-capture Comment placeholder. The fix lives in `compile.ts` —
+ * `masterChildren` is RE-SNAPSHOTTED from `node.childNodes` AFTER the
+ * recursive child compile runs so `pairChildren` keys the cloneMap by
+ * the post-capture master nodes. All six composition shapes below now
+ * render end-to-end.
  *
  * Working coverage (`it(...)`):
  *
@@ -40,17 +35,13 @@
  *    the actually-observable behavior surfaced by the same-element
  *    terminal-cutoff gap from spec 027.
  *
- * Skipped pending the nested-`transclude:'element'` gap closing:
- *
- * 3. **`ng-repeat > ng-if`** (skip) — per-row `ng-if` doesn't render.
- * 4. **`ng-repeat > ng-include`** (skip) — per-row `ng-include` placeholder
- *    is installed and the fetcher is called, but the resolved template
- *    never lands in the row (parallel to the spec-027 ng-if + ng-include
- *    gap).
- * 5. **`ng-repeat` inside `ng-if`** (skip) — the inner `ng-repeat` does
- *    not render rows when the outer `ng-if` is truthy.
- * 6. **Nested `ng-repeat`** (skip) — inner `ng-repeat` placeholder is
- *    installed but no rows render.
+ * 3. **`ng-repeat > ng-if`** — per-row `ng-if` toggles independently.
+ * 4. **`ng-repeat > ng-include`** — per-row `ng-include` fetches and
+ *    installs its template inside the row.
+ * 5. **`ng-repeat` inside `ng-if`** — the outer `ng-if` mounts the
+ *    entire `ng-repeat` block on truthy.
+ * 6. **Nested `ng-repeat`** — outer + inner rows render with per-item
+ *    variable shadowing.
  *
  * Mirrors the bootstrap shape in `structural-integration.test.ts` (the
  * closest spec-027 precedent) — full re-registration of the canonical
@@ -295,7 +286,7 @@ describe('integration: same-element `ng-repeat + ng-if` conflict — pinned obse
 // ---------------------------------------------------------------------
 
 describe('integration: ng-repeat > ng-if — per-row toggle (FS §2.6 composition)', () => {
-  it.skip("each row's nested `ng-if` toggles independently based on its item's `done` field (blocked by nested transclude:'element' gap)", () => {
+  it("each row's nested `ng-if` toggles independently based on its item's `done` field", () => {
     // FS §2.6 expectation: `<li ng-repeat="todo in todos"><span
     // ng-if="todo.done">…</span></li>` mounts the `<span>` only for
     // rows whose item is truthy. The CURRENT framework installs the
@@ -338,49 +329,6 @@ describe('integration: ng-repeat > ng-if — per-row toggle (FS §2.6 compositio
     expect(rows[1]?.querySelector('.mark')).toBeNull();
     expect(rows[2]?.querySelector('.mark')).not.toBeNull();
   });
-
-  it("pins the SILENT-no-render outcome for per-row `ng-if` (nested transclude:'element' gap)", () => {
-    // The actually-observable behavior today: outer `ng-repeat` rows
-    // render correctly; per-row `<!-- ngIf: … -->` Comment placeholders
-    // are installed inside each row; but the `ng-if` cloned subtree
-    // (`<span class="mark">`) never lands in the DOM.
-    //
-    // The plain `ng-bind` (priority 0) child works because it is NOT a
-    // transclude:'element' directive — only the nested-element-form
-    // structural directives are affected.
-    const b = bootstrap();
-    const scope = Scope.create();
-    scope.todos = [
-      { title: 'A', done: true },
-      { title: 'B', done: false },
-    ];
-
-    const parent = document.createElement('ul');
-    const host = document.createElement('li');
-    host.setAttribute('ng-repeat', 'todo in todos');
-    const mark = document.createElement('span');
-    mark.setAttribute('ng-if', 'todo.done');
-    mark.className = 'mark';
-    mark.textContent = 'done';
-    const title = document.createElement('span');
-    title.setAttribute('ng-bind', 'todo.title');
-    title.className = 'title';
-    host.appendChild(mark);
-    host.appendChild(title);
-    parent.appendChild(host);
-
-    b.$compile(host)(scope);
-    scope.$digest();
-
-    // Outer rows rendered correctly with `ng-bind` titles.
-    const rows = rowsOf(parent);
-    expect(rows.length).toBe(2);
-    expect(rows[0]?.querySelector('.title')?.textContent).toBe('A');
-    expect(rows[1]?.querySelector('.title')?.textContent).toBe('B');
-    // But no `.mark` lands anywhere — the per-row `ng-if` clone path
-    // is blocked by the nested transclude:'element' gap.
-    expect(parent.querySelectorAll('.mark').length).toBe(0);
-  });
 });
 
 // ---------------------------------------------------------------------
@@ -388,7 +336,7 @@ describe('integration: ng-repeat > ng-if — per-row toggle (FS §2.6 compositio
 // ---------------------------------------------------------------------
 
 describe('integration: ng-repeat > ng-include — per-row template fetch (FS §2.6 composition)', () => {
-  it.skip("each row fetches its own template URL via the mocked fetcher (blocked by nested transclude:'element' gap)", async () => {
+  it('each row fetches its own template URL via the mocked fetcher', async () => {
     // FS §2.6 expectation: each per-row `<div ng-include="part.url">`
     // fetches the template from its bound URL and installs the result
     // as a sibling of the per-row placeholder. The CURRENT framework
@@ -422,41 +370,6 @@ describe('integration: ng-repeat > ng-include — per-row template fetch (FS §2
     expect(rows[0]?.querySelector('.payload')?.textContent).toBe('_a_html');
     expect(rows[1]?.querySelector('.payload')?.textContent).toBe('_b_html');
   });
-
-  it("pins the actually-observable behavior: per-row `ng-include` placeholders are installed and the fetcher IS called, but the resolved template never lands in the row (nested transclude:'element' gap)", async () => {
-    const fetcher = vi.fn<TemplateFetcher>((url: string) =>
-      Promise.resolve(`<span class="payload">${url.replace(/[/.]/g, '_')}</span>`),
-    );
-    const b = bootstrap({ fetcher });
-    const scope = Scope.create();
-    scope.parts = [{ url: '/a.html' }, { url: '/b.html' }];
-
-    const parent = document.createElement('ul');
-    const host = document.createElement('li');
-    host.setAttribute('ng-repeat', 'part in parts');
-    const includeHost = document.createElement('div');
-    includeHost.setAttribute('ng-include', 'part.url');
-    host.appendChild(includeHost);
-    parent.appendChild(host);
-
-    b.$compile(host)(scope);
-    scope.$digest();
-
-    // Fetcher IS invoked once per row — the per-row $watch wired by
-    // ng-include's link DOES fire on first digest of the cloned scope.
-    expect(fetcher).toHaveBeenCalledTimes(2);
-    expect(fetcher).toHaveBeenCalledWith('/a.html');
-    expect(fetcher).toHaveBeenCalledWith('/b.html');
-
-    await flushMicrotasks();
-    scope.$digest();
-
-    // But the resolved templates never lands in the per-row DOM —
-    // parallel to the spec-027 ng-if + ng-include gap.
-    const rows = rowsOf(parent);
-    expect(rows.length).toBe(2);
-    expect(parent.querySelectorAll('.payload').length).toBe(0);
-  });
 });
 
 // ---------------------------------------------------------------------
@@ -464,7 +377,7 @@ describe('integration: ng-repeat > ng-include — per-row template fetch (FS §2
 // ---------------------------------------------------------------------
 
 describe('integration: ng-repeat inside ng-if — mount on truthy, tear down on falsy (FS §2.6 composition)', () => {
-  it.skip("the outer `ng-if` mounts the entire `ng-repeat` block on truthy and tears down every per-row scope on falsy (blocked by nested transclude:'element' gap)", () => {
+  it('the outer `ng-if` mounts the entire `ng-repeat` block on truthy and tears down every per-row scope on falsy', () => {
     // FS §2.6 expectation: `<ul ng-if="show"><li ng-repeat="…">…</li></ul>`
     // renders all per-row rows when `show === true` and tears them all
     // down when `show === false`. CURRENT framework installs the
@@ -496,40 +409,6 @@ describe('integration: ng-repeat inside ng-if — mount on truthy, tear down on 
     scope.$digest();
     expect(rowsOf(parent).length).toBe(0);
   });
-
-  it("pins the SILENT-no-render outcome for `ng-repeat` inside `ng-if` (nested transclude:'element' gap)", () => {
-    // Observable today: outer ng-if mounts (the `<ul>` lands in the
-    // DOM), the per-ng-if-clone carries a `<!-- ngRepeat: item in
-    // items -->` Comment placeholder, but ZERO `<li>` rows render
-    // (parallel of the per-row ng-if and per-row ng-include cases
-    // above — the nested-transclude:'element' watcher never fires
-    // post-outer-clone-link).
-    const b = bootstrap();
-    const scope = Scope.create();
-    scope.show = true;
-    scope.items = ['A', 'B', 'C'];
-
-    const parent = document.createElement('div');
-    const ul = document.createElement('ul');
-    ul.setAttribute('ng-if', 'show');
-    const host = document.createElement('li');
-    host.setAttribute('ng-repeat', 'item in items');
-    const probe = document.createElement('span');
-    probe.setAttribute('ng-bind', 'item');
-    host.appendChild(probe);
-    ul.appendChild(host);
-    parent.appendChild(ul);
-
-    b.$compile(parent)(scope);
-    scope.$digest();
-
-    // Outer ng-if mounted — `<ul>` is in the DOM and carries the
-    // inner ngRepeat placeholder.
-    const mountedUl = parent.querySelector('ul');
-    expect(mountedUl).not.toBeNull();
-    // But no rows rendered.
-    expect(rowsOf(parent).length).toBe(0);
-  });
 });
 
 // ---------------------------------------------------------------------
@@ -537,7 +416,7 @@ describe('integration: ng-repeat inside ng-if — mount on truthy, tear down on 
 // ---------------------------------------------------------------------
 
 describe('integration: nested ng-repeat — outer + inner with per-item variable shadowing (FS §2.6 AC6.4)', () => {
-  it.skip("each outer row carries its own inner repeat scope; inner `item` shadows the outer `item` (blocked by nested transclude:'element' gap)", () => {
+  it('each outer row carries its own inner repeat scope; inner `item` shadows the outer `item`', () => {
     // FS §2.6 AC6.4 expectation: nested ng-repeat lets the inner
     // template reference the OUTER row scope via prototypal inheritance
     // while the inner `item` binding shadows the outer's. The CURRENT
@@ -573,35 +452,5 @@ describe('integration: nested ng-repeat — outer + inner with per-item variable
     const secondInners = Array.from(outerRows[1]?.querySelectorAll('li.item') ?? []);
     expect(firstInners.map((li) => li.textContent)).toEqual(['g1:x', 'g1:y']);
     expect(secondInners.map((li) => li.textContent)).toEqual(['g2:p', 'g2:q', 'g2:r']);
-  });
-
-  it("pins the SILENT-no-render outcome for nested `ng-repeat` (nested transclude:'element' gap)", () => {
-    // Observable today: outer ng-repeat rows render; each carries an
-    // inner `<!-- ngRepeat: item in group.items -->` Comment
-    // placeholder; but ZERO `<li.item>` rows render anywhere.
-    const b = bootstrap();
-    const scope = Scope.create();
-    scope.groups = [{ id: 'g1', items: ['x', 'y'] }];
-
-    const parent = document.createElement('div');
-    const outerHost = document.createElement('ul');
-    outerHost.setAttribute('ng-repeat', 'group in groups');
-    outerHost.className = 'group';
-    const innerHost = document.createElement('li');
-    innerHost.setAttribute('ng-repeat', 'item in group.items');
-    innerHost.className = 'item';
-    const bind = document.createElement('span');
-    bind.setAttribute('ng-bind', "group.id + ':' + item");
-    innerHost.appendChild(bind);
-    outerHost.appendChild(innerHost);
-    parent.appendChild(outerHost);
-
-    b.$compile(parent)(scope);
-    scope.$digest();
-
-    // Outer ng-repeat mounted exactly one `<ul.group>` row.
-    expect(parent.querySelectorAll('ul.group').length).toBe(1);
-    // No inner `<li.item>` rows rendered.
-    expect(parent.querySelectorAll('li.item').length).toBe(0);
   });
 });

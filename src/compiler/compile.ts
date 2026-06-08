@@ -1223,13 +1223,45 @@ export function createCompile(options: CompileOptions): CompileService {
     const masterChildren: Node[] = [];
     let childLinker: NodeLinker = noopLinker;
     if (hasChildren && !isAsyncTemplateHost && !hasNonBindableTerminal && isElement(node)) {
+      const preCaptureChildren: Node[] = [];
+      for (let i = 0; i < node.childNodes.length; i++) {
+        const child = node.childNodes.item(i);
+        if (isElement(child) || isComment(child)) {
+          preCaptureChildren.push(child);
+        }
+      }
+      // Compile children. A descendant directive declaring
+      // `transclude: 'element'` (e.g. `ng-if`, `ng-repeat`, `ng-include`)
+      // will mutate `node.childNodes` during its own compile call by
+      // detaching the original child host and inserting a Comment
+      // placeholder in its slot — see `transclude-capture.ts`'s
+      // `kind: 'element'` branch.
+      childLinker = compileNodes(preCaptureChildren, queue);
+      // Re-snapshot the children AFTER the recursive child compile so
+      // `pairChildren` (see below) keys the cloneMap by the POST-CAPTURE
+      // master nodes — the same nodes the per-child linker closures
+      // closed over via `node = buckets.replacementNode` after their own
+      // element-form capture. Without this re-snapshot, a nested
+      // `transclude: 'element'` directive's link function would resolve
+      // `target = cloneMap.get(node) ?? node` to its master Comment
+      // (because the cloneMap was keyed by the pre-capture original
+      // host, which the parent's clone tree no longer carries) and mount
+      // its clones into the detached master subtree instead of the live
+      // cloned counterpart — the nested-element-form silent-no-render
+      // gap pinned by the spec 028 / 027 composition tests.
+      //
+      // Element-form capture preserves DOM position via
+      // `insertBefore(placeholder, host); removeChild(host)`, so the
+      // post-capture index of each child matches the pre-capture index
+      // 1:1 with the linker array built above — re-snapshotting in
+      // document order keeps the linker / master-child alignment that
+      // `pairChildren` depends on.
       for (let i = 0; i < node.childNodes.length; i++) {
         const child = node.childNodes.item(i);
         if (isElement(child) || isComment(child)) {
           masterChildren.push(child);
         }
       }
-      childLinker = compileNodes(masterChildren, queue);
     }
 
     return (parentScope, cloneMap): void => {

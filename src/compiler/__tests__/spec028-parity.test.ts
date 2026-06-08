@@ -373,72 +373,26 @@ describe('parity: non-iterable collection renders zero rows without error (FS §
 // "should support nested ng-repeat" + the "inner $index references the
 // inner row" assertion.
 //
-// **Implementation gap surfaced during Slice 7 parity write-up.** A
-// `transclude: 'element'` directive nested INSIDE another
-// `transclude: 'element'` directive's transclusion subtree does NOT
-// render its cloned rows — the inner placeholder Comment is installed
-// correctly inside each outer row, but the inner `$watchCollection`
-// listener never produces a row (the outer master clone's link cycle
-// does not re-fire the inner ng-repeat's per-row reconcile). The same
-// gap affects `ng-if`-inside-`ng-repeat`, `ng-include`-inside-
-// `ng-repeat`, and `ng-repeat`-inside-`ng-if` (see the integration test
-// file for the parallel write-ups).
-//
-// We pin the actually-observable behavior here: the outer `ng-repeat`
-// rows ARE built and the inner placeholder Comment IS installed inside
-// each, but the inner ng-repeat does NOT render rows. A future spec
-// slice that hardens the master-clone re-link path to also re-fire
-// captured `transclude: 'element'` watchers (or that re-enters
-// `$watchCollection` listeners during the cloned-subtree link cycle)
-// will turn this `expect(0).toBe(0)` into the FS §2.6 AC6.4 contract
-// where the inner `$index` populates `['0', '1', '2']` per outer row.
+// **Master-clone re-link.** The outer `ng-repeat`'s clone-link cycle
+// also walks INTO the captured inner `transclude: 'element'`
+// placeholder so the inner `ng-repeat` re-runs its `link` against the
+// cloned counterpart Comment. The cloneMap key fix in `compile.ts`
+// (post-capture re-snapshot of `masterChildren` so `pairChildren`
+// keys by the placeholder Comment, not the orphaned pre-capture host)
+// is what makes the nested element-form composition work — see the
+// `compile.ts:1213` block. The same fix powers `ng-if`-inside-
+// `ng-repeat`, `ng-include`-inside-`ng-repeat`, and
+// `ng-repeat`-inside-`ng-if` (see `ng-repeat-integration.test.ts`).
 // ---------------------------------------------------------------------
 
 describe('parity: nested `ngRepeat` `$index` shadowing (FS §2.6 AC6.4)', () => {
-  it('pins the SILENT-no-render outcome for nested `ng-repeat` (transclude:"element" nesting gap)', () => {
-    const b = bootstrap();
-    const scope = Scope.create();
-    scope.depts = [
-      { name: 'eng', employees: ['e1', 'e2', 'e3'] },
-      { name: 'sales', employees: ['s1', 's2'] },
-    ];
-
-    // Outer `<ul ng-repeat="dept in depts">`; each outer row carries an
-    // INNER `<li ng-repeat="emp in dept.employees">{{ $index }}</li>`.
-    const parent = document.createElement('div');
-    const outerHost = document.createElement('ul');
-    outerHost.setAttribute('ng-repeat', 'dept in depts');
-    outerHost.className = 'dept';
-    const innerHost = document.createElement('li');
-    innerHost.setAttribute('ng-repeat', 'emp in dept.employees');
-    innerHost.className = 'emp';
-    const innerBind = document.createElement('span');
-    innerBind.setAttribute('ng-bind', '$index');
-    innerHost.appendChild(innerBind);
-    outerHost.appendChild(innerHost);
-    parent.appendChild(outerHost);
-
-    b.$compile(parent)(scope);
-    scope.$digest();
-
-    // Outer rendered the two `<ul>` rows.
-    const outerRows = Array.from(parent.querySelectorAll('ul.dept'));
-    expect(outerRows.length).toBe(2);
-
-    // Each outer row carries an inner `<!-- ngRepeat: emp in
-    // dept.employees -->` Comment placeholder — the inner ng-repeat's
-    // transclude:'element' capture ran during the outer's clone link.
-    // But the inner reconcile never fires, so zero inner `<li.emp>`
-    // rows are produced. The known gap.
-    const allInnerRows = parent.querySelectorAll('li.emp');
-    expect(allInnerRows.length).toBe(0);
-  });
-
-  it.skip('inner template `$index` refers to the inner row position, not the outer (FS §2.6 AC6.4 — blocked by the transclude:"element" nesting gap)', () => {
-    // The FS §2.6 AC6.4 expectation. Currently the nested
-    // `transclude: 'element'` gap prevents the inner ng-repeat from
-    // rendering rows at all — see the describe-block prologue. Un-skip
-    // this test when the gap closes.
+  it('inner template `$index` refers to the inner row position, not the outer (FS §2.6 AC6.4)', () => {
+    // The FS §2.6 AC6.4 expectation. The nested
+    // `transclude: 'element'` composition path now correctly mounts the
+    // inner `ng-repeat`'s clones against the OUTER row's cloned
+    // counterpart — see the `compile.ts` post-capture re-snapshot of
+    // `masterChildren` that keys `pairChildren`'s cloneMap by the
+    // POST-CAPTURE master nodes.
     const b = bootstrap();
     const scope = Scope.create();
     scope.depts = [
