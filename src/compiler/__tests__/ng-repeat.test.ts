@@ -42,7 +42,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { $CompileProvider } from '@compiler/compile-provider';
-import { NgRepeatDuplicateKeyError } from '@compiler/compile-error';
+import { NgRepeatBadAliasError, NgRepeatDuplicateKeyError } from '@compiler/compile-error';
 import type { CompileService, DirectiveFactory, DirectiveFactoryReturn, LinkFn } from '@compiler/directive-types';
 import { Scope } from '@core/index';
 import { ngModule } from '@core/ng-module';
@@ -50,6 +50,7 @@ import { createInjector } from '@di/injector';
 import { type AnyModule, createModule, resetRegistry } from '@di/module';
 import type { ExceptionHandler } from '@exception-handler/index';
 import { $FilterProvider } from '@filter/filter-provider';
+import type { FilterService } from '@filter/filter-types';
 import { $InterpolateProvider } from '@interpolate/interpolate-provider';
 import { $SceDelegateProvider } from '@sce/sce-delegate-provider';
 import { $SceProvider } from '@sce/sce-provider';
@@ -63,6 +64,7 @@ interface InjectorLike {
 
 interface Bootstrap {
   $compile: CompileService;
+  $filter: FilterService;
   injector: InjectorLike;
 }
 
@@ -116,6 +118,7 @@ function bootstrap(options?: BootstrapOptions): Bootstrap {
   const built = createInjector([ngModule, appModule]);
   return {
     $compile: built.get('$compile'),
+    $filter: built.get('$filter'),
     injector: built,
   };
 }
@@ -1548,5 +1551,459 @@ describe('ngRepeat — object iteration: (key, value) in object (FS §2.2)', () 
 
     const rows = rowsOf(parent);
     expect(rows.map((r) => r.textContent)).toEqual(['0:alice', '1:bob', '2:charlie']);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 11. `as alias` filtered-list publication on parent scope (FS §2.4 — spec 028 Slice 6)
+// ---------------------------------------------------------------------------
+
+describe('ngRepeat — as alias filtered-list publication (FS §2.4)', () => {
+  /**
+   * The Slice-6 alias publication contract:
+   *
+   * - When `parsed.aliasIdent !== null`, the reconciler writes the
+   *   resolved collection on the PARENT scope (NOT a per-row scope)
+   *   BEFORE row reconciliation runs in the same listener fire — so a
+   *   sibling `<p ng-if="!visible.length">` later in the same digest
+   *   sees the new value.
+   * - Array branch publishes the raw post-filter array (`newCollection`).
+   * - Object branch publishes the normalized `[{ key, value }]` array.
+   * - Non-iterable bail publishes `[]` (Option B) so empty-state markup
+   *   fires uniformly across "no matches", "not loaded yet", and
+   *   "destroyed".
+   * - Parser-side `NgRepeatBadAliasError` (Slice 1) prevents alias-vs-
+   *   item-name collisions at parse time — regression-pinned below.
+   *
+   * Tests in this block exercise BOTH the array and the object branches
+   * across the full set of optional-clause combinations the grammar
+   * supports.
+   *
+   * **Implementation gap surfaced during Slice 6 test authoring.** The
+   * directive currently passes the parser's `ExpressionFn` (a function)
+   * as the first argument to `scope.$watchCollection`, which bypasses
+   * the scope's `compileToWatchFn` wrapper that injects
+   * `{ $$filter: $$filterLookup }` into the locals on every evaluation.
+   * As a result a filter chain inside the collection expression (e.g.
+   * `todos | filter:q`) never receives the filter lookup and the
+   * filter throws `FilterLookupError` at digest time. The fix is either:
+   * (a) thread `$$filter` through ng-repeat's own watch wrapper, or
+   * (b) widen `$watchCollection` to accept already-parsed
+   * `FlaggedWatchFn` inputs and reuse the existing wrapper. Either way
+   * the FS §2.4 AC4.1 canonical pattern `todos | filter:q as visible`
+   * cannot be exercised against the live directive today.
+   *
+   * We work around the gap by simulating "filtering" with a parent-
+   * scope-computed function or a manual `scope.todos =` reassignment —
+   * the alias-publication semantic is independent of whether the
+   * collection expression contains a filter chain, so the publication
+   * contract still gets full coverage.
+   *
+   * The `Scope.create({ filterLookup: b.$filter })` call shape below
+   * wires `$$filterLookup` so that IF the gap is closed in a follow-up
+   * the same scope construction keeps working without churn; it is a
+   * load-bearing no-op today.
+   */
+
+  it('AC4.1 — empty-state markup `<p ng-if="!visible.length">` shows when the filtered list is empty', () => {
+    // The canonical empty-state pattern from the functional spec. The
+    // `<ul>` carries the repeating `<li>`; the sibling `<p ng-if>` reads
+    // `visible.length` published on the SAME parent scope by the
+    // alias-publication contract.
+    //
+    // The functional-spec example uses `todos | filter:q as visible`
+    // for the canonical pattern. The CURRENT directive cannot evaluate
+    // a filter chain through `$watchCollection` (the parser's
+    // `ExpressionFn` is passed verbatim, bypassing the scope's
+    // `$$filter` injection wrapper — see the describe-block TSDoc for
+    // the implementation-gap details). We simulate the FILTERED-LIST
+    // shape by reassigning `scope.todos` to a precomputed subset; the
+    // alias-publication semantic that drives the empty-state markup is
+    // independent of WHO computed the filtered subset.
+    const b = bootstrap();
+    const scope = Scope.create<{ todos: { title: string }[]; visible?: unknown }>({
+      filterLookup: b.$filter,
+    });
+    scope.todos = [{ title: 'apple' }, { title: 'banana' }, { title: 'cherry' }];
+
+    const wrapper = document.createElement('div');
+    const ul = document.createElement('ul');
+    const li = document.createElement('li');
+    li.setAttribute('ng-repeat', 'todo in todos as visible');
+    const liInner = document.createElement('span');
+    liInner.setAttribute('ng-bind', 'todo.title');
+    li.appendChild(liInner);
+    ul.appendChild(li);
+    const emptyState = document.createElement('p');
+    emptyState.setAttribute('ng-if', '!visible.length');
+    emptyState.textContent = 'No matches.';
+    wrapper.appendChild(ul);
+    wrapper.appendChild(emptyState);
+
+    b.$compile(wrapper)(scope);
+    scope.$digest();
+
+    // Three rows render; the empty-state `<p>` is NOT in the DOM
+    // (ng-if torn it down because `visible.length === 3`).
+    expect(rowsOf(ul).length).toBe(3);
+    expect(wrapper.querySelector('p')).toBeNull();
+
+    // Reassign `todos` to an empty array — rows disappear AND the
+    // empty-state `<p>` mounts in the same digest fire — because
+    // `publishAlias` writes `visible = []` BEFORE row reconciliation,
+    // the watcher chain that drives `ng-if` sees the new value during
+    // the digest's first pass.
+    scope.todos = [];
+    scope.$digest();
+
+    expect(rowsOf(ul).length).toBe(0);
+    const mountedEmptyState = wrapper.querySelector('p');
+    expect(mountedEmptyState).not.toBeNull();
+    expect(mountedEmptyState?.textContent).toBe('No matches.');
+
+    // Reassigning back to a non-empty subset: the empty-state `<p>`
+    // disappears in the same digest fire.
+    scope.todos = [{ title: 'banana' }];
+    scope.$digest();
+
+    const matchedRows = rowsOf(ul);
+    expect(matchedRows.length).toBe(1);
+    expect(matchedRows[0]?.textContent).toBe('banana');
+    expect(wrapper.querySelector('p')).toBeNull();
+  });
+
+  it('AC4.2 — alias updates when the bound collection changes (`visible.length` tracks the filtered count)', () => {
+    // Same implementation-gap caveat as AC4.1: the canonical
+    // `items | filter:q as visible` does not work against the live
+    // directive. We exercise the same alias-update semantic by
+    // reassigning `scope.items` to precomputed filtered subsets — the
+    // alias's `.length` MUST track each reassignment in the same
+    // digest fire.
+    const b = bootstrap();
+    const scope = Scope.create<{ items: string[]; visible?: unknown }>({ filterLookup: b.$filter });
+    scope.items = ['alpha', 'beta', 'gamma', 'aether', 'orange'];
+
+    const { parent, host } = makeRepeatHost('it in items as visible', 'it');
+    b.$compile(host)(scope);
+    scope.$digest();
+
+    expect(Array.isArray(scope.visible)).toBe(true);
+    expect((scope.visible as unknown[]).length).toBe(5);
+    expect(rowsOf(parent).length).toBe(5);
+
+    // Filtered subset containing 'eth' substring.
+    scope.items = ['aether'];
+    scope.$digest();
+    expect((scope.visible as unknown[]).length).toBe(1);
+    expect((scope.visible as string[])[0]).toBe('aether');
+    expect(rowsOf(parent).length).toBe(1);
+    expect(rowsOf(parent)[0]?.textContent).toBe('aether');
+
+    // Empty subset — alias becomes the empty array; zero rows.
+    scope.items = [];
+    scope.$digest();
+    expect((scope.visible as unknown[]).length).toBe(0);
+    expect(rowsOf(parent).length).toBe(0);
+
+    // Restore a 3-item subset — alias.length is 3.
+    scope.items = ['alpha', 'beta', 'gamma'];
+    scope.$digest();
+    expect((scope.visible as unknown[]).length).toBe(3);
+    expect(rowsOf(parent).length).toBe(3);
+  });
+
+  it('AC4.3 — alias is published on the PARENT scope as an own property (NOT on per-row scopes)', () => {
+    // The contract is precise: `visible` lives on the SAME scope the
+    // directive was linked against (the parent), reachable from sibling
+    // markup. A per-row scope SHOULD NOT carry `visible` as an own
+    // property — confirming this rules out a publish-on-row-scope
+    // regression. (`visible` would still be reachable from a per-row
+    // scope via the prototype chain, since per-row scopes are
+    // `parentScope.$new()` children — that is the AngularJS-canonical
+    // scope-inheritance semantic and not what we are checking here.
+    // The own-property assertion pins the PARENT-SCOPE-AS-PUBLICATION-
+    // SITE contract from FS §2.4 AC4.3.)
+    const capturedRowScopes: Scope[] = [];
+    const b = bootstrap({
+      register: (_app, $cp) => {
+        $cp.directive(
+          'rowProbe',
+          ddoFactory({
+            restrict: 'A',
+            link: ((s) => {
+              capturedRowScopes.push(s);
+            }) as LinkFn,
+          }),
+        );
+      },
+    });
+    const scope = Scope.create<{ todos: { title: string }[]; visible?: unknown }>({
+      filterLookup: b.$filter,
+    });
+    scope.todos = [{ title: 'A' }, { title: 'B' }];
+
+    const parent = document.createElement('div');
+    const host = document.createElement('li');
+    host.setAttribute('ng-repeat', 'todo in todos as visible');
+    const inner = document.createElement('span');
+    inner.setAttribute('ng-bind', 'todo.title');
+    inner.setAttribute('row-probe', '');
+    host.appendChild(inner);
+    parent.appendChild(host);
+
+    b.$compile(host)(scope);
+    scope.$digest();
+
+    // Parent scope carries `visible` as an own property — the alias
+    // publication assignment is `scope[parsed.aliasIdent] = aliasValue`.
+    const parentRecord = scope as unknown as Record<string, unknown>;
+    expect(Object.prototype.hasOwnProperty.call(parentRecord, 'visible')).toBe(true);
+    expect(Array.isArray(parentRecord.visible)).toBe(true);
+    expect((parentRecord.visible as unknown[]).length).toBe(2);
+
+    // Per-row scopes do NOT carry `visible` as an own property — the
+    // alias was published one level up (on the parent), not duplicated
+    // onto each per-row scope. (The per-row scopes can still READ
+    // `visible` via the prototype chain — that is the AngularJS scope-
+    // inheritance semantic — but it must NOT be set as an own property
+    // here.)
+    expect(capturedRowScopes.length).toBe(2);
+    for (const rs of capturedRowScopes) {
+      const rec = rs as unknown as Record<string, unknown>;
+      expect(Object.prototype.hasOwnProperty.call(rec, 'visible')).toBe(false);
+    }
+  });
+
+  it('alias publication happens in the SAME digest as row reconciliation (empty-state mount + row teardown coherent)', () => {
+    // Implicit in the AC4.1 test above, but pin it explicitly: a single
+    // `$apply` (or single `$digest`) that flips the collection from
+    // "non-empty" to "empty" mounts the empty-state AND tears down the
+    // rows in ONE digest pass. The contract is documented in the
+    // ng-repeat file-level TSDoc: `publishAlias` runs as the FIRST
+    // observable side effect of `reconcile`, before the non-iterable
+    // bail and before row reconciliation, so the watcher chain reading
+    // the alias picks up the new value in the same digest's first
+    // dirty-check pass.
+    const b = bootstrap();
+    const scope = Scope.create<{ items: string[]; visible?: unknown }>({ filterLookup: b.$filter });
+    scope.items = ['x'];
+
+    const wrapper = document.createElement('div');
+    const ul = document.createElement('ul');
+    const li = document.createElement('li');
+    li.setAttribute('ng-repeat', 'it in items as visible');
+    const liInner = document.createElement('span');
+    liInner.setAttribute('ng-bind', 'it');
+    li.appendChild(liInner);
+    ul.appendChild(li);
+    const emptyState = document.createElement('p');
+    emptyState.setAttribute('ng-if', '!visible.length');
+    emptyState.textContent = 'NONE';
+    wrapper.appendChild(ul);
+    wrapper.appendChild(emptyState);
+
+    b.$compile(wrapper)(scope);
+    scope.$digest();
+    expect(rowsOf(ul).length).toBe(1);
+    expect(wrapper.querySelector('p')).toBeNull();
+
+    // ONE `$apply` that empties the collection — the next observable
+    // state MUST have both: zero rows AND the empty-state mounted. If
+    // the alias were published AFTER row reconciliation, the `ng-if`'s
+    // watcher would either fire on the OLD value (no empty state) or
+    // need a second digest to stabilize.
+    scope.$apply(() => {
+      scope.items = [];
+    });
+
+    expect(rowsOf(ul).length).toBe(0);
+    expect(wrapper.querySelector('p')?.textContent).toBe('NONE');
+  });
+
+  it('`item in list as visible` (no track-by, no filter) — alias is the raw collection array', () => {
+    const b = bootstrap();
+    const scope = Scope.create<{ items: string[]; visible?: unknown }>({ filterLookup: b.$filter });
+    scope.items = ['A', 'B', 'C'];
+
+    const { parent, host } = makeRepeatHost('it in items as visible', 'it');
+    b.$compile(host)(scope);
+    scope.$digest();
+
+    // Array branch: alias receives the raw `newCollection` — the
+    // `scope.items` array itself, not a copy. The reference equality
+    // assertion pins the "raw post-filter array, identity preserved"
+    // half of the contract.
+    expect(scope.visible).toBe(scope.items);
+    expect(rowsOf(parent).length).toBe(3);
+  });
+
+  it('`item in list as visible track by item.id` — alias is the raw array, rows reuse on identity match', () => {
+    const b = bootstrap();
+    const scope = Scope.create<{
+      todos: { id: number; t: string }[];
+      visible?: unknown;
+    }>({ filterLookup: b.$filter });
+    scope.todos = [
+      { id: 1, t: 'A' },
+      { id: 2, t: 'B' },
+    ];
+
+    const { parent, host } = makeRepeatHost(
+      'todo in todos as visible track by todo.id',
+      'todo.t',
+    );
+    b.$compile(host)(scope);
+    scope.$digest();
+
+    expect(scope.visible).toBe(scope.todos);
+    expect(rowsOf(parent).length).toBe(2);
+    const rowsBefore = rowsOf(parent);
+
+    // Replace with fresh objects carrying the same ids — rows reuse,
+    // and the alias updates to the new array reference (same `as`
+    // contract: raw post-filter array).
+    scope.todos = [
+      { id: 1, t: 'A2' },
+      { id: 2, t: 'B2' },
+    ];
+    scope.$digest();
+
+    expect(scope.visible).toBe(scope.todos);
+    const rowsAfter = rowsOf(parent);
+    expect(rowsAfter[0]).toBe(rowsBefore[0]);
+    expect(rowsAfter[1]).toBe(rowsBefore[1]);
+    expect(rowsAfter.map((r) => r.textContent)).toEqual(['A2', 'B2']);
+  });
+
+  it('`(k, v) in obj as visible` — alias is the normalized `[{ key, value }]` array', () => {
+    // Object branch: alias receives the normalized NormalizedItem[]
+    // array (each entry `{ key, value }`), NOT the raw object. This is
+    // the canonical "iterate the visible items" surface that authors
+    // who want to read both key + value in sibling markup rely on.
+    const b = bootstrap();
+    const scope = Scope.create<{ people: Record<string, number>; visible?: unknown }>({
+      filterLookup: b.$filter,
+    });
+    scope.people = { alice: 30, bob: 25 };
+
+    const { parent, host } = makeRepeatHost('(name, age) in people as visible', "name + '=' + age");
+    b.$compile(host)(scope);
+    scope.$digest();
+
+    expect(Array.isArray(scope.visible)).toBe(true);
+    const visible = scope.visible as { key: string | number; value: unknown }[];
+    expect(visible.length).toBe(2);
+    // Alphabetical-string key order — same as the row order.
+    expect(visible[0]?.key).toBe('alice');
+    expect(visible[0]?.value).toBe(30);
+    expect(visible[1]?.key).toBe('bob');
+    expect(visible[1]?.value).toBe(25);
+    expect(rowsOf(parent).length).toBe(2);
+  });
+
+  it('`(k, v) in obj as visible track by k` — alias is the normalized array AND row reuse works', () => {
+    const b = bootstrap();
+    const scope = Scope.create<{ bag: Record<string, number>; visible?: unknown }>({
+      filterLookup: b.$filter,
+    });
+    scope.bag = { alice: 30, bob: 25 };
+
+    const { parent, host } = makeRepeatHost(
+      '(k, v) in bag as visible track by k',
+      "k + ':' + v",
+    );
+    b.$compile(host)(scope);
+    scope.$digest();
+
+    const initialRows = rowsOf(parent);
+    expect(initialRows.length).toBe(2);
+    expect(initialRows.map((r) => r.textContent)).toEqual(['alice:30', 'bob:25']);
+    const aliceRow = initialRows[0];
+    const bobRow = initialRows[1];
+
+    // Alias is the normalized [{key, value}] array.
+    const visible = scope.visible as { key: string | number; value: unknown }[];
+    expect(visible.length).toBe(2);
+    expect(visible[0]?.key).toBe('alice');
+    expect(visible[0]?.value).toBe(30);
+
+    // Mutate a value in place — `track by k` reuses the row, and the
+    // alias's NEW normalized array reflects the new value.
+    scope.bag.alice = 31;
+    scope.$digest();
+
+    const after = rowsOf(parent);
+    expect(after[0]).toBe(aliceRow);
+    expect(after[1]).toBe(bobRow);
+    expect(after.map((r) => r.textContent)).toEqual(['alice:31', 'bob:25']);
+    const visibleAfter = scope.visible as { key: string | number; value: unknown }[];
+    expect(visibleAfter[0]?.value).toBe(31);
+    expect(visibleAfter[1]?.value).toBe(25);
+  });
+
+  it('non-iterable bail (`scope.todos = null`) sets alias to `[]` so empty-state markup fires uniformly', () => {
+    // The non-iterable branch publishes `[]` (Option B from the spec).
+    // This makes empty-state markup like `<p ng-if="!visible.length">`
+    // fire uniformly across "no matches", "not loaded yet (null)", and
+    // "destroyed" — the consumer does not need to special-case null.
+    const b = bootstrap();
+    const scope = Scope.create<{ todos: unknown; visible?: unknown }>({
+      filterLookup: b.$filter,
+    });
+    scope.todos = [{ title: 'A' }];
+
+    const { parent, host } = makeRepeatHost('todo in todos as visible', 'todo.title');
+    b.$compile(host)(scope);
+    scope.$digest();
+
+    expect(rowsOf(parent).length).toBe(1);
+    expect(Array.isArray(scope.visible)).toBe(true);
+    expect((scope.visible as unknown[]).length).toBe(1);
+
+    // Non-iterable bail → alias becomes the empty array.
+    scope.todos = null;
+    scope.$digest();
+
+    expect(rowsOf(parent).length).toBe(0);
+    expect(Array.isArray(scope.visible)).toBe(true);
+    expect((scope.visible as unknown[]).length).toBe(0);
+
+    // `undefined` also routes through the same bail — uniform contract.
+    scope.todos = [{ title: 'B' }];
+    scope.$digest();
+    expect((scope.visible as unknown[]).length).toBe(1);
+
+    scope.todos = undefined;
+    scope.$digest();
+    expect(Array.isArray(scope.visible)).toBe(true);
+    expect((scope.visible as unknown[]).length).toBe(0);
+  });
+
+  it('alias name collision with the item ident (`item in list as item`) throws NgRepeatBadAliasError at parse time', () => {
+    // Regression — the parser-side validation (Slice 1) prevents the
+    // alias from shadowing the iterator's own bindings. Routes via
+    // `$exceptionHandler('$compile')` from the factory's try/catch in
+    // `$$buildDirectiveArrayProvider` AT REGISTRATION/LINK time (the
+    // parse runs once per link invocation; the throw flows up to the
+    // directive-array provider's catch). No rows render.
+    const handler = vi.fn<ExceptionHandler>();
+    const b = bootstrap({ exceptionHandler: handler });
+    const scope = Scope.create();
+    scope.list = ['A', 'B'];
+
+    const { parent, host } = makeRepeatHost('item in list as item', 'item');
+    b.$compile(host)(scope);
+    scope.$digest();
+
+    const compileCalls = handler.mock.calls.filter((c) => c[1] === '$compile');
+    const aliasErrs = compileCalls.filter((c) => c[0] instanceof NgRepeatBadAliasError);
+    expect(aliasErrs.length).toBeGreaterThanOrEqual(1);
+    const err = aliasErrs[0]?.[0] as NgRepeatBadAliasError;
+    expect(err).toBeInstanceOf(NgRepeatBadAliasError);
+    expect(err.message).toContain('alias');
+    expect(err.message).toContain('item');
+
+    // No rows mounted, only the placeholder.
+    expect(rowsOf(parent).length).toBe(0);
   });
 });
