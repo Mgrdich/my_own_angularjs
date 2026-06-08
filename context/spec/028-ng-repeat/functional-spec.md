@@ -1,7 +1,7 @@
 # Functional Specification: ng-repeat (List Iteration Directive)
 
 - **Roadmap Item:** `ng-repeat` — iteration over arrays/objects with `track by`, per-item locals, animation hooks deferred to Phase 4. Phase 2 → Directives & DOM Compilation → Built-in Directives.
-- **Status:** Draft
+- **Status:** Completed
 - **Author:** Mgrdich
 
 ---
