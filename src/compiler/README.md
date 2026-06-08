@@ -1660,6 +1660,311 @@ tuple stays at 10. Every error site reuses existing surfaces:
   `ng-switch`'s parent watcher, `ng-include`'s URL watcher) route
   via the digest's existing `'watchListener'` cause.
 
+## List iteration directive (spec 028)
+
+Spec 028 ships **`ng-repeat`** — the list-iteration directive that
+renders one copy of its host element per item in the bound
+collection. Like the spec 023 / 024 / 025 / 026 / 027 batches it is
+registered on the `'ng'` module's existing `$compileProvider` config
+block and ships DI-only (no `@compiler/index` factory export). The
+factory function lives in [`src/compiler/ng-repeat.ts`](ng-repeat.ts)
+and is reachable as `injector.get('ngRepeatDirective')` whenever an
+app declares `'ng'` in its dependency chain. Apps swap or wrap it
+via `module.decorator('ngRepeatDirective', …)` and
+`module.directive('ngRepeat', …)` like any other DI-registered
+directive.
+
+### The `transclude: 'element'` reuse from spec 027
+
+`ng-repeat` is a straightforward consumer of the foundation
+introduced in spec 027 Slice 2. At compile time the host element
+is detached and replaced by a
+`<!-- ngRepeat: ITERATOR -->` Comment placeholder; each item then
+gets a fresh deep-clone of the captured master, re-linked against
+its own per-item child scope and inserted in document order after
+the placeholder. No widening of `NormalizedTransclude`, no changes
+to [`src/compiler/transclude-capture.ts`](transclude-capture.ts),
+no new placeholder mechanics. The DDO is plain:
+
+```ts
+{
+  restrict: 'A',
+  priority: 1000,
+  terminal: true,
+  transclude: 'element',
+  link, // declared in `ng-repeat.ts`
+}
+```
+
+`priority: 1000` is deliberately set high enough to win the
+same-element ordering against the other structural directives —
+`ng-if` (600), `ng-include` (400) — so `<li ng-repeat="…" ng-if="…">`
+runs `ng-repeat` first. The same-element conflict still surfaces the
+spec 027 known gap (the spec-017 terminal cutoff silently drops the
+lower-priority directive); the canonical fix is nesting
+(`<li ng-repeat="…"><span ng-if="…">…</span></li>`).
+
+### The iterator-expression grammar
+
+The right-hand side of `ng-repeat` follows the AngularJS-canonical
+grammar:
+
+```
+<ITEM> in <COLLECTION> [as <ALIAS>] [track by <EXPR>]
+```
+
+`<ITEM>` is either a single identifier (`todo`) or a parenthesized
+tuple (`(key, value)` — used with the object-iteration branch).
+Both `as ALIAS` and `track by EXPR` are independently optional, but
+when both appear `as` always precedes `track by`.
+
+The parser lives in
+[`src/compiler/ng-repeat-iterator-parse.ts`](ng-repeat-iterator-parse.ts).
+It splits the raw string into four capture groups via the top-level
+regex:
+
+```
+^\s*([\s\S]+?)\s+in\s+([\s\S]+?)(?:\s+as\s+([\s\S]+?))?(?:\s+track\s+by\s+([\s\S]+?))?\s*$
+```
+
+then re-parses the LHS against a narrower regex to discriminate the
+bare-identifier and `(key, value)` forms. Identifier tokens (item
+name, key, value, alias) are validated against the shared `IDENT_RE`
+from [`@controller/controller.ts`](../controller/controller.ts) so
+the same identifier rule applies across the compiler / controller
+surfaces. The `<COLLECTION>` and `<track by>` sub-expressions are
+parsed through the project's own
+[`parse()`](../parser/parse.ts) — they accept the full expression
+grammar including filter chains, method calls, and property paths.
+
+Three parse-time error classes are exported from `@compiler/index`
+and the root barrel:
+
+| Error class | Triggered by |
+| --- | --- |
+| `NgRepeatBadIteratorExpressionError` | Top-level regex did not match — missing `in`, wrong clause order, empty input. |
+| `NgRepeatBadIdentifierError` | A token failed `IDENT_RE` — empty, leading digit, punctuation. |
+| `NgRepeatBadAliasError` | Alias collides with the item / key / value name in the same expression OR with a reserved per-row local (`$index`, `$first`, `$last`, `$middle`, `$even`, `$odd`). |
+
+All three route via the directive's own per-element `try/catch`
+through `$exceptionHandler('$compile')` at link time; the list does
+not render until the author fixes the expression.
+
+### The WeakMap-based identity tracker
+
+When the author omits `track by`, the default identity tracker in
+[`src/compiler/ng-repeat-identity.ts`](ng-repeat-identity.ts)
+derives a stable identity string for each item without mutating
+user data. Object items go through a closure-local
+`WeakMap<object, string>` paired with a monotonically-increasing
+counter; primitive items map to type-prefixed sentinels
+(`'string:foo'`, `'number:42'`, `'number:NaN'`, `'null:'`,
+`'undefined:'`, `'boolean:true'`, `'bigint:10'`,
+`'symbol:Symbol(x)'`).
+
+**Deliberate AngularJS divergence — no `$$hashKey`.** AngularJS 1.x
+injects a non-enumerable `$$hashKey: string` property onto every
+iterated object; this project does not. The WeakMap approach
+brings three concrete wins:
+
+  1. **User data stays clean.** Iterating the same object with both
+     `ng-repeat` and an external library (a serializer, a fetch body
+     builder, a structural-clone routine) does not see a mystery
+     `$$hashKey` property leak into output.
+  2. **`Object.freeze`d items work transparently.** Frozen objects
+     cannot accept new properties — AngularJS's `$$hashKey` injection
+     throws on first encounter; the WeakMap stores the key/value
+     pair externally so frozen items are first-class citizens.
+  3. **GC-friendly.** When the user drops their reference (collection
+     re-fetched from the server, item removed from a list), the
+     WeakMap entry is reclaimable.
+
+Identity is by reference, not by value — mutating an item in place
+(`todos[0].title = 'new'`) keeps its identity. Authors wanting
+structural identity supply a `track by` expression
+(`track by todo.id`).
+
+For object collections the identity formula folds the property key
+in too — `key:${objKey}|${identityTracker.getIdentity(value)}` — so
+the same value under two different keys (`{a: 1, b: 1}`) does NOT
+falsely collide.
+
+### Row reconciliation algorithm
+
+The directive installs `scope.$watchCollection(parsed.collectionExpr,
+listener)`. Each listener fire walks the algorithm:
+
+  1. **Publish `as ALIAS`** on the parent scope (see below).
+  2. **Normalize** the new collection.
+     `Array.isArray(coll)` → array branch, `{ key: i, value: coll[i] }`
+     per entry. `coll !== null && typeof coll === 'object'` → object
+     branch, keys taken in alphabetical-string order via
+     `Object.keys(coll).sort()` (AngularJS-canonical). Anything else
+     (`null`, `undefined`, primitives, functions) → non-iterable bail:
+     tear down all current rows.
+  3. **Compute identity keys** for every entry via `identityFor` —
+     `track by EXPR` when present, default tracker otherwise. Detect
+     duplicates in the same pass (`Map<string, number>`).
+  4. **Diff and apply.** Walk the new identity list in order:
+     - **Identity in `currentRows`** → REUSE: scope, watchers,
+       listeners, and DOM subtree are kept intact; only the per-row
+       locals + item/key bindings are updated; the `cloneRoot` is
+       moved via `parentNode.insertBefore(cloneRoot, anchor.nextSibling)`
+       so DOM-node identity (input focus, form values, scroll
+       position) survives the reorder.
+     - **Identity not in `currentRows`** → FRESH BUILD via
+       `$transclude(...)`; locals + bindings populated BEFORE DOM
+       insertion so first-render watchers fire with correct values.
+  5. **Tear down survivors** of the old map not in the new map:
+     `scope.$destroy()` then `cloneRoot.remove()` (same order as
+     `ng-if`).
+
+The six framework-published per-row variables — `$index`, `$first`,
+`$last`, `$middle`, `$even`, `$odd` — are assigned by the file-local
+`updatePerRowLocals` helper from both the reuse and fresh-build
+branches.
+
+### The `as alias` publication contract
+
+When the iterator carries `as VISIBLE`, the reconciler writes the
+resolved collection to `parentScope[VISIBLE]` BEFORE row
+reconciliation runs in the same listener fire. Sibling markup
+later in the digest tree therefore sees the new value in the same
+turn — the canonical empty-state pattern works without an extra
+digest:
+
+```html
+<ul>
+  <li ng-repeat="todo in todos | filter:q as visible">
+    {{ todo.title }}
+  </li>
+</ul>
+<p ng-if="!visible.length">No matches.</p>
+```
+
+Per-shape value contract:
+
+  - **Array iteration** — the alias receives the raw post-filter
+    array (the value the watcher resolved).
+  - **Object iteration** — the alias receives the normalized
+    `[{ key, value }]` array (sibling markup reads `.length`
+    uniformly across shapes).
+  - **Non-iterable** — the alias receives `[]` so
+    `!visible.length` fires uniformly across "no matches", "not
+    loaded yet", "destroyed".
+  - **Duplicate-key throw AFTER publication** does NOT roll the
+    alias back. Alias is the input surface, rows are the
+    reconciliation surface — independent outputs.
+
+The parser prevents the alias from colliding with the item / key /
+value names in the same expression and with the six reserved
+per-row locals via `NgRepeatBadAliasError`.
+
+### Duplicate-key detection
+
+When two entries resolve to the same identity (default tracker or
+custom `track by`), the reconciler throws
+`NgRepeatDuplicateKeyError` carrying both offending items and the
+raw expression. The directive wraps its reconciliation block in a
+local `try/catch`:
+
+```ts
+scope.$watchCollection(parsed.collectionExpr, (newCollection) => {
+  try {
+    reconcile(newCollection);
+  } catch (err) {
+    tearDownAllRows();
+    invokeExceptionHandler($exceptionHandler, err, '$compile');
+  }
+});
+```
+
+So the throw routes via **`$exceptionHandler('$compile')`**, NOT
+through the digest's `'watchListener'` cause path — the directive
+captures the throw before the watcher's caller does. The
+`tearDownAllRows()` in the catch branch clears any partial state
+so the offending collection does not leave a half-rendered tree
+behind. The list does not render until the author resolves the
+duplicate (typically by adding `track by $index` or `track by item.id`).
+
+The `EXCEPTION_HANDLER_CAUSES` tuple stays at 10 — every spec-028
+error site reuses the existing `'$compile'` cause token.
+
+### Worked examples
+
+```html
+<!-- Basic array iteration with per-row locals -->
+<li ng-repeat="todo in todos">{{ $index + 1 }}. {{ todo.title }}</li>
+```
+
+```html
+<!-- Custom identity via track by — DOM nodes survive reorders -->
+<li ng-repeat="todo in todos track by todo.id">
+  <input ng-model="todo.title" />
+</li>
+```
+
+```html
+<!-- as ALIAS for empty-state markup -->
+<ul>
+  <li ng-repeat="todo in todos | filter:q as visible track by todo.id">
+    {{ todo.title }}
+  </li>
+</ul>
+<p ng-if="!visible.length">No matches.</p>
+```
+
+```html
+<!-- Object iteration with (key, value) LHS — alphabetical key order -->
+<li ng-repeat="(name, age) in {alice: 30, bob: 25}">
+  {{ name }} → {{ age }}
+</li>
+```
+
+### `$animate` deferral
+
+Row mutations (enter, leave, move) are synchronous today. No
+`$animate.enter` / `$animate.leave` / `$animate.move` hooks. The
+deferral matches the spec 023 / 024 precedent for `ng-show` /
+`ng-hide` and the class directives — `$animate` integration lands
+as a Phase 4 follow-up across every visibility-affecting directive
+at once.
+
+### Known gaps
+
+Two limitations are pinned by parity / integration tests in the
+suite — both are framework-side and shared with other directives,
+not `ng-repeat`-specific bugs:
+
+  - **`$watchCollection` function-form filter-injection.** The
+    Scope-side `compileToWatchFn` injects `$$filter` into locals
+    only for STRING-form watch inputs; the function-form path (which
+    `ng-repeat` uses because the parser produces an `ExpressionFn`)
+    returns the input unchanged. The interpreter then sees
+    `locals.$$filter === undefined` and throws `FilterLookupError`
+    at digest time whenever the collection expression contains a
+    filter chain (`todos | filter:q`). The Slice 6 and Slice 7
+    suites work around the gap by reassigning `scope.todos` to
+    precomputed subsets — the `as alias` publication contract is
+    still proven end-to-end, but the live `filter:q` chain is
+    blocked until `$$filter` is threaded through the function-form
+    path (or `$watchCollection` is widened to accept already-parsed
+    `FlaggedWatchFn` inputs). See
+    [`spec028-parity.test.ts`](__tests__/spec028-parity.test.ts) and
+    [`ng-repeat.test.ts`](__tests__/ng-repeat.test.ts) for the
+    inline justifications.
+  - **Nested `transclude: 'element'` doesn't re-link.** The same
+    foundation issue surfaced in spec 027 still affects spec 028:
+    nesting two `transclude: 'element'` directives inside each
+    other (`ng-repeat > ng-if`, `ng-repeat > ng-include`,
+    `ng-if > ng-repeat`, `ng-repeat > ng-repeat`) does not re-fire
+    the inner capture against each cloned subtree. The integration
+    tests in
+    [`ng-repeat-integration.test.ts`](__tests__/ng-repeat-integration.test.ts)
+    pin the actually-observable behavior with inline notes;
+    resolving the gap is out of scope here and lands with a future
+    capture-pass hardening spec.
+
 ## Deferred items
 
 Spec 017 deliberately stops at the compiler core. The following are
@@ -1709,9 +2014,11 @@ do not produce observable behavior in this spec:
   "Event built-ins" above). **Structural / flow-control subset
   shipped in spec 027** (`ng-init`, `ng-if`, `ng-controller`,
   `ng-switch`, `ng-switch-when`, `ng-switch-default`, `ng-include`
-  — see "Structural directives (spec 027)" above). The remaining
-  built-ins (`ng-repeat`, `ng-model`, and the rest) ship under
-  their own roadmap items.
+  — see "Structural directives (spec 027)" above). **List iteration
+  shipped in spec 028** (`ng-repeat` — see "List iteration
+  directive (spec 028)" above). The remaining built-ins
+  (`ng-model`, `ng-pluralize`, and the rest) ship under their own
+  roadmap items.
 - **Multi-element directives** (`multiElement: true`, `*-start` /
   `*-end` pairs) — deferred; lands alongside `ng-repeat`.
 - **Module DSL `.directive(...)` shorthand** on `createModule` —
