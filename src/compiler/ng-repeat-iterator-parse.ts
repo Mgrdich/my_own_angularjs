@@ -166,7 +166,7 @@ export interface ParsedIteratorExpression {
  * {@link NgRepeatBadIdentifierError} on miss, carrying both the
  * offending token and the raw `ng-repeat` expression for context.
  */
-function assertIdentifier(name: string, rawExpression: string): void {
+function assertIdentifier(name: string, rawExpression: string) {
   if (!IDENT_RE.test(name)) {
     throw new NgRepeatBadIdentifierError(name, rawExpression);
   }
@@ -179,7 +179,7 @@ function assertIdentifier(name: string, rawExpression: string): void {
  * identifier. Identifier validity is enforced in both branches via
  * `assertIdentifier`.
  */
-function parseIteratorLhs(rawLhs: string, rawExpression: string): { keyIdent: string | null; valueIdent: string } {
+function parseIteratorLhs(rawLhs: string, rawExpression: string) {
   const tupleMatch = TUPLE_LHS_RE.exec(rawLhs);
   if (tupleMatch !== null) {
     const keyIdent = tupleMatch[1];
@@ -207,7 +207,7 @@ function parseIteratorLhs(rawLhs: string, rawExpression: string): { keyIdent: st
  * rules. Throws {@link NgRepeatBadAliasError} on any failure. Pure
  * function — does not mutate the parsed record.
  */
-function assertAlias(aliasIdent: string, keyIdent: string | null, valueIdent: string, rawExpression: string): void {
+function assertAlias(aliasIdent: string, keyIdent: string | null, valueIdent: string, rawExpression: string) {
   if (!IDENT_RE.test(aliasIdent)) {
     throw new NgRepeatBadAliasError(aliasIdent, rawExpression);
   }

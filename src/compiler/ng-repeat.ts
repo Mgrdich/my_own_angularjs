@@ -31,12 +31,12 @@
  * independent outputs.
  *
  * **Collection-shape dispatch (FS §2.2).** `normalizeCollection`
- * triages the runtime value. `Array.isArray(coll)` → array branch,
- * `{ key: i, value: coll[i] }` per entry (per-row scope binds
- * `valueIdent` to the item; `(k, v) in arr` also binds `keyIdent` to
- * the numeric index, AngularJS-canonical). `coll !== null && typeof
- * coll === 'object'` → object branch, keys taken in alphabetical-
- * string order via `Object.keys(coll).sort()`. Anything else (`null`,
+ * triages the runtime value via the `@core` guards. `isArray(coll)` →
+ * array branch, `{ key: i, value: coll[i] }` per entry (per-row scope
+ * binds `valueIdent` to the item; `(k, v) in arr` also binds `keyIdent`
+ * to the numeric index, AngularJS-canonical). `isObject(coll)` →
+ * object branch, keys taken in alphabetical-string order via
+ * `Object.keys(coll).sort()`. Anything else (`null`,
  * `undefined`, primitives, functions) → non-iterable bail (FS §2.7);
  * functions take the non-iterable path even though `Object.keys(fn)`
  * succeeds, matching the Slice 3 contract pinned by the test suite.
@@ -113,7 +113,7 @@
  * ```
  */
 
-import type { Scope } from '@core/index';
+import { isArray, isObject, isString, type Scope } from '@core/index';
 import { invokeExceptionHandler, type ExceptionHandler } from '@exception-handler/index';
 
 import { addElementCleanup } from './cleanup';
@@ -156,12 +156,23 @@ interface NormalizedItem {
 }
 
 /**
+ * Result shape of `normalizeCollection` — the uniform list plus the
+ * array-vs-object discriminant the identity pass folds the property
+ * key in on. Named so `publishAlias` and `normalizeCollection` share
+ * one declaration.
+ */
+interface NormalizedCollection {
+  items: NormalizedItem[];
+  isObjectCollection: boolean;
+}
+
+/**
  * Mutate the per-row scope's six framework-published locals to reflect
  * the row's new position. Used from both reuse and fresh-build
  * branches. The `Record<string, unknown>` cast matches the `compile.ts`
  * precedent for dynamic scope writes.
  */
-function updatePerRowLocals(scope: Scope, index: number, totalCount: number): void {
+function updatePerRowLocals(scope: Scope, index: number, totalCount: number) {
   const lastIndex = totalCount - 1;
   const isFirstRow = index === 0;
   const isLastRow = index === lastIndex;
@@ -199,12 +210,12 @@ function ngRepeatFactory($exceptionHandler: ExceptionHandler): DirectiveFactoryR
     const transclude = $transclude;
 
     const rawAttrValue = attrs[NG_REPEAT_NAME];
-    if (typeof rawAttrValue !== 'string') {
+    if (!isString(rawAttrValue)) {
       return;
     }
     // Narrowed const so nested closures see `string` (TS does not
     // propagate flow narrowing into nested function scopes).
-    const rawExpression: string = rawAttrValue;
+    const rawExpression = rawAttrValue;
 
     // Parse once per link invocation. Parser throws (NgRepeatBad*) flow
     // through the factory's try/catch in $$buildDirectiveArrayProvider
@@ -216,7 +227,7 @@ function ngRepeatFactory($exceptionHandler: ExceptionHandler): DirectiveFactoryR
     const identityTracker = createIdentityTracker();
 
     // Closure-local row state, rebound by `reconcile` on each fire.
-    let currentRows: Map<string, RowEntry> = new Map();
+    let currentRows = new Map<string, RowEntry>();
 
     /**
      * Identity for a normalized entry. With `track by EXPR`, evaluates
@@ -226,7 +237,7 @@ function ngRepeatFactory($exceptionHandler: ExceptionHandler): DirectiveFactoryR
      * === true`) the result is prefixed with `'key:${k}|'` so the same
      * value under two distinct keys does not falsely collide.
      */
-    function identityFor(entry: NormalizedItem, index: number, isObjectCollection: boolean): string {
+    function identityFor(entry: NormalizedItem, index: number, isObjectCollection: boolean) {
       if (parsed.trackByExpr !== null) {
         const locals: Record<string, unknown> = {
           $index: index,
@@ -258,7 +269,7 @@ function ngRepeatFactory($exceptionHandler: ExceptionHandler): DirectiveFactoryR
      * The steady-state diff pass does NOT call this helper — survivors
      * of the OLD map are torn down individually.
      */
-    function tearDownAllRows(): void {
+    function tearDownAllRows() {
       for (const entry of currentRows.values()) {
         // Order mirrors ng-if / ng-switch: destroy the scope BEFORE
         // removing from the DOM so any `$on('$destroy', …)` listeners
@@ -271,25 +282,21 @@ function ngRepeatFactory($exceptionHandler: ExceptionHandler): DirectiveFactoryR
 
     /**
      * Normalize the runtime collection into a uniform `NormalizedItem[]`
-     * shape (or `null` for non-iterable values). `Array.isArray` →
-     * `{ key: i, value: arr[i] }`. `value !== null && typeof ===
-     * 'object'` → object branch, keys via `Object.keys(...).sort()`
-     * (AngularJS-canonical). Functions take the non-iterable bail
-     * (`typeof 'function'` is disjoint from `typeof 'object'`); the
-     * `!== null` check precedes `typeof === 'object'` because `typeof
-     * null === 'object'` in JS.
+     * shape (or `null` for non-iterable values). `isArray` →
+     * `{ key: i, value: arr[i] }`. `isObject` → object branch, keys via
+     * `Object.keys(...).sort()` (AngularJS-canonical). Functions take
+     * the non-iterable bail — `isObject` rejects them (and `null`), so
+     * only genuine object collections reach the key walk.
      */
-    function normalizeCollection(value: unknown): { items: NormalizedItem[]; isObject: boolean } | null {
-      if (Array.isArray(value)) {
-        const arr: unknown[] = value;
-        const items: NormalizedItem[] = arr.map((v, i) => ({ key: i, value: v }));
-        return { items, isObject: false };
+    function normalizeCollection(value: unknown): NormalizedCollection | null {
+      if (isArray(value)) {
+        const items: NormalizedItem[] = value.map((v, i) => ({ key: i, value: v }));
+        return { items, isObjectCollection: false };
       }
-      if (value !== null && typeof value === 'object') {
-        const obj = value as Record<string, unknown>;
-        const keys = Object.keys(obj).sort();
-        const items: NormalizedItem[] = keys.map((k) => ({ key: k, value: obj[k] }));
-        return { items, isObject: true };
+      if (isObject(value)) {
+        const keys = Object.keys(value).sort();
+        const items: NormalizedItem[] = keys.map((k) => ({ key: k, value: value[k] }));
+        return { items, isObjectCollection: true };
       }
       return null;
     }
@@ -299,17 +306,14 @@ function ngRepeatFactory($exceptionHandler: ExceptionHandler): DirectiveFactoryR
      * Per-shape value contract documented in the file-level TSDoc.
      * No-op when `parsed.aliasIdent === null`.
      */
-    function publishAlias(
-      rawCollection: unknown,
-      normalized: { items: NormalizedItem[]; isObject: boolean } | null,
-    ): void {
+    function publishAlias(rawCollection: unknown, normalized: NormalizedCollection | null) {
       if (parsed.aliasIdent === null) {
         return;
       }
       let aliasValue: unknown;
       if (normalized === null) {
         aliasValue = [];
-      } else if (normalized.isObject) {
+      } else if (normalized.isObjectCollection) {
         aliasValue = normalized.items;
       } else {
         aliasValue = rawCollection;
@@ -328,7 +332,7 @@ function ngRepeatFactory($exceptionHandler: ExceptionHandler): DirectiveFactoryR
      * left in the previous map. Array vs object dispatch is collapsed
      * into `normalizeCollection` so the diff body is shape-agnostic.
      */
-    function reconcile(newCollection: unknown): void {
+    function reconcile(newCollection: unknown) {
       const normalized = normalizeCollection(newCollection);
       // Alias publication is the FIRST observable side effect — see
       // `publishAlias` for the per-shape value contract. Runs before
@@ -339,7 +343,7 @@ function ngRepeatFactory($exceptionHandler: ExceptionHandler): DirectiveFactoryR
         tearDownAllRows();
         return;
       }
-      const { items, isObject } = normalized;
+      const { items, isObjectCollection } = normalized;
 
       // Compute identity keys + detect duplicates in a single pass.
       // `newKeyToIndex` lets the diagnostic name BOTH offending items.
@@ -353,7 +357,7 @@ function ngRepeatFactory($exceptionHandler: ExceptionHandler): DirectiveFactoryR
           // practice. Treat as a no-op rather than panic.
           continue;
         }
-        const key = identityFor(entry, i, isObject);
+        const key = identityFor(entry, i, isObjectCollection);
         const existingIndex = newKeyToIndex.get(key);
         if (existingIndex !== undefined) {
           const prior = items[existingIndex];

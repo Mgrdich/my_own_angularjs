@@ -851,7 +851,7 @@ export class NgRepeatBadAliasError extends Error {
  * diagnostic display only; tests should assert on the duplicate-key
  * portion of the message, not on the rendered item descriptors.
  */
-function describeRepeatItem(item: unknown): string {
+function describeRepeatItem(item: unknown) {
   try {
     // `JSON.stringify` is typed to return `string` for the
     // single-arg overload that accepts `any`, but the runtime actually

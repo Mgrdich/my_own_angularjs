@@ -36,11 +36,10 @@
  *      are impossible by construction.
  *
  * **Primitive-vs-object dispatch.** `getIdentity` first triages on
- * `value === null` and `value === undefined` (because `typeof null
- * === 'object'` in JavaScript — a null check before the object/function
- * branch is non-optional). Object-like values (`typeof === 'object' &&
- * value !== null`, OR `typeof === 'function'` — arrays, plain objects,
- * class instances, functions, dates, maps, sets, etc. all qualify) take
+ * `value === null` and `value === undefined` (each owns a dedicated
+ * sentinel). Object-like values per the `@core` `isObjectLike` guard
+ * (arrays, plain objects, class instances, functions, dates, maps,
+ * sets, etc. all qualify) take
  * the WeakMap branch. All other primitives produce a type-prefixed
  * sentinel string built from `typeof` + `String(value)` with three
  * deliberate normalizations:
@@ -110,6 +109,8 @@
  * ```
  */
 
+import { isObjectLike } from '@core/index';
+
 /**
  * Closure interface returned by {@link createIdentityTracker}. The
  * single method derives a stable identity string for any value — see
@@ -135,11 +136,11 @@ export function createIdentityTracker(): IdentityTracker {
   const objectIdentities = new WeakMap<object, string>();
   let nextId = 0;
 
-  function getIdentity(value: unknown): string {
-    // `null` and `undefined` must be checked BEFORE the object/function
-    // branch because `typeof null === 'object'` in JavaScript and a
-    // bare `typeof === 'object'` check would otherwise route `null`
-    // into the WeakMap path (which throws on a `null` key).
+  function getIdentity(value: unknown) {
+    // `null` and `undefined` get their dedicated sentinels before the
+    // shape dispatch. `isObjectLike` itself rejects `null` (it wraps
+    // the `value !== null && typeof === 'object'` check), so neither
+    // can leak into the WeakMap path (which throws on a `null` key).
     if (value === null) {
       return 'null:';
     }
@@ -147,23 +148,22 @@ export function createIdentityTracker(): IdentityTracker {
       return 'undefined:';
     }
 
-    const valueType = typeof value;
-
-    if (valueType === 'object' || valueType === 'function') {
-      // Narrowed-to-object branch — covers plain objects, arrays,
-      // class instances, functions, dates, maps, sets, and any other
-      // reference type. The `as object` cast is safe given the type
-      // discrimination above and is the canonical WeakMap-key shape.
-      const objectValue = value as object;
-      const existing = objectIdentities.get(objectValue);
+    if (isObjectLike(value)) {
+      // Object-like branch — covers plain objects, arrays, class
+      // instances, functions, dates, maps, sets, and any other
+      // reference type. The guard's `Record<string, unknown>`
+      // narrowing is a valid WeakMap-key shape — no cast needed.
+      const existing = objectIdentities.get(value);
       if (existing !== undefined) {
         return existing;
       }
       nextId += 1;
       const identity = `object:${String(nextId)}`;
-      objectIdentities.set(objectValue, identity);
+      objectIdentities.set(value, identity);
       return identity;
     }
+
+    const valueType = typeof value;
 
     // Primitive branch — `string`, `number`, `boolean`, `bigint`,
     // `symbol`. Each gets a `<typeof>:<String(value)>` sentinel. The
