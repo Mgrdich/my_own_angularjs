@@ -741,3 +741,183 @@ export class InvalidComponentDefinitionError extends Error {
     super(`Invalid component definition for "${componentName}": ${reason}`);
   }
 }
+
+/**
+ * Thrown by `parseIteratorExpression` (spec 028 Slice 1) when the raw
+ * right-hand side of `ng-repeat` does not match the canonical
+ * grammar `ITEM in COLLECTION [as ALIAS] [track by EXPR]`. Typical
+ * triggers: the `in` keyword is missing, the optional clauses appear
+ * in the wrong order (`track by` before `as`), or the expression is
+ * otherwise unparseable at the top level.
+ *
+ * Routed at link time via the directive's per-element `try/catch`
+ * through `$exceptionHandler('$compile')`. The list does not render
+ * until the author fixes the expression; siblings are unaffected.
+ *
+ * No new `EXCEPTION_HANDLER_CAUSES` cause token is introduced —
+ * `'$compile'` is reused (see spec 027 precedent).
+ *
+ * @example
+ * ```ts
+ * // Missing `in` keyword:
+ * // <li ng-repeat="todos.length"></li>
+ * // → NgRepeatBadIteratorExpressionError routed via $exceptionHandler('$compile')
+ * ```
+ */
+export class NgRepeatBadIteratorExpressionError extends Error {
+  readonly name = 'NgRepeatBadIteratorExpressionError' as const;
+
+  constructor(rawExpression: string) {
+    super(
+      `ngRepeat: invalid iterator expression "${rawExpression}". Expected "ITEM in COLLECTION [as ALIAS] [track by EXPR]".`,
+    );
+  }
+}
+
+/**
+ * Thrown by `parseIteratorExpression` (spec 028 Slice 1) when any
+ * identifier appearing in the iterator's left-hand side (the item
+ * name in `item in list`, or either of the names in `(key, value)
+ * in object`) fails the shared `IDENT_RE` check — i.e. it is empty,
+ * starts with a digit, contains punctuation, or otherwise diverges
+ * from the canonical JS-identifier rule. The same `IDENT_RE`
+ * exported from `@controller/controller.ts` is the single source of
+ * truth for identifier validity across the compiler / controller
+ * surfaces.
+ *
+ * Routed at link time via `$exceptionHandler('$compile')`. The list
+ * does not render until the author fixes the expression; siblings
+ * are unaffected.
+ *
+ * @example
+ * ```ts
+ * // Punctuation in the item name:
+ * // <li ng-repeat="item-name in todos"></li>
+ * // → NgRepeatBadIdentifierError routed via $exceptionHandler('$compile')
+ * ```
+ */
+export class NgRepeatBadIdentifierError extends Error {
+  readonly name = 'NgRepeatBadIdentifierError' as const;
+
+  constructor(identifierName: string, rawExpression: string) {
+    super(
+      `ngRepeat: invalid identifier "${identifierName}" in expression "${rawExpression}". Identifiers must start with a letter, dollar, or underscore.`,
+    );
+  }
+}
+
+/**
+ * Thrown by `parseIteratorExpression` (spec 028 Slice 1) when the
+ * `as ALIAS` clause is malformed. Two sub-cases trip this error:
+ *
+ *  1. **Alias name fails `IDENT_RE`** — e.g. empty, contains
+ *     whitespace or punctuation, starts with a digit.
+ *  2. **Alias collides with a reserved per-row variable name or
+ *     with another identifier declared in the same expression** —
+ *     the six framework-published locals (`$index`, `$first`,
+ *     `$last`, `$middle`, `$even`, `$odd`) and the iterator's own
+ *     `keyIdent` / `valueIdent` are forbidden alias names. Allowing
+ *     the alias to shadow the iterator's per-row bindings would
+ *     produce confusing scope reads in the loop body and is
+ *     rejected up front.
+ *
+ * Routed at link time via `$exceptionHandler('$compile')`. The list
+ * does not render until the author fixes the expression; siblings
+ * are unaffected.
+ *
+ * @example
+ * ```ts
+ * // Alias collides with the iterator's value name:
+ * // <li ng-repeat="todo in todos as todo">...</li>
+ * // → NgRepeatBadAliasError routed via $exceptionHandler('$compile')
+ * ```
+ */
+export class NgRepeatBadAliasError extends Error {
+  readonly name = 'NgRepeatBadAliasError' as const;
+
+  constructor(aliasName: string, rawExpression: string) {
+    super(
+      `ngRepeat: invalid alias "${aliasName}" in expression "${rawExpression}". Alias must be a valid identifier and must not collide with the iterator names or reserved locals ($index, $first, $last, $middle, $even, $odd).`,
+    );
+  }
+}
+
+/**
+ * Format an arbitrary collection item for inclusion in the
+ * {@link NgRepeatDuplicateKeyError} message. Prefers `JSON.stringify` so
+ * structural values render readably (`{"id":1}`, `[1,2]`, `"hello"`),
+ * falling back to `String(item)` if stringification throws (circular
+ * references, getters that throw, `BigInt`, etc.). The output is for
+ * diagnostic display only; tests should assert on the duplicate-key
+ * portion of the message, not on the rendered item descriptors.
+ */
+function describeRepeatItem(item: unknown) {
+  try {
+    // `JSON.stringify` is typed to return `string` for the
+    // single-arg overload that accepts `any`, but the runtime actually
+    // returns `string | undefined` (the value-is-undefined / value-is-symbol
+    // case yields `undefined`). The cast through `string | undefined`
+    // surfaces that wider runtime shape so the fallback gate works.
+    const rendered = JSON.stringify(item) as string | undefined;
+    if (rendered !== undefined) {
+      return rendered;
+    }
+    // `JSON.stringify(undefined)` and `JSON.stringify(<symbol>)` both
+    // return `undefined`. Fall through to the `String()` path so those
+    // values still produce a useful descriptor.
+  } catch {
+    // `JSON.stringify` throws on circular references and on `BigInt`.
+    // Fall through to the `String()` path.
+  }
+  try {
+    // `String(symbol)` is safe (`'Symbol(x)'`). `String({})` yields
+    // `'[object Object]'` — acceptable as a fallback diagnostic.
+    return String(item);
+  } catch {
+    // `String()` would only throw if the value carries a throwing
+    // `Symbol.toPrimitive` or `toString`. Surface a stable fallback.
+    return '[unprintable]';
+  }
+}
+
+/**
+ * Thrown by `ngRepeat`'s reconciliation engine (spec 028 Slice 3) when
+ * two items in the bound collection resolve to the same identity key.
+ * Without a `track by` clause the default identity tracker (spec 028
+ * Slice 2) maps each item to a stable string; duplicates in the input
+ * therefore produce duplicate identities and the reconciler cannot
+ * distinguish two rows that "are the same item" from two rows that
+ * "happen to look alike". The author either deduplicates the input or
+ * supplies a `track by` expression (`track by $index` is the canonical
+ * escape hatch for lists whose item values legitimately repeat).
+ *
+ * Routed at watch-listener time via the directive's own try/catch
+ * through `$exceptionHandler('$compile')` — NOT through the digest's
+ * `'watchListener'` path, because the directive captures the throw
+ * before the watcher's caller does. No new `EXCEPTION_HANDLER_CAUSES`
+ * cause token; the tuple stays at 10.
+ *
+ * The list does not render until the author resolves the duplicate;
+ * the rows from the previous (valid) state are torn down by the
+ * routing branch in `ng-repeat.ts`'s `reconcile` so the offending
+ * collection does not leave a half-rendered tree behind.
+ *
+ * @example
+ * ```ts
+ * // Duplicate primitives without `track by`:
+ * // <li ng-repeat="n in [1, 2, 2, 3]">{{n}}</li>
+ * // → NgRepeatDuplicateKeyError routed via $exceptionHandler('$compile')
+ * //
+ * // Fix: add `track by $index`
+ * // <li ng-repeat="n in [1, 2, 2, 3] track by $index">{{n}}</li>
+ * ```
+ */
+export class NgRepeatDuplicateKeyError extends Error {
+  readonly name = 'NgRepeatDuplicateKeyError' as const;
+
+  constructor(rawExpression: string, duplicateKey: string, itemA: unknown, itemB: unknown) {
+    super(
+      `ngRepeat: duplicate identity "${duplicateKey}" for items ${describeRepeatItem(itemA)}, ${describeRepeatItem(itemB)} in expression "${rawExpression}". Use "track by" to provide unique identities.`,
+    );
+  }
+}
