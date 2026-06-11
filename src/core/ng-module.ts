@@ -67,6 +67,7 @@ import { NG_IF_NAME, ngIfDirective } from '@compiler/ng-if';
 import { NG_INCLUDE_NAME, ngIncludeDirective } from '@compiler/ng-include';
 import { NG_INIT_NAME, ngInitDirective } from '@compiler/ng-init';
 import { NG_NON_BINDABLE_NAME, ngNonBindableDirective } from '@compiler/ng-non-bindable';
+import { NG_PLURALIZE_NAME, ngPluralizeDirective } from '@compiler/ng-pluralize';
 import { NG_REPEAT_NAME, ngRepeatDirective } from '@compiler/ng-repeat';
 import { NG_SHOW_NAME, ngShowDirective } from '@compiler/ng-show';
 import { NG_STYLE_NAME, ngStyleDirective } from '@compiler/ng-style';
@@ -433,6 +434,26 @@ export const ngModule = createModule('ng', [])
       // alias` parent-scope publication. See
       // `src/compiler/ng-repeat.ts` for the file-level rationale.
       $compileProvider.directive(NG_REPEAT_NAME, ngRepeatDirective);
+      // Spec 029 Slice 2 — `ngPluralize` displays the message variant
+      // that grammatically fits the current count. At link time the
+      // `when` map is `$eval`'d ONCE (static-map contract) and each
+      // message is `$interpolate`-compiled ONCE with its `{}`
+      // placeholders rewritten to the parenthesized count expression.
+      // A primary `scope.$watch` on the count expression resolves the
+      // message key (exact `String(count)` match wins, else
+      // `$locale.pluralCat(count)` — the spec-029 Slice 1 locale
+      // seam) and, on each key TRANSITION, deregisters the previous
+      // message watch and installs `scope.$watch(messageFn, write)` —
+      // the switching-watch design that keeps embedded `{{expr}}`
+      // bindings live without watch churn. Unusable (NaN) counts
+      // blank the element silently; a valid count with no matching
+      // rule blanks the element and routes
+      // `NgPluralizeNoRuleDefinedError` via
+      // `$exceptionHandler('$compile')` once per key transition (the
+      // no-`$log` divergence). `offset` (Slice 3) and the per-key
+      // `when-…` attribute scan (Slice 4) land in later slices. See
+      // `src/compiler/ng-pluralize.ts` for the file-level rationale.
+      $compileProvider.directive(NG_PLURALIZE_NAME, ngPluralizeDirective);
       // Spec 027 Slice 5 — `ngSwitch` + `ngSwitchWhen` + `ngSwitchDefault`
       // provide value-driven subtree selection. The parent (`ngSwitch`)
       // owns a `NgSwitchController` controller plus a `scope.$watch`

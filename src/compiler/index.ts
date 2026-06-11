@@ -20,6 +20,8 @@ export {
   MultipleIsolateScopeError,
   MultipleTemplateDirectivesError,
   MultipleTranscludeDirectivesError,
+  NgPluralizeBadOffsetError,
+  NgPluralizeNoRuleDefinedError,
   NgRepeatBadAliasError,
   NgRepeatBadIdentifierError,
   NgRepeatBadIteratorExpressionError,

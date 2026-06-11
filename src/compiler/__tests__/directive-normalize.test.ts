@@ -83,3 +83,32 @@ describe('directiveNormalize (FS §2.6)', () => {
     expect(first === second).toBe(true);
   });
 });
+
+describe('directiveNormalize — digit-leading segments (spec 029 Slice 4 pin)', () => {
+  // The `ngPluralize` per-key attribute scan (FS §2.7) assumes that a
+  // digit-leading segment survives camelization unchanged: the algorithm
+  // is `letter.toUpperCase()` on the char following each separator, and
+  // `'1'.toUpperCase() === '1'`. These pins guard the assumption the
+  // `/^when(Minus)?(.+)$/` scan in `ng-pluralize.ts` is built on
+  // (technical-considerations §2.3 step 4 / §3 risk row).
+
+  it('normalizes `when-1` to `when1` (digit after separator is preserved)', () => {
+    expect(directiveNormalize('when-1')).toBe('when1');
+  });
+
+  it('normalizes `when-minus-1` to `whenMinus1`', () => {
+    expect(directiveNormalize('when-minus-1')).toBe('whenMinus1');
+  });
+
+  it('normalizes `when-one` to `whenOne` (category-name segment)', () => {
+    expect(directiveNormalize('when-one')).toBe('whenOne');
+  });
+
+  it('normalizes a multi-digit exact key: `when-42` → `when42`', () => {
+    expect(directiveNormalize('when-42')).toBe('when42');
+  });
+
+  it('leaves the bare `when` attribute untouched (never a per-key entry)', () => {
+    expect(directiveNormalize('when')).toBe('when');
+  });
+});

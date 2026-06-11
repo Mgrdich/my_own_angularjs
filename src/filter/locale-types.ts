@@ -138,4 +138,33 @@ export interface LocaleService {
   readonly id: string;
   readonly NUMBER_FORMATS: NumberFormats;
   readonly DATETIME_FORMATS: DatetimeFormats;
+
+  /**
+   * Maps a number to its plural-category name for this locale — the
+   * seam that makes `ng-pluralize` locale-driven. Given the (already
+   * offset-adjusted) count, returns the category string the directive
+   * uses as a lookup key into its `when` message table whenever no
+   * exact-number key matches.
+   *
+   * Category names are **opaque lookup keys** — the framework never
+   * interprets them. CLDR conventionally uses `zero` / `one` / `two` /
+   * `few` / `many` / `other`, but a custom locale may return any
+   * string, as long as it matches the `when` keys templates use.
+   *
+   * The en-US default is a one-liner — copy it as the starting point
+   * for a custom locale:
+   *
+   * @example
+   * ```ts
+   * // en-US reference implementation: exactly 1 is 'one'; everything
+   * // else (0, decimals, negatives, ±Infinity) is 'other'.
+   * const pluralCat = (num: number): string => (num === 1 ? 'one' : 'other');
+   *
+   * pluralCat(1);   // => 'one'
+   * pluralCat(0);   // => 'other'
+   * pluralCat(1.5); // => 'other'
+   * pluralCat(-1);  // => 'other'
+   * ```
+   */
+  readonly pluralCat: (num: number) => string;
 }
