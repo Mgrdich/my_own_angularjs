@@ -1965,6 +1965,263 @@ not `ng-repeat`-specific bugs:
     resolving the gap is out of scope here and lands with a future
     capture-pass hardening spec.
 
+## Pluralization directive (spec 029)
+
+Spec 029 ships **`ng-pluralize`** — the locale-aware pluralization
+directive that displays the message variant grammatically fitting the
+current count and keeps it up to date as the count (and any embedded
+`{{expr}}` bindings) change. Like the spec 023 / 024 / 025 / 026 /
+027 / 028 batches it is registered on the `'ng'` module's existing
+`$compileProvider` config block and ships DI-only (no
+`@compiler/index` factory export). The factory function lives in
+[`src/compiler/ng-pluralize.ts`](ng-pluralize.ts) and is reachable as
+`injector.get('ngPluralizeDirective')` whenever an app declares
+`'ng'` in its dependency chain. Apps swap or wrap it via
+`module.decorator('ngPluralizeDirective', …)` and
+`module.directive('ngPluralize', …)` like any other DI-registered
+directive.
+
+The directive is a leaf text-writer in the `ng-bind-template`
+family — `restrict: 'EA'`, default priority, link-only, no
+transclusion, no terminal flag — so it composes with structural
+hosts (an `ng-repeat` row, an `ng-if` subtree) the way `ng-class`
+does and does not widen the spec-027 same-element known gap.
+
+### The selection algorithm — exact-raw vs. category-offset
+
+On each fire of the primary count watch,
+`count = parseFloat(String(newValue))` — so numeric text `"3"`
+behaves as the number `3`, while `"abc"` / `undefined` / `null` /
+`''` all yield `NaN`. Then:
+
+  1. **Exact key first, against the RAW count.** `String(count)` is
+     looked up in the message table with NO offset applied. With
+     offset 2, a count of 1 hits an exact `'1'` key directly (1, not
+     1 − 2 = −1).
+  2. **Category second, against count − offset.** On an exact miss,
+     `$locale.pluralCat(count - offset)` supplies the lookup key.
+     With offset 2, a count of 4 categorizes as
+     `pluralCat(2) = 'other'` and the `{}` placeholder renders `2` —
+     "John, Mary and 2 other people are viewing."
+  3. **NaN → blank, silently.** The text is cleared, the active
+     message watch is deregistered, and nothing is reported
+     (FS §2.8). A NaN that follows another NaN is a no-op.
+
+The compiled message table is a `Map<string, InterpolateFn>` (not a
+plain record) so a count resolving to a prototype key like
+`"constructor"` MISSES instead of finding
+`Object.prototype.constructor`.
+
+### The `{}` rewrite — the parenthesized deviation
+
+Each message string has its `{}` placeholders rewritten ONCE at link
+time, then the rewritten message is compiled with `$interpolate(...)`
+ONCE:
+
+```ts
+message.replace(/{}/g, startSym + '(' + countExpr + ')-(' + offset + ')' + endSym);
+```
+
+**BOTH operands are parenthesized** — a documented micro-deviation
+from upstream's bare concatenation. The count side guards expressions
+like `a ? b : c` (which upstream mis-parses); the offset side guards
+negative offsets — a bare emit of offset `-1` would produce the
+unparseable `(count)--1`, while `(count)-(-1)` evaluates correctly.
+Semantics for all upstream-legal inputs are identical: the
+placeholder shows count − offset. The delimiters come from the
+service's `startSymbol()` / `endSymbol()` accessors, so apps that
+reconfigure `$interpolateProvider` (e.g. to `[[ ]]`) get correct
+rewrites for free — pinned in
+[`spec029-parity.test.ts`](__tests__/spec029-parity.test.ts).
+
+A present-but-non-numeric `offset` attribute (`offset="abc"`) routes
+`NgPluralizeBadOffsetError` via `$exceptionHandler('$compile')` at
+link time and leaves the directive inert — blank, no watches. The
+offset itself is link-time static (a literal attribute, parsed once,
+never an expression); an empty `offset=""` counts as absent
+(offset 0, no error).
+
+### The `when-…` attribute scan
+
+Per-key message attributes (FS §2.7 form 3) are collected by matching
+the enumerable keys of `attrs` against upstream's
+`/^when(Minus)?(.+)$/` — enumeration yields only normalized attribute
+names because `$attr` / `$set` / the `$$…` internals are all
+installed non-enumerably. The message key is
+`(minus ? '-' : '') + lowercase(rest)`:
+
+| Attribute | Normalized | Key |
+| --- | --- | --- |
+| `when-one` | `whenOne` | `one` |
+| `when-1` | `when1` | `1` (digits survive `directiveNormalize` untouched) |
+| `when-minus-1` | `whenMinus1` | `-1` |
+| `when-minus` (bare) | `whenMinus` | `minus` (upstream-identical backtracking edge) |
+
+The raw attribute TEXT is the message — it is never `$eval`ed —
+which is exactly what makes the form convenient for messages
+containing quote characters. PRECEDENCE: per-attribute entries are
+folded into the table AFTER the `when`-map entries, so a same-key
+`when-…` attribute OVERRIDES its map counterpart ("the individual
+attribute wins").
+
+**Liveness rule.** The directive is live iff `count` is present and
+non-empty AND at least one message SOURCE exists — a non-empty `when`
+attribute OR at least one `when-…` attribute. With neither source it
+bails inert (blank, no watches, no error — upstream-lenient), and the
+bail runs BEFORE the offset parse, so a bad offset on an
+already-inert directive stays silent. A present-but-empty TABLE
+(`when="{}"`, or a non-object `when`) keeps the directive LIVE —
+presence of a source, not table contents, decides — and every valid
+count then takes the missing-rule report path.
+
+### The switching-watch design
+
+The directive installs ONE primary `scope.$watch` on the count
+expression and at most ONE active message watch at a time:
+
+```ts
+scope.$watch(countExpr, (newValue) => {
+  // resolve key (exact-raw, else pluralCat(count - offset)) …
+  if (key === lastKey) return; // same variant → the active watch keeps the text current
+  stopMessageWatch(); // deregister the previous message watch
+  lastKey = key;
+  deregisterMessageWatch = scope.$watch(messageFn, (value) => {
+    element.textContent = value ?? ''; // the ng-bind-template write shape
+  });
+});
+```
+
+On each key transition the previous message watch is deregistered
+before the next is installed — no stale watches accumulate within a
+live scope and no double-writes occur (pinned via a `textContent`
+accessor spy in [`ng-pluralize.test.ts`](__tests__/ng-pluralize.test.ts)).
+Embedded `{{expr}}` bindings inside the active message refresh
+through the message watch without any count change. There is no
+explicit `$destroy` handling — watch lifetime is scope lifetime,
+matching `ng-bind` / `ng-bind-template`.
+
+The `when` map itself is link-time static: `scope.$eval(attrs.when)`
+runs EXACTLY ONCE at link (upstream parity). Runtime mutations of the
+map object are invisible to the directive — the count and the
+embedded `{{expr}}` bindings are the live surfaces, the message TABLE
+is not. Non-string values inside the map are skipped at table-build
+time; a non-object `$eval` result degrades to an empty table.
+
+### The `$locale.pluralCat` seam + custom-locale recipe
+
+Which category a number belongs to is decided by
+`$locale.pluralCat(num)` — a REQUIRED `LocaleService` member added in
+spec 029 Slice 1 (a deliberate published-`.d.ts` break: every
+AngularJS locale file ships `pluralCat`, and an optional field would
+silently fall back to English rules — a worse failure mode). Category
+names are **opaque lookup keys**: CLDR conventionally uses `zero` /
+`one` / `two` / `few` / `many` / `other`, but a custom locale may
+return any string that matches the `when` keys its templates use. The
+en-US default is `num === 1 ? 'one' : 'other'` (decimals, negatives,
+±Infinity, 0 → `'other'`).
+
+The directive receives the OFFSET-ADJUSTED count
+(`pluralCat(count - offset)`), so locale authors never see the offset.
+Swapping rules is the standard `$locale` factory swap — same template,
+new rules, no markup changes:
+
+```ts
+import { defaultLocale, type LocaleService } from 'my-own-angularjs/filter';
+
+const myLocale: LocaleService = {
+  ...defaultLocale,
+  pluralCat: (num) => (num === 1 || num === 2 ? 'few' : 'other'),
+};
+
+createModule('app', ['ng']).factory('$locale', [() => myLocale]);
+```
+
+The locale-swap pair is pinned in
+[`spec029-parity.test.ts`](__tests__/spec029-parity.test.ts): the same
+`{'one', 'few', 'other'}` template renders `one` at count 1 under
+en-US but `few` at counts 1 AND 2 under the custom locale — proving
+the locale, not the table, decides.
+
+### The no-`$log` divergence — handler-routed missing-rule reports
+
+Upstream AngularJS reports a missing rule via `$log.debug`; this
+project ships no `$log` service, so the report routes through the
+standard exception channel instead — a documented divergence. When a
+valid numeric count resolves to a key (exact value or category) with
+no message, the element's text is cleared and
+`NgPluralizeNoRuleDefinedError` (carrying the resolved key and the
+`when` source text) is routed via
+`invokeExceptionHandler($exceptionHandler, err, '$compile')` — the
+ng-repeat in-listener precedent. The page around the element keeps
+digesting normally.
+
+Report cadence is keyed to key TRANSITIONS via the closure-local
+`lastKey`, never to digests — a digest-heavy app cannot flood the
+handler. `lastKey` resets to `null` on a NaN interlude, so
+uncovered-key → NaN → same-uncovered-key reports twice (acceptable —
+it is a development-time signal); NaN itself NEVER reports. When the
+directive is authored purely with `when-…` attributes (no `when` map
+to quote), the error message quotes the literal stand-in descriptor
+`'when-… attributes'` as the source.
+
+Both spec-029 error classes — `NgPluralizeBadOffsetError` and
+`NgPluralizeNoRuleDefinedError` — are exported from
+`@compiler/index` and the root barrel (the directive factory itself
+is NOT) and reuse the existing `'$compile'` cause token. The
+`EXCEPTION_HANDLER_CAUSES` tuple stays at 10.
+
+### Worked examples
+
+```html
+<!-- Canonical message-count walk: exact '0' key beats the category -->
+<ng-pluralize
+  count="msgCount"
+  when="{'0': 'You have no new messages.',
+         'one': 'You have one new message.',
+         'other': 'You have {} new messages.'}"
+>
+</ng-pluralize>
+<!-- msgCount = 0 → "You have no new messages."
+     msgCount = 1 → "You have one new message."
+     msgCount = 3 → "You have 3 new messages." -->
+```
+
+```html
+<!-- Offset: exact keys match the raw count; the category and {} use count − offset -->
+<ng-pluralize
+  count="viewCount"
+  offset="2"
+  when="{'0': 'Nobody is viewing.',
+         '1': '{{person1}} is viewing.',
+         '2': '{{person1}} and {{person2}} are viewing.',
+         'one': '{{person1}}, {{person2}} and one other person are viewing.',
+         'other': '{{person1}}, {{person2}} and {} other people are viewing.'}"
+>
+</ng-pluralize>
+<!-- viewCount = 1 → exact '1' (raw)      → "Igor is viewing."
+     viewCount = 3 → pluralCat(1) = 'one' → "Igor, Misko and one other person are viewing."
+     viewCount = 4 → pluralCat(2), {} = 2 → "Igor, Misko and 2 other people are viewing." -->
+```
+
+```html
+<!-- Pure per-key attribute form — handy for messages with quotes; never $eval'ed -->
+<span
+  ng-pluralize
+  count="msgCount"
+  when-0="You have no new messages."
+  when-one="You have one new message."
+  when-other="You have {} new messages."
+  when-minus-1="You owe one message."
+></span>
+<!-- msgCount = -1 → "You owe one message." (key '-1') -->
+```
+
+```html
+<!-- Combined form: the per-key attribute OVERRIDES the map -->
+<ng-pluralize count="msgCount" when="{'one': 'A'}" when-one="B"></ng-pluralize>
+<!-- msgCount = 1 → "B" -->
+```
+
 ## Deferred items
 
 Spec 017 deliberately stops at the compiler core. The following are
@@ -2016,9 +2273,10 @@ do not produce observable behavior in this spec:
   `ng-switch`, `ng-switch-when`, `ng-switch-default`, `ng-include`
   — see "Structural directives (spec 027)" above). **List iteration
   shipped in spec 028** (`ng-repeat` — see "List iteration
-  directive (spec 028)" above). The remaining built-ins
-  (`ng-model`, `ng-pluralize`, and the rest) ship under their own
-  roadmap items.
+  directive (spec 028)" above). **Pluralization shipped in spec 029**
+  (`ng-pluralize` — see "Pluralization directive (spec 029)" above).
+  The remaining built-ins (`ng-model` and the rest) ship under their
+  own roadmap items.
 - **Multi-element directives** (`multiElement: true`, `*-start` /
   `*-end` pairs) — deferred; lands alongside `ng-repeat`.
 - **Module DSL `.directive(...)` shorthand** on `createModule` —

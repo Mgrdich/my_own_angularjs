@@ -1,7 +1,7 @@
 # Functional Specification: Pluralization Directive (`ng-pluralize`)
 
 - **Roadmap Item:** Built-in Directives — Pluralization / i18n: `ng-pluralize`
-- **Status:** Approved
+- **Status:** Completed
 - **Author:** Mgrdich
 
 ---
@@ -35,10 +35,10 @@ This is the second-to-last batch in the project's "Built-in Directives" roadmap 
 
 **Acceptance Criteria:**
 
-- [ ] Given messages `{'0': "You have no new messages.", 'one': "You have one new message.", 'other': "You have {} new messages."}`, when the count is 0, the element displays "You have no new messages."
-- [ ] With the same messages, when the count is 1, the element displays "You have one new message."
-- [ ] With the same messages, when the count is 3, the element displays "You have 3 new messages."
-- [ ] Given messages for both `"1"` and `"one"`, when the count is 1, the `"1"` message is displayed (exact match wins).
+- [x] Given messages `{'0': "You have no new messages.", 'one': "You have one new message.", 'other': "You have {} new messages."}`, when the count is 0, the element displays "You have no new messages."
+- [x] With the same messages, when the count is 1, the element displays "You have one new message."
+- [x] With the same messages, when the count is 3, the element displays "You have 3 new messages."
+- [x] Given messages for both `"1"` and `"one"`, when the count is 1, the `"1"` message is displayed (exact match wins).
 
 ### 2.2. The number placeholder
 
@@ -47,8 +47,8 @@ This is the second-to-last batch in the project's "Built-in Directives" roadmap 
 
 **Acceptance Criteria:**
 
-- [ ] Given the message `"You have {} new messages."` and a count of 42, the element displays "You have 42 new messages."
-- [ ] A message may use the placeholder more than once; every occurrence is replaced.
+- [x] Given the message `"You have {} new messages."` and a count of 42, the element displays "You have 42 new messages."
+- [x] A message may use the placeholder more than once; every occurrence is replaced.
 
 ### 2.3. Messages may embed live expressions
 
@@ -56,8 +56,8 @@ This is the second-to-last batch in the project's "Built-in Directives" roadmap 
 
 **Acceptance Criteria:**
 
-- [ ] Given the message `"{{person1}} is viewing."` and `person1` is "Igor", the element displays "Igor is viewing."
-- [ ] When `person1` later changes to "Misko" (with the count unchanged), the displayed text updates to "Misko is viewing."
+- [x] Given the message `"{{person1}} is viewing."` and `person1` is "Igor", the element displays "Igor is viewing."
+- [x] When `person1` later changes to "Misko" (with the count unchanged), the displayed text updates to "Misko is viewing."
 
 ### 2.4. Offset
 
@@ -68,12 +68,12 @@ This is the second-to-last batch in the project's "Built-in Directives" roadmap 
 
 **Acceptance Criteria:**
 
-- [ ] Given offset 2 and messages `{'0': "Nobody is viewing.", '1': "{{person1}} is viewing.", '2': "{{person1}} and {{person2}} are viewing.", 'one': "{{person1}}, {{person2}} and one other person are viewing.", 'other': "{{person1}}, {{person2}} and {} other people are viewing."}`:
-  - [ ] count 0 → "Nobody is viewing." (exact key `0`, raw count)
-  - [ ] count 1 → "Igor is viewing." (exact key `1`, raw count)
-  - [ ] count 2 → "Igor and Misko are viewing." (exact key `2`, raw count)
-  - [ ] count 3 → "Igor, Misko and one other person are viewing." (3 − 2 = 1 → category `one`)
-  - [ ] count 4 → "Igor, Misko and 2 other people are viewing." (4 − 2 = 2 → category `other`; `{}` shows 2)
+- [x] Given offset 2 and messages `{'0': "Nobody is viewing.", '1': "{{person1}} is viewing.", '2': "{{person1}} and {{person2}} are viewing.", 'one': "{{person1}}, {{person2}} and one other person are viewing.", 'other': "{{person1}}, {{person2}} and {} other people are viewing."}`:
+  - [x] count 0 → "Nobody is viewing." (exact key `0`, raw count)
+  - [x] count 1 → "Igor is viewing." (exact key `1`, raw count)
+  - [x] count 2 → "Igor and Misko are viewing." (exact key `2`, raw count)
+  - [x] count 3 → "Igor, Misko and one other person are viewing." (3 − 2 = 1 → category `one`)
+  - [x] count 4 → "Igor, Misko and 2 other people are viewing." (4 − 2 = 2 → category `other`; `{}` shows 2)
 
 ### 2.5. Locale-driven plural categories
 
@@ -83,8 +83,8 @@ This is the second-to-last batch in the project's "Built-in Directives" roadmap 
 
 **Acceptance Criteria:**
 
-- [ ] Under the default locale, a count of 1 selects the `one` message; counts of 0, 2, 1.5, and −1 select the `other` message.
-- [ ] After the app replaces the locale with one whose rules differ (e.g. a locale that maps both 1 and 2 to a special category), the same template picks messages per the new rules.
+- [x] Under the default locale, a count of 1 selects the `one` message; counts of 0, 2, 1.5, and −1 select the `other` message.
+- [x] After the app replaces the locale with one whose rules differ (e.g. a locale that maps both 1 and 2 to a special category), the same template picks messages per the new rules.
 
 ### 2.6. Live updates
 
@@ -92,8 +92,8 @@ This is the second-to-last batch in the project's "Built-in Directives" roadmap 
 
 **Acceptance Criteria:**
 
-- [ ] Given a page displaying "You have one new message." (count 1), when the count changes to 2, the text changes to "You have 2 new messages." without any other action.
-- [ ] When the count changes between two values in the same category (e.g. 2 → 5), the placeholder number updates accordingly.
+- [x] Given a page displaying "You have one new message." (count 1), when the count changes to 2, the text changes to "You have 2 new messages." without any other action.
+- [x] When the count changes between two values in the same category (e.g. 2 → 5), the placeholder number updates accordingly.
 
 ### 2.7. Authoring forms
 
@@ -107,9 +107,9 @@ Three equivalent ways to write the directive are supported:
 
 **Acceptance Criteria:**
 
-- [ ] The same count and messages produce identical displayed text whether written as the element form or the attribute form.
-- [ ] A directive written purely with `when-0` / `when-one` / `when-other` attributes (no `when` mapping) behaves identically to the equivalent `when` mapping.
-- [ ] When `when` declares `'one': "A"` and the element also carries `when-one="B"`, a count of 1 displays "B".
+- [x] The same count and messages produce identical displayed text whether written as the element form or the attribute form.
+- [x] A directive written purely with `when-0` / `when-one` / `when-other` attributes (no `when` mapping) behaves identically to the equivalent `when` mapping.
+- [x] When `when` declares `'one': "A"` and the element also carries `when-one="B"`, a count of 1 displays "B".
 
 ### 2.8. Unusable count
 
@@ -118,10 +118,10 @@ Three equivalent ways to write the directive are supported:
 
 **Acceptance Criteria:**
 
-- [ ] Given a count bound to a value that is missing, the element shows no text.
-- [ ] Given a count bound to the text "abc", the element shows no text.
-- [ ] Given a displayed message for count 2, when the count becomes unusable, the element's text clears to blank.
-- [ ] A count provided as numeric text (e.g. the text "3") behaves the same as the number 3.
+- [x] Given a count bound to a value that is missing, the element shows no text.
+- [x] Given a count bound to the text "abc", the element shows no text.
+- [x] Given a displayed message for count 2, when the count becomes unusable, the element's text clears to blank.
+- [x] A count provided as numeric text (e.g. the text "3") behaves the same as the number 3.
 
 ### 2.9. Missing message for a matched category
 
@@ -129,8 +129,8 @@ Three equivalent ways to write the directive are supported:
 
 **Acceptance Criteria:**
 
-- [ ] Given only a `one` message and a count of 5, the element shows no text and a report describing the missing category is delivered to the app's configured error handler.
-- [ ] The page around the element keeps updating normally after such a report.
+- [x] Given only a `one` message and a count of 5, the element shows no text and a report describing the missing category is delivered to the app's configured error handler.
+- [x] The page around the element keeps updating normally after such a report.
 
 ---
 
