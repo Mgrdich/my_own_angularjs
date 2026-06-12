@@ -14,6 +14,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { ngModule } from '@core/ng-module';
 import { createInjector } from '@di/injector';
 import { createModule, resetRegistry } from '@di/module';
+import { defaultLocale } from '@filter/locale';
 import type { LocaleService } from '@filter/locale-types';
 
 describe('$locale provider (FS §2.20)', () => {
@@ -214,6 +215,7 @@ describe('$locale provider (FS §2.20)', () => {
           ERAS: ['v. Chr.', 'n. Chr.'],
           ERANAMES: ['vor Christus', 'nach Christus'],
         },
+        pluralCat: (num: number) => (num === 1 ? 'one' : 'other'),
       };
 
       // App-module overrides $locale via module.factory. Last-wins,
@@ -284,6 +286,7 @@ describe('$locale provider (FS §2.20)', () => {
             ERAS: ['', ''],
             ERANAMES: ['', ''],
           },
+          pluralCat: (num: number) => (num === 1 ? 'one' : 'other'),
         },
       };
 
@@ -296,6 +299,59 @@ describe('$locale provider (FS §2.20)', () => {
       // but the filter reads `$locale.NUMBER_FORMATS.CURRENCY_SYM`
       // per invocation — so the custom symbol is visible.
       expect($filter('currency')(100)).toBe('F100,00');
+    });
+  });
+
+  describe('pluralCat (spec 029 / FS §2.5)', () => {
+    it('returns "one" for exactly 1', () => {
+      const injector = createInjector([ngModule]);
+      const $locale = injector.get('$locale');
+
+      expect($locale.pluralCat(1)).toBe('one');
+    });
+
+    it.each([
+      [0, 'other'],
+      [2, 'other'],
+      [1.5, 'other'],
+      [-1, 'other'],
+      [Infinity, 'other'],
+    ])('returns %s → "%s" under the en-US rule', (num, category) => {
+      const injector = createInjector([ngModule]);
+      const $locale = injector.get('$locale');
+
+      expect($locale.pluralCat(num)).toBe(category);
+    });
+
+    it('survives the deep freeze — callable on the frozen defaultLocale literal', () => {
+      expect(Object.isFrozen(defaultLocale)).toBe(true);
+
+      // The frozen wrapper does not impair invocation; the function
+      // member is reachable and behaves per the en-US contract.
+      expect(defaultLocale.pluralCat(1)).toBe('one');
+      expect(defaultLocale.pluralCat(0)).toBe('other');
+    });
+
+    it("a swapped custom locale's pluralCat is reachable via injector.get('$locale')", () => {
+      // A locale whose rules differ from en-US: BOTH 1 and 2 map to a
+      // custom 'few' category (FS §2.5 — "a locale that maps both 1
+      // and 2 to a special category"). Built by spreading the en-US
+      // literal so the structural fields stay valid.
+      const customLocale: LocaleService = {
+        ...defaultLocale,
+        id: 'x-test',
+        pluralCat: (num: number) => (num === 1 || num === 2 ? 'few' : 'other'),
+      };
+
+      const appModule = createModule('app', ['ng']).factory('$locale', [() => customLocale]);
+
+      const injector = createInjector([ngModule, appModule]);
+      const $locale = injector.get('$locale');
+
+      expect($locale.id).toBe('x-test');
+      expect($locale.pluralCat(1)).toBe('few');
+      expect($locale.pluralCat(2)).toBe('few');
+      expect($locale.pluralCat(3)).toBe('other');
     });
   });
 });

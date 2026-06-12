@@ -921,3 +921,72 @@ export class NgRepeatDuplicateKeyError extends Error {
     );
   }
 }
+
+/**
+ * Thrown by `ngPluralize`'s link function (spec 029 Slice 3) when the
+ * `offset` attribute is present but its text does not parse as a
+ * number (`parseFloat(attrs.offset)` yields `NaN`). The error is
+ * routed via `$exceptionHandler('$compile')` at link time and the
+ * directive goes inert — blank output, NO watches installed — so a
+ * typo'd offset is loud during development while the rest of the page
+ * keeps digesting normally.
+ *
+ * This is deliberately NOISIER than the missing-`count`/-`when` inert
+ * path (which bails silently, upstream-lenient): an absent offset is a
+ * valid authoring choice (offset 0), but a PRESENT offset that cannot
+ * be parsed is always an authoring mistake.
+ *
+ * No new `EXCEPTION_HANDLER_CAUSES` token — the tuple stays at 10.
+ *
+ * @example
+ * ```ts
+ * // "abc" is not a number:
+ * // <ng-pluralize count="n" offset="abc" when="{'other': '{} items'}"></ng-pluralize>
+ * // → NgPluralizeBadOffsetError routed via $exceptionHandler('$compile'),
+ * //   element stays blank, no watches are installed.
+ * ```
+ */
+export class NgPluralizeBadOffsetError extends Error {
+  readonly name = 'NgPluralizeBadOffsetError' as const;
+
+  constructor(offsetSource: string) {
+    super(
+      `ngPluralize: offset attribute value "${offsetSource}" is not a number. Provide a numeric offset or remove the attribute.`,
+    );
+  }
+}
+
+/**
+ * Thrown by `ngPluralize`'s count watcher (spec 029 Slice 2) when a
+ * valid numeric count resolves to a key — the exact `String(count)`
+ * value or the `$locale.pluralCat(...)` category — for which the
+ * directive's message table holds no message. The element's text is
+ * cleared and the error is routed via `$exceptionHandler('$compile')`
+ * so the author notices the gap during development; the rest of the
+ * page keeps digesting normally.
+ *
+ * This substitutes for upstream AngularJS's `$log.debug(...)` call —
+ * this project ships no `$log` service, so the standard exception
+ * channel carries the development-time signal instead (a documented
+ * divergence). The report fires once per key *transition*, never per
+ * digest, and never for NaN counts (an unusable count blanks the
+ * element silently per FS §2.8).
+ *
+ * No new `EXCEPTION_HANDLER_CAUSES` token — the tuple stays at 10.
+ *
+ * @example
+ * ```ts
+ * // Only a 'one' message, but the count is 5 (category 'other'):
+ * // <ng-pluralize count="5" when="{'one': 'one message'}"></ng-pluralize>
+ * // → NgPluralizeNoRuleDefinedError routed via $exceptionHandler('$compile')
+ * ```
+ */
+export class NgPluralizeNoRuleDefinedError extends Error {
+  readonly name = 'NgPluralizeNoRuleDefinedError' as const;
+
+  constructor(resolvedKey: string, whenSource: string) {
+    super(
+      `ngPluralize: no rule defined for "${resolvedKey}" in "${whenSource}". Add a message for that exact value or plural category.`,
+    );
+  }
+}

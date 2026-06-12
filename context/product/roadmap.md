@@ -99,7 +99,7 @@ _The layer that connects the runtime to templates and the DOM._
     - [x] **Mouse events:** `ng-click`, `ng-dblclick`, `ng-mousedown`, `ng-mouseup`, `ng-mouseover`, `ng-mouseout`, `ng-mousemove`, `ng-mouseenter`, `ng-mouseleave`. _(spec 026 — shipped; bundled with Keyboard + Clipboard/focus/form-lifecycle below.)_
     - [x] **Keyboard events:** `ng-keydown`, `ng-keyup`, `ng-keypress`. _(spec 026 — shipped; bundled above.)_
     - [x] **Clipboard / focus / form-lifecycle events:** `ng-copy`, `ng-cut`, `ng-paste`, `ng-focus`, `ng-blur`, `ng-submit`. _(spec 026 — shipped; bundled above.)_
-    - [ ] **Pluralization / i18n:** `ng-pluralize`. _(separate spec.)_
+    - [x] **Pluralization / i18n:** `ng-pluralize`. _(spec 029 — shipped.)_
     - [ ] **CSP / template-cache / element overrides:** `ng-csp` (config-time CSP hint for the compiler), `ng-jq` (opt into a specific jqLite implementation), `ng-ref` (1.7+; publishes a controller reference onto scope), `script` (registers `<script type="text/ng-template">` in `$templateCache`), `a` (empty-`href` guard + target-attribute safety for the anchor element). _(separate spec.)_
 
 - [ ] **Service Text Diagrams (Phase 2 wrap-up)**

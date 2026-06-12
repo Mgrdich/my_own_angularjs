@@ -140,4 +140,8 @@ export const defaultLocale: LocaleService = Object.freeze({
   id: 'en-us',
   NUMBER_FORMATS,
   DATETIME_FORMATS,
+  // en-US plural rule: exactly 1 → 'one'; everything else — 0,
+  // decimals, negatives, ±Infinity — → 'other'. Consumed by
+  // `ng-pluralize` as an opaque lookup key into its `when` table.
+  pluralCat: (num: number) => (num === 1 ? 'one' : 'other'),
 });
