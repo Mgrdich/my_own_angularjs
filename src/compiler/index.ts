@@ -20,6 +20,10 @@ export {
   MultipleIsolateScopeError,
   MultipleTemplateDirectivesError,
   MultipleTranscludeDirectivesError,
+  NgPluralizeBadOffsetError,
+  NgPluralizeNoRuleDefinedError,
+  NgRefBadExpressionError,
+  NgRefNoControllerError,
   NgRepeatBadAliasError,
   NgRepeatBadIdentifierError,
   NgRepeatBadIteratorExpressionError,
@@ -45,7 +49,14 @@ export type { ChangeRecord, LifecycleHookName } from './lifecycle';
 export { $CompileProvider } from './compile-provider';
 export { createCompile } from './compile';
 export { AttributesImpl } from './attributes';
-export { addElementCleanup, destroyElementScope, getElementScope, setElementScope } from './cleanup';
+export {
+  addElementCleanup,
+  destroyElementScope,
+  getElementScope,
+  getIsolateHostScope,
+  setElementScope,
+  setIsolateHostScope,
+} from './cleanup';
 export type {
   Attributes,
   CompileFn,

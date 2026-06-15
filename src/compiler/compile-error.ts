@@ -921,3 +921,144 @@ export class NgRepeatDuplicateKeyError extends Error {
     );
   }
 }
+
+/**
+ * Thrown by `ngPluralize`'s link function (spec 029 Slice 3) when the
+ * `offset` attribute is present but its text does not parse as a
+ * number (`parseFloat(attrs.offset)` yields `NaN`). The error is
+ * routed via `$exceptionHandler('$compile')` at link time and the
+ * directive goes inert — blank output, NO watches installed — so a
+ * typo'd offset is loud during development while the rest of the page
+ * keeps digesting normally.
+ *
+ * This is deliberately NOISIER than the missing-`count`/-`when` inert
+ * path (which bails silently, upstream-lenient): an absent offset is a
+ * valid authoring choice (offset 0), but a PRESENT offset that cannot
+ * be parsed is always an authoring mistake.
+ *
+ * No new `EXCEPTION_HANDLER_CAUSES` token — the tuple stays at 10.
+ *
+ * @example
+ * ```ts
+ * // "abc" is not a number:
+ * // <ng-pluralize count="n" offset="abc" when="{'other': '{} items'}"></ng-pluralize>
+ * // → NgPluralizeBadOffsetError routed via $exceptionHandler('$compile'),
+ * //   element stays blank, no watches are installed.
+ * ```
+ */
+export class NgPluralizeBadOffsetError extends Error {
+  readonly name = 'NgPluralizeBadOffsetError' as const;
+
+  constructor(offsetSource: string) {
+    super(
+      `ngPluralize: offset attribute value "${offsetSource}" is not a number. Provide a numeric offset or remove the attribute.`,
+    );
+  }
+}
+
+/**
+ * Thrown by `ngPluralize`'s count watcher (spec 029 Slice 2) when a
+ * valid numeric count resolves to a key — the exact `String(count)`
+ * value or the `$locale.pluralCat(...)` category — for which the
+ * directive's message table holds no message. The element's text is
+ * cleared and the error is routed via `$exceptionHandler('$compile')`
+ * so the author notices the gap during development; the rest of the
+ * page keeps digesting normally.
+ *
+ * This substitutes for upstream AngularJS's `$log.debug(...)` call —
+ * this project ships no `$log` service, so the standard exception
+ * channel carries the development-time signal instead (a documented
+ * divergence). The report fires once per key *transition*, never per
+ * digest, and never for NaN counts (an unusable count blanks the
+ * element silently per FS §2.8).
+ *
+ * No new `EXCEPTION_HANDLER_CAUSES` token — the tuple stays at 10.
+ *
+ * @example
+ * ```ts
+ * // Only a 'one' message, but the count is 5 (category 'other'):
+ * // <ng-pluralize count="5" when="{'one': 'one message'}"></ng-pluralize>
+ * // → NgPluralizeNoRuleDefinedError routed via $exceptionHandler('$compile')
+ * ```
+ */
+export class NgPluralizeNoRuleDefinedError extends Error {
+  readonly name = 'NgPluralizeNoRuleDefinedError' as const;
+
+  constructor(resolvedKey: string, whenSource: string) {
+    super(
+      `ngPluralize: no rule defined for "${resolvedKey}" in "${whenSource}". Add a message for that exact value or plural category.`,
+    );
+  }
+}
+
+/**
+ * Thrown by `ngRef`'s link function (spec 030 Slice 3) when the
+ * `ng-ref` attribute is missing/empty OR its expression is not an
+ * assignable l-value — i.e. it is anything other than an `Identifier`
+ * (`widget`) or a `MemberExpression` (`refs.widget`). Tokens like
+ * `123bad`, `a + b`, or `fn()` parse to non-assignable AST nodes and
+ * trip this error. The directive cannot publish a reference through a
+ * non-assignable target, so it routes this error via
+ * `$exceptionHandler('$compile')` at link time and goes inert — it
+ * publishes nothing and installs no destroy listener.
+ *
+ * No new `EXCEPTION_HANDLER_CAUSES` token — the tuple stays at 10.
+ *
+ * @example
+ * ```ts
+ * // Leading-digit token — not a valid identifier, parses non-assignable:
+ * // <my-widget ng-ref="123bad"></my-widget>
+ * // → NgRefBadExpressionError routed via $exceptionHandler('$compile'),
+ * //   the directive publishes nothing.
+ * ```
+ */
+export class NgRefBadExpressionError extends Error {
+  readonly name = 'NgRefBadExpressionError' as const;
+
+  constructor(refExpression: string) {
+    super(
+      `ngRef: expression "${refExpression}" is not assignable. Provide an identifier or member expression (e.g. "widget" or "refs.widget").`,
+    );
+  }
+}
+
+/**
+ * Thrown by `ngRef`'s link function (spec 030 Slice 4) when an
+ * `ng-ref-read` attribute names a specific directive controller that is
+ * not present on the OWN element's `$$ngControllers` map. Unlike the
+ * default (no-`ng-ref-read`) read — which falls back to publishing the
+ * native `Element` when no controller is found — an explicit
+ * `ng-ref-read="someDirective"` is a precise author request: the author
+ * asked for that controller by name, so a miss is an authoring mistake
+ * rather than the plain-element case. The directive routes this error
+ * via `$exceptionHandler('$compile')` at link time and publishes
+ * NOTHING (no element fallback).
+ *
+ * The special value `ng-ref-read="$element"` never reaches this error —
+ * it publishes the raw `Element` directly (raw-Element convention,
+ * spec 017). Only a NAMED directive that resolves to no controller
+ * trips this class.
+ *
+ * The message carries BOTH the requested directive name (from the
+ * `ng-ref-read` attribute) AND the element's tag name so the author can
+ * locate the offending element and the unmatched controller request.
+ *
+ * No new `EXCEPTION_HANDLER_CAUSES` token — the tuple stays at 10.
+ *
+ * @example
+ * ```ts
+ * // <input ng-ref="model" ng-ref-read="ngModel"> with no ngModel
+ * // directive registered on <input>:
+ * // → NgRefNoControllerError routed via $exceptionHandler('$compile'),
+ * //   the directive publishes nothing.
+ * ```
+ */
+export class NgRefNoControllerError extends Error {
+  readonly name = 'NgRefNoControllerError' as const;
+
+  constructor(requestedDirective: string, tagName: string) {
+    super(
+      `ngRef: ng-ref-read requested controller "${requestedDirective}" on element <${tagName}>, but no such controller is present on that element.`,
+    );
+  }
+}

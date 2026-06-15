@@ -40,6 +40,7 @@ import {
   ngClassEvenDirective,
   ngClassOddDirective,
 } from '@compiler/ng-class';
+import { NG_CSP_NAME, NG_JQ_NAME, ngCspDirective, ngJqDirective } from '@compiler/ng-compat-switches';
 import { ngCloakDirective } from '@compiler/ng-cloak';
 import { NG_CONTROLLER_NAME, ngControllerDirective } from '@compiler/ng-controller';
 import {
@@ -63,11 +64,15 @@ import {
   ngSubmitDirective,
 } from '@compiler/ng-event-directives';
 import { NG_HIDE_NAME, ngHideDirective } from '@compiler/ng-hide';
+import { HTML_ANCHOR_NAME, htmlAnchorDirective } from '@compiler/html-anchor';
 import { NG_IF_NAME, ngIfDirective } from '@compiler/ng-if';
 import { NG_INCLUDE_NAME, ngIncludeDirective } from '@compiler/ng-include';
 import { NG_INIT_NAME, ngInitDirective } from '@compiler/ng-init';
 import { NG_NON_BINDABLE_NAME, ngNonBindableDirective } from '@compiler/ng-non-bindable';
+import { NG_PLURALIZE_NAME, ngPluralizeDirective } from '@compiler/ng-pluralize';
+import { NG_REF_NAME, ngRefDirective } from '@compiler/ng-ref';
 import { NG_REPEAT_NAME, ngRepeatDirective } from '@compiler/ng-repeat';
+import { SCRIPT_TEMPLATE_NAME, scriptTemplateDirective } from '@compiler/script-template';
 import { NG_SHOW_NAME, ngShowDirective } from '@compiler/ng-show';
 import { NG_STYLE_NAME, ngStyleDirective } from '@compiler/ng-style';
 import {
@@ -433,6 +438,82 @@ export const ngModule = createModule('ng', [])
       // alias` parent-scope publication. See
       // `src/compiler/ng-repeat.ts` for the file-level rationale.
       $compileProvider.directive(NG_REPEAT_NAME, ngRepeatDirective);
+      // Spec 029 Slice 2 — `ngPluralize` displays the message variant
+      // that grammatically fits the current count. At link time the
+      // `when` map is `$eval`'d ONCE (static-map contract) and each
+      // message is `$interpolate`-compiled ONCE with its `{}`
+      // placeholders rewritten to the parenthesized count expression.
+      // A primary `scope.$watch` on the count expression resolves the
+      // message key (exact `String(count)` match wins, else
+      // `$locale.pluralCat(count)` — the spec-029 Slice 1 locale
+      // seam) and, on each key TRANSITION, deregisters the previous
+      // message watch and installs `scope.$watch(messageFn, write)` —
+      // the switching-watch design that keeps embedded `{{expr}}`
+      // bindings live without watch churn. Unusable (NaN) counts
+      // blank the element silently; a valid count with no matching
+      // rule blanks the element and routes
+      // `NgPluralizeNoRuleDefinedError` via
+      // `$exceptionHandler('$compile')` once per key transition (the
+      // no-`$log` divergence). `offset` (Slice 3) and the per-key
+      // `when-…` attribute scan (Slice 4) land in later slices. See
+      // `src/compiler/ng-pluralize.ts` for the file-level rationale.
+      $compileProvider.directive(NG_PLURALIZE_NAME, ngPluralizeDirective);
+      // Spec 030 Slice 3 — `ngRef` publishes a reference to a
+      // directive's controller (or, absent a matching controller, the
+      // native DOM element) onto the surrounding scope. Post-link only:
+      // the per-element controller seam (spec 022 Slice 3) has already
+      // populated the `$$ngControllers` stash by post-link, so reading
+      // the own element's controller (keyed by its normalized tag name)
+      // is reliable. The published value is written through the
+      // assignable-expression writer (`buildParentWriter`) — the same
+      // machinery the `=` two-way isolate binding uses — so dotted-path
+      // refs (`ng-ref="refs.widget"`) auto-create their intermediates.
+      // A missing/empty or non-assignable expression (`ng-ref="123bad"`)
+      // routes `NgRefBadExpressionError` via `$exceptionHandler('$compile')`
+      // and the directive goes inert. On scope `$destroy` the slot is
+      // reset to `null` only when it still holds this directive's
+      // published reference (identity guard). The `ngRefRead` modifier
+      // lands in Slice 4. See `src/compiler/ng-ref.ts`.
+      $compileProvider.directive(NG_REF_NAME, ngRefDirective);
+      // Spec 030 Slice 1 — `script` registers inline
+      // `<script type="text/ng-template" id="…">…</script>` bodies into
+      // `$templateCache` at compile time (compile-only, no link fn). A
+      // subsequent `templateUrl` / `ng-include` for the same `id`
+      // resolves with zero network round-trip via `$templateRequest`'s
+      // cache-first check. `terminal: true` for upstream same-element
+      // cutoff parity; missing / non-`text/ng-template` cases are silent
+      // no-ops. See `src/compiler/script-template.ts`.
+      $compileProvider.directive(SCRIPT_TEMPLATE_NAME, scriptTemplateDirective);
+      // Spec 030 Slice 5 — `a` is the native-anchor override directive.
+      // `restrict: 'E'`, priority 0, non-terminal, link-only: it matches
+      // every `<a>` and layers two browser-safety behaviors on top of the
+      // author's markup WITHOUT taking ownership (accumulate-per-name
+      // registration lets an app's own `a` directive run alongside it, and
+      // it composes with `ng-click` / `ng-href`). Behavior 1 is the
+      // empty-link click guard — a single native `click` listener reads
+      // `element.getAttribute('href')` at CLICK time (live; sees
+      // `ng-href`-written values) and calls `event.preventDefault()` when
+      // the href is null / empty, with zero watches and no digest.
+      // Behavior 2 is new-tab `rel` hardening — a link-time check plus an
+      // `attrs.$observe('target', …)` token-merge `noopener` /
+      // `noreferrer` into the existing `rel` (idempotent, preserving
+      // author tokens like `license`) whenever `target` is `_blank`;
+      // one-way (never removed on a later transition away from `_blank`).
+      // See `src/compiler/html-anchor.ts` for the file-level rationale.
+      $compileProvider.directive(HTML_ANCHOR_NAME, htmlAnchorDirective);
+      // Spec 030 Slice 6 — `ngCsp` + `ngJq` are documented compatibility
+      // no-ops. Both are A-restricted metadata-only DDOs (no compile, no
+      // link) so AngularJS-migrated markup carrying `ng-csp` / `ng-jq`
+      // compiles and renders unchanged. There is nothing for either to do
+      // here: this framework's expression evaluation is a tree-walking
+      // interpreter (never `eval` / `new Function`, CSP-safe by
+      // construction) and injects no inline styles, so `ng-csp` has nothing
+      // to reconfigure; and there is no jQuery/jqLite selection layer (a
+      // Phase 5 roadmap item), so `ng-jq` has nothing to select. Every
+      // classic value form (`ng-csp="no-unsafe-eval"`, `ng-jq="jQuery"`, …)
+      // is inert by construction. See `src/compiler/ng-compat-switches.ts`.
+      $compileProvider.directive(NG_CSP_NAME, ngCspDirective);
+      $compileProvider.directive(NG_JQ_NAME, ngJqDirective);
       // Spec 027 Slice 5 — `ngSwitch` + `ngSwitchWhen` + `ngSwitchDefault`
       // provide value-driven subtree selection. The parent (`ngSwitch`)
       // owns a `NgSwitchController` controller plus a `scope.$watch`

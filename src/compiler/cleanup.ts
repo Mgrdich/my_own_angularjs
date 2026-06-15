@@ -33,7 +33,13 @@
 
 import type { Scope } from '@core/index';
 
-import { isNgManagedComment, isNgManagedElement, NG_CLEANUP_QUEUE, NG_SCOPE } from './element-slots';
+import {
+  isNgManagedComment,
+  isNgManagedElement,
+  NG_CLEANUP_QUEUE,
+  NG_ISOLATE_HOST_SCOPE,
+  NG_SCOPE,
+} from './element-slots';
 import { isComment } from './node-guards';
 
 /**
@@ -71,6 +77,52 @@ export function getElementScope(element: Element): Scope | undefined {
     return undefined;
   }
   return element[NG_SCOPE];
+}
+
+/**
+ * Record the SURROUNDING (pre-isolate) scope on an element that bears an
+ * ISOLATE scope. The compiler calls this when it creates an isolate
+ * scope via `parentScope.$new(true)`, passing the `parentScope` it held
+ * BEFORE the isolate scope existed — the scope a true outer DOM sibling
+ * shares.
+ *
+ * Non-isolate directives that publish into the scope (currently only
+ * `ngRef`) read this via {@link getIsolateHostScope} so their published
+ * reference lands on the surrounding scope rather than on the isolate
+ * scope the element's own link fn receives — AngularJS parity for
+ * `linkFn.isolateScope ? isolateScope : scope`. Stashed as a
+ * non-enumerable property following the `$$ngScope` precedent.
+ *
+ * @example
+ * ```ts
+ * const isolateScope = parentScope.$new(true);
+ * setElementScope(element, isolateScope);
+ * setIsolateHostScope(element, parentScope);
+ * ```
+ */
+export function setIsolateHostScope(element: Element, scope: Scope): void {
+  Object.defineProperty(element, NG_ISOLATE_HOST_SCOPE, {
+    value: scope,
+    writable: true,
+    configurable: true,
+    enumerable: false,
+  });
+}
+
+/**
+ * Read the surrounding (pre-isolate) {@link Scope} previously stashed on
+ * the element via {@link setIsolateHostScope}. Returns `undefined` when
+ * the element has no isolate scope (the common case) — non-isolate
+ * directives then fall back to their linked scope unchanged.
+ */
+export function getIsolateHostScope(element: Element | Comment): Scope | undefined {
+  if (isComment(element)) {
+    return undefined;
+  }
+  if (!isNgManagedElement(element)) {
+    return undefined;
+  }
+  return element[NG_ISOLATE_HOST_SCOPE];
 }
 
 /**
