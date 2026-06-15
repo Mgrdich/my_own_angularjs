@@ -2222,6 +2222,255 @@ is NOT) and reuse the existing `'$compile'` cause token. The
 <!-- msgCount = 1 → "B" -->
 ```
 
+## CSP, template-cache & element-override directives (spec 030)
+
+Spec 030 ships a small grab-bag of `ngModule`-registered built-ins that
+either harden the page (the `a` override, the `ng-ref` view-reference) or
+exist purely so AngularJS-migrated markup compiles unchanged (`ng-csp`,
+`ng-jq`, inline `<script type="text/ng-template">`). All five register on
+the `'ng'` module's existing `$compileProvider` config block; apps that
+declare `'ng'` in their dependency chain get them for free. Like the spec
+023–029 batches they ship as DI registrations ONLY — there are NO new
+exports from `@compiler/index`. The factory functions are file-local
+exports, reachable exclusively via `injector.get('<name>Directive')`
+(`scriptTemplateDirective`, `ngRefDirective`, `htmlAnchorDirective`,
+`ngCspDirective`, `ngJqDirective`). The two NEW error classes
+(`NgRefBadExpressionError`, `NgRefNoControllerError`) ARE exported from
+`@compiler/index` and the root barrel. `EXCEPTION_HANDLER_CAUSES` stays at
+10 — every error site reuses the existing `'$compile'` cause token.
+
+Two of these match by ELEMENT name (`script`, `a`) rather than attribute.
+They reuse the walker's existing tag-name normalization — registering a
+directive under the literal name `'script'` / `'a'` (`restrict: 'E'`) is
+all the walker needs; no compiler-walker changes ship in spec 030.
+
+### `script` — inline `text/ng-template` registration
+
+`<script type="text/ng-template" id="…">` lets an app ship template
+fragments INLINE in its host document and resolve them later through the
+SAME `templateUrl` machinery a networked template would use — but with
+ZERO network round-trip. At compile time the directive reads the
+element's `textContent` and `$templateCache.put`s it under the `id`
+attribute as the cache key. A subsequent `templateUrl` / `ng-include`
+then finds the entry already present and skips the fetch entirely.
+
+```html
+<script type="text/ng-template" id="/tpl/card.html">
+  <div class="card">{{ title }}</div>
+</script>
+<my-widget template-url="/tpl/card.html"></my-widget>
+<!-- After $compile reaches the <script>:
+     $templateCache.get('/tpl/card.html') holds the body, and the
+     <my-widget> templateUrl resolves with NO fetch. -->
+```
+
+The directive fires ONLY when `attrs.type === 'text/ng-template'` AND
+`attrs.id` is present and non-empty — a `<script>` of any other type, or
+one missing an `id`, is a SILENT no-op (no cache write, no error, element
+left untouched). `$templateCache` is `Map`-backed so two blocks under the
+same `id` are last-wins (`put` overwrites). `terminal: true` is upstream
+parity — it triggers the spec-017 same-element directive cutoff so lower-
+priority same-element directives do not also run on the `<script>`. It
+does NOT trigger the spec-023 no-descent walker hook (that extension is
+narrowed to `ngNonBindable`); inline-template content is structurally
+inert anyway because this compiler has no text-node interpolation, so the
+`{{ … }}` inside a `<script>` body is never compiled or rendered.
+
+**Zero-network resolution path.** When `$templateRequest(url)` is later
+called for a cached `id`, the cache-first check in
+`src/template/template-request.ts` returns the stored string via
+`Promise.resolve(cached)` WITHOUT ever invoking the fetcher — so an
+inline `<script>`-registered template costs no HTTP request and resolves
+synchronously-then-microtask, never hitting the network.
+
+### `ng-ref` — publish a view reference
+
+`<my-widget ng-ref="widget">` writes a reference to the element's
+controller (or the element itself) into the scope slot named by the
+`ng-ref` expression — the template-side analogue of Angular's
+`@ViewChild`. The directive is `restrict: 'A'`, **post-link only** (by
+post-link the controller seam has already stashed every controller into
+the element's `$$ngControllers` map, so the own-element read is reliable).
+
+The published value follows a three-way read dispatch on the optional
+`ng-ref-read` attribute:
+
+1. **`ng-ref-read="$element"`** → publish the native `Element` itself; no
+   controller lookup runs.
+2. **`ng-ref-read="<directiveName>"`** → look up that directive's
+   controller on the OWN element. A HIT publishes it; a MISS is an
+   authoring mistake (the author named a specific directive that is not
+   present) → routes `NgRefNoControllerError` via
+   `$exceptionHandler('$compile')` and publishes NOTHING (no element
+   fallback).
+3. **No `ng-ref-read`** → the default read: the controller stashed under
+   the element's own normalized tag-name key (the canonical
+   component-element case), else the native `Element` (the plain-element
+   fallback).
+
+```html
+<!-- Reference a component controller -->
+<my-widget ng-ref="widget"></my-widget>
+<button ng-click="widget.reset()">Reset</button>
+<!-- scope.widget is the <my-widget> controller (read from
+     $$ngControllers under the 'myWidget' key). -->
+
+<!-- Reference a plain DOM element via a dotted path -->
+<input ng-ref="form.name">
+<span>{{ form.name.value }}</span>
+<!-- No controller on <input> → scope.form.name is the native <input>
+     Element; the `form` intermediate object is auto-created by the
+     assignable writer (ensurePath). -->
+
+<!-- Request the raw element explicitly -->
+<input ng-ref="el" ng-ref-read="$element">
+```
+
+The publish goes through `buildParentWriter` (the same assignable-write
+machinery the `=` two-way binding uses — see the extraction note below),
+so the expression must be an `Identifier` (`widget`) or `MemberExpression`
+(`refs.widget`). A missing/empty `ng-ref` or a non-assignable expression
+(`ng-ref="123bad"`, `ng-ref="a + b"`, `ng-ref="fn()"`) routes
+`NgRefBadExpressionError` via `$exceptionHandler('$compile')` and makes
+the directive INERT — it publishes nothing and installs no destroy
+listener.
+
+**Clear-on-destroy guard.** On `scope.$destroy` the slot is reset to
+`null` — but ONLY IF the scope slot still holds the reference this
+directive published (identity-compared through the same compiled
+expression so a dotted-path ref resolves correctly). This guards against
+clobbering a newer publish under the same name that re-bound elsewhere
+before this scope tore down.
+
+**Surrounding-scope publish (full upstream parity).** `ng-ref` publishes
+onto the element's SURROUNDING scope — matching AngularJS's
+`linkFn.isolateScope ? isolateScope : scope`. On an isolate-scope element
+(a `.component` or a directive requesting `scope: { … }`) the ref lands on
+the SURROUNDING (pre-isolate) scope, so a genuine outer sibling reaches
+the published controller/element:
+
+```html
+<my-player ng-ref="player"></my-player>
+<button ng-click="player.play()">Play</button>
+<!-- scope.player is the <my-player> controller; the outer <button>,
+     a true sibling, can call it. -->
+```
+
+Mechanism: the compiler stashes the surrounding scope on isolate elements
+as a non-enumerable `$$ngIsolateHostScope` (set at the isolate-scope
+creation site in `compile.ts`; helpers `setIsolateHostScope` /
+`getIsolateHostScope` live in `cleanup.ts`), and `ng-ref` publishes to
+`getIsolateHostScope(element) ?? scope`. On a NON-isolate element the
+surrounding scope IS the linked scope, so behavior there is unchanged —
+matching AngularJS, where only isolate elements get surrounding-scope
+treatment (`scope: true` elements publish to the child scope). No special
+consuming-markup arrangement is required: an outer sibling reads the ref
+directly.
+
+### `a` — native-anchor override
+
+A built-in that matches EVERY `<a>` element (`restrict: 'E'`, priority 0,
+non-terminal, link-only) and layers two browser-safety behaviors on top
+of the author's markup WITHOUT taking ownership of it. Because directive
+registration ACCUMULATES per name, an app's own `directive('a', …)` runs
+alongside this built-in, and it composes with attribute directives on the
+same anchor (`ng-click`, `ng-href`).
+
+**Empty-link click guard (live, zero watches).** A bare `<a href="">` or
+an `<a>` with no `href` is the common "button-styled link, behavior lives
+in `ng-click`" idiom; the browser default is to scroll to the top /
+navigate to the current URL. The directive registers a single native
+`click` listener that reads `element.getAttribute('href')` AT CLICK TIME
+and calls `event.preventDefault()` when the live value is `null`
+(attribute absent) or `''` (present but empty).
+
+```html
+<a href="" ng-click="doThing()">Do the thing</a>
+<!-- A click does NOT scroll to top: the click-time href read sees '' and
+     calls preventDefault(). The ng-click expression still fires. -->
+
+<a ng-href="{{profileUrl}}">Profile</a>
+<!-- Before the first digest: no `href` → a click is prevented. After
+     scope.profileUrl = '/me' + digest: href="/me" → the click-time read
+     sees a real value and navigation proceeds. -->
+```
+
+Reading the href at CLICK time (not caching it at link time) is what makes
+the guard LIVE: by the time the user clicks, `ng-href` (priority 99) may
+have written a real URL during a digest, and the guard sees that value.
+NO `scope.$watch` is installed — the check costs nothing per digest and
+runs only on actual clicks. The guard never mutates scope and never
+triggers a digest, so the spec-026 `scope.$apply` `try/catch` workaround
+is deliberately NOT needed here.
+
+**New-tab `rel` hardening (reverse-tabnabbing defense).** An
+`<a target="_blank">` without `rel="noopener"` lets the opened page reach
+back into the opener via `window.opener`. Whenever `target` is `'_blank'`,
+the directive token-merges `noopener` and `noreferrer` into the anchor's
+existing `rel` — once at link time (so a STATIC `target="_blank"` is
+hardened without waiting for a digest) and again on every
+`attrs.$observe('target', …)` notification (so an interpolated / late-set
+`target="{{mode}}"` is hardened the moment it resolves to `'_blank'`).
+
+```html
+<a href="https://example.com" target="_blank" rel="license">Terms</a>
+<!-- After compile: rel="license noopener noreferrer" — idempotent, and
+     the author's `license` token is preserved. -->
+```
+
+The merge is IDEMPOTENT (a token already present is not duplicated) and
+PRESERVES author tokens. The hardening is ONE-WAY: once added, `noopener`
+/ `noreferrer` are never removed even if `target` later changes away from
+`_blank` — stripping them on a transition back would re-open the
+tabnabbing window for any click racing the next digest, so leaving them in
+place is strictly safer (and matches AngularJS-canonical behavior).
+
+### `ng-csp` / `ng-jq` — documented compatibility no-ops
+
+Both are `restrict: 'A'`, metadata-only DDOs — no `compile`, no `link`,
+no watchers, zero per-digest cost. They exist so AngularJS-migrated markup
+carrying the classic `ng-csp` / `ng-jq` attributes compiles and renders
+unchanged. Every classic value form (`ng-csp`, `ng-csp="no-unsafe-eval"`,
+`ng-csp="no-inline-style"`, `ng-jq`, `ng-jq="jQuery"`) is inert by
+construction — the attribute value is never read.
+
+```html
+<!-- These two compile and render identically; ng-csp changes nothing. -->
+<div ng-csp ng-bind="user.name"></div>
+<div ng-bind="user.name"></div>
+```
+
+**Why `ng-csp` is a no-op.** Upstream, `ng-csp` flips the framework out of
+two CSP-unsafe code paths: generating expression evaluators with
+`Function` / `eval`, and injecting an inline `<style>` for built-in
+directive CSS. NEITHER path exists here — this framework's expression
+evaluation is a tree-walking interpreter that never uses `eval` /
+`new Function` (a permanent part of the project's security posture, so
+expressions are CSP-safe by construction with no flag to set), and the
+framework never injects inline styles (visibility directives rely on
+consumer-shipped CSS). There is nothing for `ng-csp` to reconfigure.
+
+**Why `ng-jq` is a no-op.** Upstream, `ng-jq` selects which
+jQuery-compatible library `angular.element` delegates to. This framework
+operates directly on the plain DOM (`Element` / `Comment`) with no
+jQuery/jqLite selection layer at all — an `angular.element` compatibility
+wrapper is a separate Phase 5 roadmap item. `ng-jq` has nothing to select.
+
+### `expression-assign.ts` extraction
+
+The small set of assignable-expression write helpers
+(`isAssignable` / `ensurePath` / `writeAssignable` / `buildParentWriter`)
+was extracted out of `isolate-bindings.ts` into the compiler-internal
+`src/compiler/expression-assign.ts` so it can be SHARED by the `=`
+two-way isolate binding (its original consumer) and `ngRef` (which writes
+the published reference back through an assignable l-value). Both need to
+turn a parsed expression into a parent-side writer: detect structural
+assignability, auto-create intermediate objects along a member path
+(`ensurePath`), and perform the final assignment. The module is
+compiler-internal — NOT exported from `@compiler/index` or the root
+barrel; it re-implements a narrow subset of the parser's internal `assign`
+machinery because the parser does not publicly expose that helper.
+
 ## Deferred items
 
 Spec 017 deliberately stops at the compiler core. The following are
@@ -2248,8 +2497,9 @@ do not produce observable behavior in this spec:
   full [`src/template/README.md`](../template/README.md) for the
   worked example. `replace: true` is REJECTED at registration via
   `ReplaceTrueNotSupportedError` (deprecated in AngularJS 1.x; will
-  not ship). `<script type="text/ng-template">` lands with the
-  Built-in Directives roadmap bullet.
+  not ship). `<script type="text/ng-template">` (inline template-cache
+  registration) shipped with spec 030 — see "CSP, template-cache &
+  element-override directives (spec 030)" above.
 - **Controllers** (`controller`, `controllerAs`) shipped with spec 020.
   **`bindToController` + `require` + lifecycle hooks +
   `$compileProvider.component`** shipped with spec 022 — see "Isolate
@@ -2275,8 +2525,10 @@ do not produce observable behavior in this spec:
   shipped in spec 028** (`ng-repeat` — see "List iteration
   directive (spec 028)" above). **Pluralization shipped in spec 029**
   (`ng-pluralize` — see "Pluralization directive (spec 029)" above).
-  The remaining built-ins (`ng-model` and the rest) ship under their
-  own roadmap items.
+  **CSP / template-cache / element-override subset shipped in spec 030**
+  (`ng-csp`, `ng-jq`, `ng-ref`, `script`, `a` — see "CSP, template-cache
+  & element-override directives (spec 030)" above). The remaining
+  built-ins (`ng-model` and the rest) ship under their own roadmap items.
 - **Multi-element directives** (`multiElement: true`, `*-start` /
   `*-end` pairs) — deferred; lands alongside `ng-repeat`.
 - **Module DSL `.directive(...)` shorthand** on `createModule` —
