@@ -990,3 +990,75 @@ export class NgPluralizeNoRuleDefinedError extends Error {
     );
   }
 }
+
+/**
+ * Thrown by `ngRef`'s link function (spec 030 Slice 3) when the
+ * `ng-ref` attribute is missing/empty OR its expression is not an
+ * assignable l-value — i.e. it is anything other than an `Identifier`
+ * (`widget`) or a `MemberExpression` (`refs.widget`). Tokens like
+ * `123bad`, `a + b`, or `fn()` parse to non-assignable AST nodes and
+ * trip this error. The directive cannot publish a reference through a
+ * non-assignable target, so it routes this error via
+ * `$exceptionHandler('$compile')` at link time and goes inert — it
+ * publishes nothing and installs no destroy listener.
+ *
+ * No new `EXCEPTION_HANDLER_CAUSES` token — the tuple stays at 10.
+ *
+ * @example
+ * ```ts
+ * // Leading-digit token — not a valid identifier, parses non-assignable:
+ * // <my-widget ng-ref="123bad"></my-widget>
+ * // → NgRefBadExpressionError routed via $exceptionHandler('$compile'),
+ * //   the directive publishes nothing.
+ * ```
+ */
+export class NgRefBadExpressionError extends Error {
+  readonly name = 'NgRefBadExpressionError' as const;
+
+  constructor(refExpression: string) {
+    super(
+      `ngRef: expression "${refExpression}" is not assignable. Provide an identifier or member expression (e.g. "widget" or "refs.widget").`,
+    );
+  }
+}
+
+/**
+ * Thrown by `ngRef`'s link function (spec 030 Slice 4) when an
+ * `ng-ref-read` attribute names a specific directive controller that is
+ * not present on the OWN element's `$$ngControllers` map. Unlike the
+ * default (no-`ng-ref-read`) read — which falls back to publishing the
+ * native `Element` when no controller is found — an explicit
+ * `ng-ref-read="someDirective"` is a precise author request: the author
+ * asked for that controller by name, so a miss is an authoring mistake
+ * rather than the plain-element case. The directive routes this error
+ * via `$exceptionHandler('$compile')` at link time and publishes
+ * NOTHING (no element fallback).
+ *
+ * The special value `ng-ref-read="$element"` never reaches this error —
+ * it publishes the raw `Element` directly (raw-Element convention,
+ * spec 017). Only a NAMED directive that resolves to no controller
+ * trips this class.
+ *
+ * The message carries BOTH the requested directive name (from the
+ * `ng-ref-read` attribute) AND the element's tag name so the author can
+ * locate the offending element and the unmatched controller request.
+ *
+ * No new `EXCEPTION_HANDLER_CAUSES` token — the tuple stays at 10.
+ *
+ * @example
+ * ```ts
+ * // <input ng-ref="model" ng-ref-read="ngModel"> with no ngModel
+ * // directive registered on <input>:
+ * // → NgRefNoControllerError routed via $exceptionHandler('$compile'),
+ * //   the directive publishes nothing.
+ * ```
+ */
+export class NgRefNoControllerError extends Error {
+  readonly name = 'NgRefNoControllerError' as const;
+
+  constructor(requestedDirective: string, tagName: string) {
+    super(
+      `ngRef: ng-ref-read requested controller "${requestedDirective}" on element <${tagName}>, but no such controller is present on that element.`,
+    );
+  }
+}

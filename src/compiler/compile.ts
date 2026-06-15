@@ -92,7 +92,7 @@ import type { Scope } from '@core/index';
 import { invokeExceptionHandler, type ExceptionHandler } from '@exception-handler/index';
 
 import { bindAttrsToScope } from './attributes';
-import { addElementCleanup, setElementScope } from './cleanup';
+import { addElementCleanup, setElementScope, setIsolateHostScope } from './cleanup';
 import {
   MultipleIsolateScopeError,
   MultipleTemplateDirectivesError,
@@ -1429,6 +1429,15 @@ export function createCompile(options: CompileOptions): CompileService {
       const scope: Scope = needsChildScope ? parentScope.$new(isolate) : parentScope;
       if (needsChildScope && isElement(target)) {
         setElementScope(target, scope);
+        if (isolate) {
+          // Record the surrounding (pre-isolate) scope so non-isolate
+          // directives that publish into the scope (currently only
+          // `ngRef`) can target the scope a true outer DOM sibling shares
+          // — AngularJS parity for `linkFn.isolateScope ? isolateScope :
+          // scope`. `parentScope` is the scope held BEFORE this isolate
+          // `$new(true)` ran.
+          setIsolateHostScope(target, parentScope);
+        }
       }
       // Wire isolate bindings AFTER scope creation and BEFORE attrs are
       // bound to the scope (binding `@` reads attrs and seeds the

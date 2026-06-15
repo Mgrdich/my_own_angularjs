@@ -91,6 +91,8 @@ export {
   MultipleTranscludeDirectivesError,
   NgPluralizeBadOffsetError,
   NgPluralizeNoRuleDefinedError,
+  NgRefBadExpressionError,
+  NgRefNoControllerError,
   NgRepeatBadAliasError,
   NgRepeatBadIdentifierError,
   NgRepeatBadIteratorExpressionError,

@@ -35,6 +35,21 @@ import type { Scope } from '@core/index';
 import type { BoundTranscludeFn } from './transclude-types';
 
 export const NG_SCOPE = '$$ngScope' as const;
+/**
+ * Records the SURROUNDING (pre-isolate) scope on an element that bears
+ * an ISOLATE scope. The compiler stamps this slot when it creates an
+ * isolate scope via `parentScope.$new(true)`; the value is the
+ * `parentScope` the linker held BEFORE the isolate scope existed — i.e.
+ * the scope a true outer DOM sibling shares.
+ *
+ * Non-isolate directives that publish into the scope (currently only
+ * `ngRef`) read this slot so their published reference lands on the
+ * surrounding scope rather than on the isolate scope the element's own
+ * link fn receives — AngularJS parity for `linkFn.isolateScope ?
+ * isolateScope : scope`. On a non-isolate element the slot is absent
+ * and such directives fall back to the linked scope unchanged.
+ */
+export const NG_ISOLATE_HOST_SCOPE = '$$ngIsolateHostScope' as const;
 export const NG_CLEANUP_QUEUE = '$$ngCleanupQueue' as const;
 export const NG_CONTROLLERS = '$$ngControllers' as const;
 export const NG_BOUND_TRANSCLUDE = '$$ngBoundTransclude' as const;
@@ -63,6 +78,7 @@ export const NG_ELEMENT_TRANSCLUDED = '$$ngElementTranscluded' as const;
  */
 export interface NgManagedElement extends Element {
   [NG_SCOPE]?: Scope;
+  [NG_ISOLATE_HOST_SCOPE]?: Scope;
   [NG_CLEANUP_QUEUE]?: (() => void)[];
   [NG_CONTROLLERS]?: Map<string, unknown>;
   [NG_BOUND_TRANSCLUDE]?: BoundTranscludeFn;
@@ -109,6 +125,7 @@ export interface NgManagedComment extends Comment {
 export function isNgManagedElement(el: Element): el is NgManagedElement {
   return (
     NG_SCOPE in el ||
+    NG_ISOLATE_HOST_SCOPE in el ||
     NG_CLEANUP_QUEUE in el ||
     NG_CONTROLLERS in el ||
     NG_BOUND_TRANSCLUDE in el ||
