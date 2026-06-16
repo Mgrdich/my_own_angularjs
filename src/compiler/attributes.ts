@@ -58,6 +58,8 @@
 import type { Scope } from '@core/index';
 import { invokeExceptionHandler, type ExceptionHandler } from '@exception-handler/index';
 import type { InterpolateFn, InterpolateService } from '@interpolate/interpolate-types';
+import { SCE_CONTEXTS } from '@sce/index';
+import type { SceContext } from '@sce/sce-types';
 
 import { camelToKebab } from './attribute-name-utils';
 import type { Attributes, AttributesObserveFn, AttributesSetFn } from './directive-types';
@@ -80,8 +82,12 @@ type BindToScopeFn = (scope: Scope, interpolate?: InterpolateService, exceptionH
  *   `$observe` calls don't re-interpret. Each new observer still
  *   schedules a one-shot `$evalAsync` notification.
  * - `InterpolateFn` — DYNAMIC attribute; a single per-attribute
- *   `$watch` was installed (the `watchListener` calls
- *   `$set(name, value, false)`, which iterates `$$observers`).
+ *   `$watch` was installed. Under the normal compile flow that watch
+ *   is installed by `bindAttrsToScope`'s eager pass (spec 031) and its
+ *   listener calls `$set(name, value, true)` — it OWNS the real DOM
+ *   write. In the standalone-`AttributesImpl` case (no eager pass) the
+ *   watch is installed lazily by `$observe` and uses
+ *   `$set(name, value, false)`. Both iterate `$$observers`.
  */
 interface AttributesInternals {
   readonly $$element: Element | Comment;
@@ -393,13 +399,23 @@ function notifyObservers(
  *        - `InterpolateFn` result → DYNAMIC. Cache the function AND
  *          install exactly ONE per-attribute
  *          `scope.$watch(interpolateFn, listener)` whose listener
- *          calls `$set(name, newValue, false)` (the `writeAttr: false`
- *          is intentional — we don't want $observe's own watch to
- *          thrash the DOM; built-in attribute directives like
- *          `ng-href` will take that responsibility in a later spec).
- *          The first watch evaluation fires this observer (and any
- *          others registered before the first digest) via the standard
- *          `$set`-iterates-`$$observers` notification path.
+ *          calls `$set(name, newValue, false)` (`writeAttr: false`).
+ *
+ *          NOTE (spec 031): under the normal compile flow this DYNAMIC
+ *          branch is NOT reached — `bindAttrsToScope`'s eager
+ *          interpolation pass classifies EVERY attribute up front, so
+ *          by the time a directive calls `$observe` the `$$interpolators`
+ *          cache already holds the `InterpolateFn` (the "Cached
+ *          `InterpolateFn`" branch above) and the observer just rides
+ *          the existing watch. The eager watch writes the REAL DOM
+ *          attribute (`$set(name, value, true)`) — auto-interpolation
+ *          now OWNS the live DOM write for `{{...}}` attributes. This
+ *          branch only runs in the standalone-`AttributesImpl` case
+ *          where `bindAttrsToScope` was never called with an
+ *          `$interpolate` (e.g. a unit test, or `$observe` invoked
+ *          before link wiring), where `writeAttr: false` deliberately
+ *          avoids thrashing the DOM. Either way the cache guarantees
+ *          exactly ONE watch per interpolated attribute.
  * 3. If `$$scope` or `$$interpolate` is `undefined` (no link wiring,
  *    or `$observe` called from a unit test that built `AttributesImpl`
  *    standalone), the interpolation-classification step is skipped
@@ -534,12 +550,222 @@ Object.defineProperty(AttributesImpl.prototype, '$observe', {
  * unit test that hand-builds an `AttributesImpl`) keeps `$$interpolate`
  * unset; `$observe` then degrades gracefully — it appends to
  * `$$observers` but skips the lazy watch wiring entirely.
+ *
+ * Attribute interpolation (spec 031): when `interpolate` is supplied,
+ * this ALSO runs the eager interpolation pass — every `{{...}}`-bearing
+ * attribute gets a single owning `scope.$watch` that writes the resolved
+ * value to the live DOM attribute (`writeAttr: true`). `href`/`src`
+ * route through the URL trusted context. The optional `writeTarget`
+ * argument is the resolved live element (the transclusion clone under a
+ * clone-map, else the master); when it differs from the master the eager
+ * pass writes to the clone and installs an independent per-clone watch.
+ *
+ * @example Eager attribute interpolation at link time
+ * ```ts
+ * // <div title="{{tooltip}}"> — `bindAttrsToScope` installs the watch
+ * const attrs = new AttributesImpl(divElement);
+ * bindAttrsToScope(attrs, scope, $interpolate, $exceptionHandler);
+ * scope.tooltip = 'Save your work';
+ * scope.$digest();
+ * divElement.getAttribute('title'); // 'Save your work'
+ * ```
  */
 export function bindAttrsToScope(
   attrs: AttributesImpl,
   scope: Scope,
   interpolate?: InterpolateService,
   exceptionHandler?: ExceptionHandler,
+  writeTarget?: Element | Comment,
 ): void {
   (attrs as unknown as { bindToScope: BindToScopeFn }).bindToScope(scope, interpolate, exceptionHandler);
+  if (interpolate !== undefined) {
+    eagerlyInterpolateAttributes(attrs, scope, interpolate, exceptionHandler, writeTarget);
+  }
+}
+
+/**
+ * Eager attribute-interpolation pass (spec 031 Slice 2,
+ * technical-considerations §2.2).
+ *
+ * Run once per element at link time, immediately after the scope /
+ * interpolate / exception-handler references are stashed. For every
+ * own (enumerable) normalized attribute on the `Attributes` instance,
+ * classify its value via `interpolate(value, true)` (truthy
+ * `mustHaveExpression`):
+ *
+ * - **Static** (`undefined` result, no `{{...}}` markers) — cache the
+ *   `null` sentinel in the shared `$$interpolators` map and install NO
+ *   watch. A subsequent `$observe('name', fn)` finds the cached `null`
+ *   and merely schedules a one-shot notification — no DOM cost.
+ * - **Dynamic** (`InterpolateFn` result) — cache the parsed function
+ *   in `$$interpolators` AND install exactly ONE
+ *   `scope.$watch(interpolateFn, listener)`. The listener writes the
+ *   resolved value to the REAL DOM attribute via
+ *   `$set(name, value ?? null, true)` (`writeAttr: true` — the eager
+ *   pass OWNS the live DOM write for interpolated attributes). The
+ *   same `$set` call iterates `$$observers`, so a directive that later
+ *   `$observe`s this attribute is notified through the existing path
+ *   without a second watch.
+ *
+ * The `$$interpolators` cache is the single source of truth shared
+ * with `$observe`: because this pass classifies every attribute up
+ * front, a later `$observe` call always finds a cached entry and never
+ * installs a competing watch — guaranteeing one watch per interpolated
+ * attribute.
+ *
+ * Security routing (spec 031 Slice 3, technical-considerations §2.2):
+ * interpolated link/source attributes (`a`/`area[href]`, `img[src]`)
+ * resolve a trusted `SceContext` from {@link ATTRIBUTE_SCE_CONTEXTS} and
+ * pass it as the 3rd argument to `interpolate(value, true, ctx)`, so
+ * `$interpolate`'s already-wired SCE callbacks enforce trust. Under SCE
+ * strict mode this also activates the "single binding, no surrounding
+ * text" rule — `href="/u/{{id}}"` THROWS at classification time; the
+ * throw is caught, routed via the `exceptionHandler` (cause `'$compile'`,
+ * no new cause token), and only THAT attribute is skipped so the rest of
+ * the element still links.
+ *
+ * @example
+ * ```ts
+ * // <a href="{{profileUrl}}">  — routes through the URL trusted context;
+ * // a safe URL renders into the live `href` after the first digest.
+ * eagerlyInterpolateAttributes(attrs, scope, interpolate, exceptionHandler);
+ * scope.profileUrl = '/users/42';
+ * scope.$digest();
+ * // anchor.getAttribute('href') === '/users/42'
+ * ```
+ */
+function eagerlyInterpolateAttributes(
+  attrs: AttributesImpl,
+  scope: Scope,
+  interpolate: InterpolateService,
+  exceptionHandler?: ExceptionHandler,
+  writeTarget?: Element | Comment,
+): void {
+  const internals = attrs as unknown as AttributesInternals;
+  const masterNode = internals.$$element;
+  // The `attrs` instance is built ONCE per master element at compile
+  // time and SHARED across every link / transclusion-clone invocation.
+  // When the per-element linker resolves a `target` that is a cloned
+  // counterpart (transclusion via `ng-if` / `ng-repeat` / `ng-include`),
+  // we must (a) write interpolated values to the CLONE's live attribute,
+  // not the master's, and (b) install an INDEPENDENT watch per clone
+  // (the shared `$$interpolators` cache is the master's classification
+  // record and must not gate clone wiring, or only the first clone would
+  // ever wire). `isClone` discriminates the two paths.
+  const target: Element | Comment = writeTarget ?? masterNode;
+  const isClone = target !== masterNode;
+  const tagName = isElement(target) ? target.tagName.toLowerCase() : undefined;
+  // Snapshot the own enumerable keys first — these are exactly the
+  // normalized attribute names ($attr / $set / $observe / etc. are
+  // non-enumerable and never appear here). Snapshotting guards against
+  // any mutation of the indexed properties while we iterate (e.g. a
+  // dynamic attribute resolving to `null` deletes its own key inside
+  // `$set`).
+  const names = Object.keys(attrs);
+  for (const name of names) {
+    // On the master path the shared cache prevents a double-install; on a
+    // clone path each clone needs its own watch, so the cache is ignored.
+    if (!isClone && internals.$$interpolators.has(name)) {
+      continue;
+    }
+    const rawValue = attrs[name];
+    if (typeof rawValue !== 'string') {
+      continue;
+    }
+    // Security routing (spec 031 Slice 3, technical-considerations §2.2):
+    // resolve the trusted SCE context for this `(tagName, attrName)` pair
+    // from the static `ATTRIBUTE_SCE_CONTEXTS` map. The DOM-form attribute
+    // name lives in `$attr[name]` (e.g. `href`, `src`); fall back to the
+    // normalized name for attributes never present on the source DOM.
+    const domName = (internals as unknown as AttributesImpl).$attr[name] ?? name;
+    const ctx = resolveAttributeSceContext(tagName, domName);
+
+    // The eager pass runs at LINK time. Under SCE strict mode (default
+    // ON) `$interpolate` THROWS synchronously when a trusted-context
+    // template has surrounding literal text or more than one expression
+    // (e.g. `href="/u/{{id}}"`). A raw throw here would abort linking of
+    // the whole element, so we catch it, route via the exception handler
+    // (cause `'$compile'`, already used by every other `$compile`/`$set`
+    // site — no new `EXCEPTION_HANDLER_CAUSES` entry), and skip wiring
+    // THIS single attribute. The rest of the element still links.
+    let interpolateFn: InterpolateFn | undefined;
+    try {
+      interpolateFn = interpolate(rawValue, true, ctx);
+    } catch (err) {
+      if (exceptionHandler !== undefined) {
+        invokeExceptionHandler(exceptionHandler, err, '$compile');
+      }
+      // Do NOT cache a classification — leave this attribute unclassified
+      // so a later `$observe` can still attempt its own (lazy) handling.
+      continue;
+    }
+
+    if (interpolateFn === undefined) {
+      // STATIC — cache the sentinel on the master path; no watch, no DOM
+      // write. (Clones don't touch the shared cache.)
+      if (!isClone) {
+        internals.$$interpolators.set(name, null);
+      }
+      continue;
+    }
+
+    if (isClone) {
+      // CLONE path — write directly to the clone's live attribute. The
+      // clone's scope tears the watch down on `$destroy`, so there is no
+      // leak when the row / branch is removed. `$observe` integration is
+      // a master-element concern (directive link receives the master
+      // `attrs`); the clone simply keeps its own DOM attribute live.
+      const writeDomName = (internals as unknown as AttributesImpl).$attr[name] ?? camelToKebab(name);
+      const cloneElement = isElement(target) ? target : undefined;
+      if (cloneElement === undefined) {
+        continue;
+      }
+      scope.$watch(interpolateFn, (newValue) => {
+        if (newValue === undefined) {
+          cloneElement.removeAttribute(writeDomName);
+        } else {
+          cloneElement.setAttribute(writeDomName, newValue);
+        }
+      });
+      continue;
+    }
+
+    // MASTER path — cache the parsed fn and install the single owning
+    // watch routed through `attrs.$set(name, …, true)` so the live DOM
+    // attribute updates AND `$$observers` are notified through the
+    // existing iteration.
+    internals.$$interpolators.set(name, interpolateFn);
+    scope.$watch(interpolateFn, (newValue) => {
+      attrs.$set(name, newValue ?? null, true);
+    });
+  }
+}
+
+/**
+ * Static `(tagName, attrName) → SceContext` security map (spec 031
+ * Slice 3, technical-considerations §2.2). Interpolated link/source
+ * attributes route through `$interpolate`'s already-wired trusted-context
+ * support so the framework's URL-safety rules apply uniformly.
+ *
+ * The project has no `MEDIA_URL` context, so the upstream `img[src]` →
+ * `MEDIA_URL` mapping collapses to `URL` here.
+ *
+ * @example
+ * ```ts
+ * resolveAttributeSceContext('a', 'href');   // → SCE_CONTEXTS.URL
+ * resolveAttributeSceContext('img', 'src');  // → SCE_CONTEXTS.URL
+ * resolveAttributeSceContext('div', 'title'); // → undefined (plain text)
+ * ```
+ */
+const ATTRIBUTE_SCE_CONTEXTS: Readonly<Record<string, Readonly<Record<string, SceContext>>>> = {
+  a: { href: SCE_CONTEXTS.URL },
+  area: { href: SCE_CONTEXTS.URL },
+  img: { src: SCE_CONTEXTS.URL },
+};
+
+function resolveAttributeSceContext(tagName: string | undefined, attrName: string): SceContext | undefined {
+  if (tagName === undefined) {
+    return undefined;
+  }
+  return ATTRIBUTE_SCE_CONTEXTS[tagName]?.[attrName];
 }

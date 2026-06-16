@@ -6,7 +6,7 @@ It is NOT a copy-paste implementation guide.
 # Technical Specification: Template Interpolation in the Compiler (Text & Attribute Bindings)
 
 - **Functional Specification:** `context/spec/031-template-interpolation/functional-spec.md`
-- **Status:** Approved
+- **Status:** Completed
 - **Author(s):** Mgrdich
 
 ---

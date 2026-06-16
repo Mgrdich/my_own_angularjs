@@ -114,7 +114,9 @@ import type { CompileOptions, CompileService, Directive, Linker, LinkFn, Attribu
 import { wireIsolateBindings, type NormalizedBindingMap } from './isolate-bindings';
 import { ChangesQueue, flushChangesQueue, hasHook, invokeHook, UNINITIALIZED_VALUE } from './lifecycle';
 import { NG_NON_BINDABLE_NAME } from './ng-non-bindable';
-import { isComment, isElement } from './node-guards';
+import { SCRIPT_TEMPLATE_NAME } from './script-template';
+import { isComment, isElement, isText } from './node-guards';
+import { compileTextNode } from './text-interpolate';
 import { parseTemplate } from './template-parse';
 import { resolveRequireForm } from './require-resolver';
 import { captureChildren } from './transclude-capture';
@@ -814,6 +816,9 @@ export function createCompile(options: CompileOptions): CompileService {
     if (isComment(node)) {
       return compileElementOrComment(node, /* hasChildren */ false, queue);
     }
+    if (isText(node)) {
+      return compileTextNode(node, interpolate);
+    }
     return noopLinker;
   }
 
@@ -1205,11 +1210,21 @@ export function createCompile(options: CompileOptions): CompileService {
     // narrower semantic with a custom `terminal: true` directive plus
     // a child directive that asserted child compilation runs. Per the
     // spec 023 risk-mitigation guidance (tech-considerations §3), we
-    // narrow the broadened semantic to the `ngNonBindable` name only —
-    // every existing `terminal: true` consumer keeps the spec-017
-    // same-element-only behavior. Slice 6 ships `ng-non-bindable` and
-    // is the sole consumer of this opt-out path.
-    const hasNonBindableTerminal = effectiveDirectives.some((d) => d.terminal && d.name === NG_NON_BINDABLE_NAME);
+    // narrow the broadened semantic to a fixed allow-list of directive
+    // names rather than every `terminal: true` consumer — so custom
+    // `terminal: true` directives keep the spec-017 same-element-only
+    // behavior pinned by `terminal.test.ts`.
+    //
+    // Spec 031 adds `script` to the allow-list: now that text nodes are
+    // compiled (`{{ }}` interpolation), the body of a
+    // `<script type="text/ng-template">` would otherwise be interpolated
+    // and rendered live. AngularJS treats script-template bodies as raw
+    // template text (never interpolated where they stand), so `script`
+    // joins `ngNonBindable` as a no-descent halt — keeping the body
+    // structurally inert.
+    const haltsChildDescent = effectiveDirectives.some(
+      (d) => d.terminal && (d.name === NG_NON_BINDABLE_NAME || d.name === SCRIPT_TEMPLATE_NAME),
+    );
 
     // Snapshot children AFTER the compile loop runs. For transcluding
     // hosts the capture pass above already drained children, so the
@@ -1222,11 +1237,11 @@ export function createCompile(options: CompileOptions): CompileService {
     // template and are compiled inside the drain.
     const masterChildren: Node[] = [];
     let childLinker: NodeLinker = noopLinker;
-    if (hasChildren && !isAsyncTemplateHost && !hasNonBindableTerminal && isElement(node)) {
+    if (hasChildren && !isAsyncTemplateHost && !haltsChildDescent && isElement(node)) {
       const preCaptureChildren: Node[] = [];
       for (let i = 0; i < node.childNodes.length; i++) {
         const child = node.childNodes.item(i);
-        if (isElement(child) || isComment(child)) {
+        if (isElement(child) || isComment(child) || isText(child)) {
           preCaptureChildren.push(child);
         }
       }
@@ -1258,7 +1273,7 @@ export function createCompile(options: CompileOptions): CompileService {
       // `pairChildren` depends on.
       for (let i = 0; i < node.childNodes.length; i++) {
         const child = node.childNodes.item(i);
-        if (isElement(child) || isComment(child)) {
+        if (isElement(child) || isComment(child) || isText(child)) {
           masterChildren.push(child);
         }
       }
@@ -1516,7 +1531,13 @@ export function createCompile(options: CompileOptions): CompileService {
 
       const effectiveLinkEntries = deferCompileToLink ? liveLinkEntries : templateTimeLinkEntries;
 
-      bindAttrsToScope(attrs, scope, interpolate, exceptionHandler);
+      // Pass the resolved live `target` (the clone under a transclusion
+      // clone-map, else the master `node`) so the eager attribute-
+      // interpolation pass writes `{{...}}` results to the CLONE's live
+      // DOM attribute and installs an independent per-clone watch (spec
+      // 031 — text nodes already resolve their clone target the same way
+      // via the cloneMap indirection).
+      bindAttrsToScope(attrs, scope, interpolate, exceptionHandler, isElement(target) ? target : undefined);
 
       // ----- Spec 020 / Slice 4: per-element controller seam.
       //
@@ -1749,7 +1770,7 @@ export function createCompile(options: CompileOptions): CompileService {
     const childNodes: Node[] = [];
     for (let i = 0; i < element.childNodes.length; i++) {
       const child = element.childNodes.item(i);
-      if (isElement(child) || isComment(child)) {
+      if (isElement(child) || isComment(child) || isText(child)) {
         childNodes.push(child);
       }
     }
@@ -1974,15 +1995,16 @@ export function createCompile(options: CompileOptions): CompileService {
  * child lists are guaranteed structurally aligned because the parent
  * is a deep clone produced by `Node.cloneNode(true)`.
  *
- * The filter mirrors the live walker — only Element and Comment
- * children participate in the per-node linkers, so only those are
- * paired (Text nodes carry no directive matches and are skipped).
+ * The filter mirrors the live walker — Element, Comment, and Text
+ * children all participate in the per-node linkers (text nodes carry
+ * `{{ }}` interpolation bindings since spec 031), so all three are
+ * paired index-by-index.
  */
 function pairChildren(masters: readonly Node[], cloneParent: Element, parentMap: Map<Node, Node>) {
   const cloneChildren: Node[] = [];
   for (let i = 0; i < cloneParent.childNodes.length; i++) {
     const child = cloneParent.childNodes.item(i);
-    if (isElement(child) || isComment(child)) {
+    if (isElement(child) || isComment(child) || isText(child)) {
       cloneChildren.push(child);
     }
   }

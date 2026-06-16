@@ -2471,6 +2471,119 @@ compiler-internal — NOT exported from `@compiler/index` or the root
 barrel; it re-implements a narrow subset of the parser's internal `assign`
 machinery because the parser does not publicly expose that helper.
 
+## Template interpolation (spec 031)
+
+Spec 031 closes the biggest remaining hole in the templating story: the
+ability to write `{{ expression }}` directly in markup — inside element
+text AND inside attribute values — and have it evaluate and stay in sync
+with the data, with NO directive required. This mirrors AngularJS's two
+synthetic interpolation directives (`addTextInterpolateDirective` /
+`addAttrInterpolateDirective`), adapted to this codebase's existing seams
+(the walker + the `Attributes` instance) rather than as new directives.
+Both reuse the `$interpolate` collaborator already threaded through the
+walker, so custom delimiters and null/undefined→`''` are inherited for
+free. `EXCEPTION_HANDLER_CAUSES` stays at 10 — interpolation adds NO new
+cause token.
+
+### Text-node interpolation
+
+Before spec 031 the walker skipped `Text` nodes entirely. Now
+`compileNode` dispatches every text node to `compileTextNode`
+(`src/compiler/text-interpolate.ts`):
+
+- Text containing NO `{{ … }}` is **static** — `compileTextNode` returns
+  a no-op linker, so a pure-literal `<p>Just text</p>` installs ZERO
+  watches and costs nothing per digest.
+- Text containing at least one expression installs a single
+  `scope.$watch(interpolateFn, …)` whose listener writes the rendered
+  string to the node's `textContent`. Surrounding literal characters
+  (commas, whitespace, newlines) are preserved verbatim; non-string and
+  `null` / `undefined` values render as `''`, never `"undefined"`.
+
+```html
+<h1>Hello {{name}}</h1>   <!-- renders "Hello World", updates live -->
+<p>{{greeting}}, {{name}}!</p>  <!-- multiple expressions, literals kept -->
+<p>Just text</p>          <!-- static — left as written, no watch -->
+```
+
+Transcluded clones (an `ng-if` / `ng-repeat` row) bind their OWN text
+node: the linker resolves the live target through the same `cloneMap`
+indirection every element linker uses (`cloneMap?.get(node) ?? node`), so
+each clone gets an independent watch torn down with its transclusion
+scope. The master fragment is never inserted.
+
+### Attribute interpolation — eager classification in `bindAttrsToScope`
+
+Attribute interpolation runs EAGERLY at link time. `bindAttrsToScope`
+(`src/compiler/attributes.ts`) — already called once per element before
+any directive's pre-link — gains a pass over every own normalized
+attribute. For each value it calls `interpolate(value, true, ctx?)`:
+
+- **Static** (no `{{ … }}`) — cache the `null` sentinel in the shared
+  `$$interpolators` map; install NO watch.
+- **Dynamic** — cache the `InterpolateFn` AND install exactly ONE
+  `scope.$watch(interpolateFn, …)` whose listener writes the resolved
+  value to the REAL DOM attribute via `$set(name, value ?? null, true)`
+  (`writeAttr: true` — auto-interpolation now OWNS the live DOM write).
+
+```html
+<div title="{{tooltip}}">       <!-- live title attribute -->
+<div class="box {{state}}">     <!-- mixed literal + expression → "box active" -->
+<img alt="{{caption}}" data-id="{{id}}" aria-label="{{label}}">
+```
+
+The `$$interpolators` cache is the **single source of truth** shared with
+`$observe`: because the eager pass classifies every attribute up front, a
+later `attrs.$observe('title', fn)` always finds a cached entry and never
+installs a competing watch — guaranteeing ONE watch per interpolated
+attribute. Observers ride the existing `$set` → `$$observers` iteration.
+
+**Transclusion-clone attributes.** The `Attributes` instance is built
+once per master element and shared across clone re-links, so the eager
+pass receives the resolved live `target` (the clone under a clone-map,
+else the master). When `target` differs from the master it writes the
+interpolated value to the CLONE's live attribute and installs an
+INDEPENDENT per-clone watch — so `<li ng-repeat="item in items"
+data-label="{{item}}">` gives each row its own correct `data-label`.
+
+### `href` / `src` trusted-context routing
+
+Interpolated link/source attributes route through `$interpolate`'s
+already-wired trusted-context support so the framework's URL-safety rules
+apply uniformly. A static `(tagName, attrName) → SceContext` map resolves
+the context — `a`/`area[href] → URL`, `img[src] → URL` (the project has
+no `MEDIA_URL`, so the upstream `img[src] → MEDIA_URL` mapping collapses
+to `URL`). The context is passed as the 3rd argument to
+`interpolate(value, true, ctx)`; a safe plain URL passes through and
+renders into the live attribute after digest.
+
+```html
+<a href="{{profileUrl}}">      <!-- URL trusted context; safe URL renders -->
+<img src="{{imageUrl}}">       <!-- URL trusted context -->
+```
+
+**Known limitation — surrounding-text URL under SCE strict mode.** With
+SCE strict mode ON (default), `$interpolate` enforces the "exactly one
+`{{expression}}`, no surrounding literal text" rule for trusted contexts.
+So `href="/users/{{id}}"` (literal `/users/` + an expression) THROWS at
+classification time. The eager pass runs at LINK time, so a raw throw
+there would abort linking of the whole element. Instead the per-attribute
+`interpolate(...)` call is wrapped in `try/catch`: the throw is routed via
+the `$exceptionHandler` (cause `'$compile'` — no new cause token), that
+SINGLE attribute is skipped, and the rest of the element still links and
+keeps digesting. Plain (non-URL) attributes are unaffected by the rule.
+Use `ng-href` (which observes the `ng-*` name and writes the real `href`)
+when you need surrounding text in a URL attribute.
+
+### Custom delimiters & first-render flash
+
+Configured custom start/end symbols (`$interpolateProvider.startSymbol`/
+`endSymbol`) are honored for BOTH text and attributes — the compiler
+passes raw text through `$interpolate` unchanged. Until the first digest
+runs the raw `{{ }}` markup may briefly be visible (parity with
+AngularJS); `ng-cloak` / `ng-bind` / `ng-href` / `ng-src` remain the
+flash-free options.
+
 ## Deferred items
 
 Spec 017 deliberately stops at the compiler core. The following are
