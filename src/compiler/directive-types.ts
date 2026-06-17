@@ -542,6 +542,35 @@ export interface DirectiveDefinition {
    * ```
    */
   require?: string | string[] | Record<string, string>;
+  /**
+   * Opt-in for ranged (multi-element) `<name>-start` / `<name>-end`
+   * support (spec 033). Defaults to `false`. When `true`, the directive
+   * may be applied across a RANGE of sibling elements by marking the
+   * first element with `<name>-start` and the matching last element with
+   * `<name>-end`; the directive then operates on the start element, the
+   * end element, and every node in between as one group.
+   *
+   * The grouping is depth-aware (nested same-named ranges resolve by
+   * counting `-start` / `-end` pairs), and a `-start` with no matching
+   * `-end` routes
+   * {@link import('./compile-error').UnterminatedMultiElementDirectiveError}
+   * via `$exceptionHandler('$compile')` at compile time, leaving the DOM
+   * untouched.
+   *
+   * `multiElement` only activates on the `-start` suffix — the ordinary
+   * single-element form of the directive is completely unaffected.
+   *
+   * @example
+   * ```ts
+   * // <tr ng-repeat-start="r in rows">…</tr><tr ng-repeat-end>…</tr>
+   * $compileProvider.directive('ngRepeat', () => ({
+   *   multiElement: true,
+   *   transclude: 'element',
+   *   // … compile / link …
+   * }));
+   * ```
+   */
+  multiElement?: boolean;
 }
 
 /**
@@ -799,6 +828,16 @@ export interface Directive {
    * directive stays cheap and the resolver owns the lazy parsing.
    */
   require?: string | string[] | Record<string, string>;
+  /**
+   * Post-normalize `multiElement` flag (spec 033). Defaults to `false`.
+   * When `true`, the directive collector recognizes the `<name>-start` /
+   * `<name>-end` ranged form for this directive and the compiler groups
+   * the start→end sibling range into one unit (Mode A — `transclude:
+   * 'element'` directives capture the whole range as the transclusion
+   * master). Normalized from the factory's `multiElement` field by
+   * `normalizeDirective` like the other boolean flags.
+   */
+  multiElement: boolean;
 }
 
 /**

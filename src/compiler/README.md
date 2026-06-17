@@ -2584,6 +2584,114 @@ runs the raw `{{ }}` markup may briefly be visible (parity with
 AngularJS); `ng-cloak` / `ng-bind` / `ng-href` / `ng-src` remain the
 flash-free options.
 
+## Multi-element / ranged directives (spec 033)
+
+Some directives need to apply across a **range of sibling elements**, not
+just a single host — `<tr>` rows inside a `<table>`, `<option>`s inside a
+`<select>`, `<dt>`/`<dd>` pairs inside a `<dl>` — where there is no legal
+wrapper element to host a single directive. AngularJS solves this with
+paired `<name>-start` / `<name>-end` suffixes: the directive applies to
+the start element, the end element, and **everything between them**,
+treated as one group. Spec 033 ships the parity feature.
+
+### The `multiElement` flag
+
+Ranged support is opt-in via a single DDO field:
+
+```ts
+$compileProvider.directive('myRange', () => ({
+  multiElement: true, // opt in to <my-range-start> / <my-range-end>
+  link: (scope, element) => { /* … */ },
+}));
+```
+
+The flag normalizes to `false` by default; only directives that set
+`multiElement: true` participate in `-start` / `-end` grouping. The
+ordinary single-element form of EVERY ranged directive continues to work
+exactly as before — the feature is purely additive. A custom (developer-
+authored) directive opts in the same way the built-ins do.
+
+### The depth-aware range scan
+
+When an element carries `<name>-start` for a `multiElement` directive, the
+compiler walks `nextSibling` collecting the inclusive group up to the
+matching `<name>-end`. The scan in `src/compiler/multi-element-range.ts`
+(`collectMultiElementRange`) is **depth-aware**: a nested `<name>-start`
+increments depth and a `<name>-end` decrements it, so nested same-named
+ranges (`ng-repeat-start` inside another `ng-repeat-start`) resolve to the
+correct matching end. The helper is **pure-read** — it never mutates the
+DOM and never throws; it returns a discriminated union
+(`{ ok: true; nodes } | { ok: false; reason: 'unterminated' }`). The
+collected `nodes` array includes **text and comment nodes** between the
+endpoints, so spec-031 text interpolation and authored comments inside the
+range survive cloning.
+
+### Mode A — ranged `transclude: 'element'` directives
+
+`ng-repeat`, `ng-if`, `ng-switch-when`, and `ng-switch-default` are
+`transclude: 'element'` directives. For the ranged form, the WHOLE range
+is captured as the transclusion master — the spec-027 `kind: 'element'`
+capture in `src/compiler/transclude-capture.ts` is generalized from a
+single-host `defaultBucket: [host]` to `defaultBucket: [...range]`. The
+entire range is replaced by ONE Comment placeholder, and `$transclude`
+deep-clones the whole range per iteration / branch. The four directives'
+links were extended to insert / move / remove all top-level cloned nodes
+as one group; the single-element path is preserved unchanged.
+
+### Mode B — ranged non-transclude directives
+
+`ng-show`, `ng-hide`, and `ng-class` are not transclusion directives. For
+the ranged form the directive is applied to **every node** in the range:
+the start element's expression is propagated onto each range element, and
+the normal per-element link runs the directive there. The net effect is
+one watch per range node, all bound to the same expression, so the whole
+group toggles / styles together. This is a deliberate
+clarity-over-performance choice — AngularJS links once against a single
+node collection; this project links per node — with identical observable
+behavior.
+
+### Unterminated range
+
+A `<name>-start` with no matching `<name>-end` sibling routes
+`UnterminatedMultiElementDirectiveError` via `$exceptionHandler('$compile')`
+at compile time. The error is detected BEFORE any capture or node removal,
+so the DOM is left **untouched** — an unterminated range never leaves a
+half-grouped tree behind. No new `EXCEPTION_HANDLER_CAUSES` token — the
+existing `'$compile'` cause is reused (the tuple stays at 10).
+
+### The parity built-in set
+
+The seven built-ins that set `multiElement: true`:
+
+| Mode | Directives |
+| --- | --- |
+| **A** (`transclude: 'element'`) | `ng-repeat`, `ng-if`, `ng-switch-when`, `ng-switch-default` |
+| **B** (per-node link) | `ng-show`, `ng-hide`, `ng-class` |
+
+### Worked example — repeating `<tr>` pairs
+
+The canonical case: repeating two `<tr>` rows together for each record,
+where the rows cannot share a wrapper element inside the `<table>`:
+
+```html
+<table>
+  <tr ng-repeat-start="record in records">
+    <td>{{ record.name }}</td>
+  </tr>
+  <tr ng-repeat-end>
+    <td>{{ record.detail }}</td>
+  </tr>
+</table>
+```
+
+Both `<tr>` rows are captured as one transclusion master, replaced by a
+single `<!-- ngRepeat: record in records -->` Comment placeholder, and
+cloned together once per record — preserving order. Nodes between the two
+endpoints (whitespace, comments, additional elements) are part of the
+group and repeat with it. Toggling, styling, or selecting a range with
+`ng-if-start`/`-end`, `ng-show-start`/`-end`, `ng-class-start`/`-end`, or
+`ng-switch-when-start`/`-end` follows the same whole-range semantics.
+
 ## Deferred items
 
 Spec 017 deliberately stops at the compiler core. The following are
@@ -2643,7 +2751,9 @@ do not produce observable behavior in this spec:
   & element-override directives (spec 030)" above). The remaining
   built-ins (`ng-model` and the rest) ship under their own roadmap items.
 - **Multi-element directives** (`multiElement: true`, `*-start` /
-  `*-end` pairs) — deferred; lands alongside `ng-repeat`.
+  `*-end` pairs) shipped with spec 033 — see
+  [Multi-element / ranged directives (spec 033)](#multi-element--ranged-directives-spec-033)
+  above.
 - **Module DSL `.directive(...)` shorthand** on `createModule` —
   registration in spec 017 is config-block-only via
   `$compileProvider.directive`. The `module.directive` shorthand is a

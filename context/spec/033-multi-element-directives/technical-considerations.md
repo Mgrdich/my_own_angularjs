@@ -6,7 +6,7 @@ It is NOT a copy-paste implementation guide.
 # Technical Specification: Multi-element / Ranged Directives (`*-start` / `*-end`)
 
 - **Functional Specification:** `context/spec/033-multi-element-directives/functional-spec.md`
-- **Status:** Draft
+- **Status:** Completed
 - **Author(s):** Mgrdich
 
 ---
@@ -21,7 +21,7 @@ AngularJS handles ranged directives by, during directive collection, detecting a
    - `transclude: 'element'` directives (`ng-if`, `ng-repeat`, `ng-switch-when`, `ng-switch-default`) → capture the **whole range** as the transclusion master (generalizing today's single-host `defaultBucket: [host]` to `[...range]`), replace the range with one Comment placeholder, and let `$transclude` clone the whole range per iteration/branch.
    - non-transclude directives (`ng-show`, `ng-hide`, `ng-class`) → apply the directive to **every node** in the range (each grouped node links the directive with the start element's expression), so the effect covers the whole group.
 
-**Prerequisite:** spec 032 (structural-directive correctness). The ranged transclude path reuses the same clone re-link machinery; without 034's cleanup, every ranged row/branch would also emit the spurious `$compile` notice.
+**Prerequisite:** spec 032 (structural-directive correctness). The ranged transclude path reuses the same clone re-link machinery; without 032's cleanup, every ranged row/branch would also emit the spurious `$compile` notice.
 
 **Affected systems:** `@compiler` (`directive-types.ts`, `directive-collector.ts`, `transclude-capture.ts`, `compile.ts`, `compile-error.ts`). The seven built-in directive files gain only the `multiElement: true` flag — their link logic is unchanged.
 
@@ -49,9 +49,9 @@ AngularJS handles ranged directives by, during directive collection, detecting a
 | Change | Detail |
 | --- | --- |
 | Form the group | When `compileElementOrComment` encounters an element matched by a `multiElement` directive via `-start`, build the range via `collectMultiElementRange` before the transclude pre-pass. |
-| Mode A — `transclude: 'element'` | Generalize the `kind: 'element'` capture in `transclude-capture.ts` to accept a node **range**: `defaultBucket: [...range]` (instead of `[host]`), insert ONE Comment placeholder before the first range node, and remove EVERY range node from the DOM. Everything downstream (placeholder linker, `$transclude` deep-clone of the bucket, spec-034 clone re-link, `addElementCleanup`) already handles a multi-node bucket — the master fragment is simply N nodes instead of 1. The directive's link still receives the single Comment placeholder. |
+| Mode A — `transclude: 'element'` | Generalize the `kind: 'element'` capture in `transclude-capture.ts` to accept a node **range**: `defaultBucket: [...range]` (instead of `[host]`), insert ONE Comment placeholder before the first range node, and remove EVERY range node from the DOM. Everything downstream (placeholder linker, `$transclude` deep-clone of the bucket, spec-032 clone re-link, `addElementCleanup`) already handles a multi-node bucket — the master fragment is simply N nodes instead of 1. The directive's link still receives the single Comment placeholder. |
 | Mode B — non-transclude | For a `multiElement` directive that does NOT declare `transclude`, attach the directive to each node in the range: propagate the start element's attribute value as `attrs[base]` on each grouped node and let the normal per-element link apply the directive there. Net effect: one watch per grouped node, all bound to the same expression, so `ng-show`/`ng-hide`/`ng-class` toggle/style the whole range together. Deliberate clarity-over-performance choice (AngularJS links once against a node collection; we link per node — identical observable behavior). |
-| Re-entrancy / terminal | Mode A reuses the spec-034-cleaned re-entrancy guard (the structural directive is excluded from the clone of the range, so it does not re-fire). The same-element multi-structural conflict detection (spec 032) still applies if two structural directives target the same start element. |
+| Re-entrancy / terminal | Mode A reuses the spec-032-cleaned re-entrancy guard (the structural directive is excluded from the clone of the range, so it does not re-fire). The same-element multi-structural conflict detection (spec 032) still applies if two structural directives target the same start element. |
 
 ### 2.4 Logic / contracts (shared)
 
@@ -68,7 +68,7 @@ AngularJS handles ranged directives by, during directive collection, detecting a
   - **Depth tracking for nested same-named ranges** (`ng-repeat-start` inside another `ng-repeat-start`) — *Mitigation:* depth counter in `collectMultiElementRange`; explicit nested-range tests.
   - **Range spans non-element nodes** (whitespace/text/comments between `<tr>`s) — *Mitigation:* include all node types in the bucket so spec-031 text interpolation and comments inside the range survive cloning; tested.
   - **Mode B per-node watches diverge from single-collection semantics** — *Mitigation:* documented as an intentional clarity-over-performance deviation; assert identical observable behavior (all range nodes toggle/style together) in tests.
-  - **Interaction with the same-element terminal cutoff** — a `-start` element may also carry other directives; *Mitigation:* grouping runs alongside normal collection; reuse spec-034 conflict detection; pin spec-017/027/028 suites.
+  - **Interaction with the same-element terminal cutoff** — a `-start` element may also carry other directives; *Mitigation:* grouping runs alongside normal collection; reuse spec-032 conflict detection; pin spec-017/027/028 suites.
   - **Unterminated range corrupts the DOM** — *Mitigation:* detect + error before any capture/removal; leave the DOM untouched on the error path.
 
 ---
@@ -87,4 +87,4 @@ AngularJS handles ranged directives by, during directive collection, detecting a
   - **Errors:** missing `-end` → `UnterminatedMultiElementDirectiveError` via `'$compile'`, DOM untouched.
   - **Additivity:** single-element form of all seven directives unchanged (full spec 023/024/027/028 suites green).
   - **Custom opt-in:** a developer directive with `multiElement: true` works in the ranged form.
-  - **No-regression + spec 031/034:** interpolation inside a range renders; zero spurious `$compile` notices (depends on 034).
+  - **No-regression + spec 031/032:** interpolation inside a range renders; zero spurious `$compile` notices (depends on 032).

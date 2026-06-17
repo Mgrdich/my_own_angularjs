@@ -1,7 +1,7 @@
 # Functional Specification: Multi-element / Ranged Directives (`*-start` / `*-end`)
 
 - **Roadmap Item:** Directives & DOM Compilation — multi-element (`directiveName-start` / `directiveName-end`) ranged directives.
-- **Status:** Draft
+- **Status:** Completed
 - **Author:** Mgrdich
 
 ---
@@ -27,16 +27,16 @@ AngularJS solves this with paired `-start` / `-end` suffixes: you put `directive
 
 - **As a** developer, **I want to** mark a start and an end element with `directive-start` / `directive-end`, **so that** the directive applies to that whole range of sibling elements as a single group.
   - **Acceptance Criteria:**
-    - [ ] `<tr ng-repeat-start="item in items">…</tr><tr ng-repeat-end>…</tr>` repeats the **entire** start→end group once per item, preserving order.
-    - [ ] Elements that sit **between** the start and end elements (not only the two endpoints) are part of the group and are repeated / toggled / styled with it.
-    - [ ] `ng-if-start` / `ng-if-end` mounts and unmounts the whole range together; toggling the condition adds or removes every element in the range.
-    - [ ] `ng-show-start` / `ng-show-end` and `ng-hide-start` / `ng-hide-end` show or hide every element in the range together.
-    - [ ] `ng-switch-when-start` / `ng-switch-when-end` and `ng-switch-default-start` / `ng-switch-default-end` select the whole range as one case.
-    - [ ] `ng-class-start` / `ng-class-end` applies the computed classes to every element in the range.
-    - [ ] Other directives — including nested ranged directives — placed **inside** the range continue to work normally.
-    - [ ] If a `-start` element has no matching `-end` sibling, the framework reports a clear error that identifies the unterminated directive (AngularJS parity).
-    - [ ] The ordinary single-element form of every one of these directives continues to work exactly as before — the ranged form is purely additive.
-    - [ ] A custom (developer-authored) directive can opt in to ranged support and behave the same way.
+    - [x] `<tr ng-repeat-start="item in items">…</tr><tr ng-repeat-end>…</tr>` repeats the **entire** start→end group once per item, preserving order.
+    - [x] Elements that sit **between** the start and end elements (not only the two endpoints) are part of the group and are repeated / toggled / styled with it.
+    - [x] `ng-if-start` / `ng-if-end` mounts and unmounts the whole range together; toggling the condition adds or removes every element in the range.
+    - [x] `ng-show-start` / `ng-show-end` and `ng-hide-start` / `ng-hide-end` show or hide every element in the range together.
+    - [x] `ng-switch-when-start` / `ng-switch-when-end` and `ng-switch-default-start` / `ng-switch-default-end` select the whole range as one case.
+    - [x] `ng-class-start` / `ng-class-end` applies the computed classes to every element in the range.
+    - [x] Other directives — including nested ranged directives — placed **inside** the range continue to work normally.
+    - [x] If a `-start` element has no matching `-end` sibling, the framework reports a clear error that identifies the unterminated directive (AngularJS parity).
+    - [x] The ordinary single-element form of every one of these directives continues to work exactly as before — the ranged form is purely additive.
+    - [x] A custom (developer-authored) directive can opt in to ranged support and behave the same way.
 
 ---
 

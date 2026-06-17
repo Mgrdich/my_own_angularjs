@@ -92,6 +92,7 @@ import type { Scope } from '@core/index';
 import { invokeExceptionHandler, type ExceptionHandler } from '@exception-handler/index';
 
 import { bindAttrsToScope } from './attributes';
+import { camelToKebab } from './attribute-name-utils';
 import { addElementCleanup, setElementScope, setIsolateHostScope } from './cleanup';
 import {
   MultipleIsolateScopeError,
@@ -100,6 +101,7 @@ import {
   RequiredTranscludeSlotUnfilledError,
   TemplateFunctionReturnedNonStringError,
   TemplateUrlFunctionReturnedNonStringError,
+  UnterminatedMultiElementDirectiveError,
 } from './compile-error';
 import { describeValue } from './describe-value';
 import { collectDirectives } from './directive-collector';
@@ -119,6 +121,7 @@ import { isComment, isElement, isText } from './node-guards';
 import { compileTextNode } from './text-interpolate';
 import { parseTemplate } from './template-parse';
 import { resolveRequireForm } from './require-resolver';
+import { collectMultiElementRange } from './multi-element-range';
 import { captureChildren } from './transclude-capture';
 import { compileBuckets } from './transclude-compile';
 import { buildTranscludeFn } from './transclude-fn';
@@ -874,7 +877,7 @@ export function createCompile(options: CompileOptions): CompileService {
     hasChildren: boolean,
     queue: DeferredTemplateEntry[],
   ): NodeLinker {
-    const { directives, attrs } = collectDirectives(node, getDirectivesByName);
+    const { directives, attrs, multiElementStarts } = collectDirectives(node, getDirectivesByName);
 
     // Slice 10 — `scope: true` detection (FS §2.12). Decide ONCE at
     // compile time whether THIS node needs its own child scope.
@@ -987,6 +990,105 @@ export function createCompile(options: CompileOptions): CompileService {
     let transcludeMasters: Node[] = [];
     let transcludeNamedMasters: Record<string, Node[]> = {};
     let transcludeUnfilledRequired: string[] = [];
+
+    // ----- Spec 033 / Slice 1: multi-element (ranged) grouping (Mode A) -----
+    //
+    // When the winning transcluding directive (`kind: 'element'`) matched
+    // via the `<name>-start` ranged form, group the start element through
+    // its matching depth-aware `<name>-end` sibling into one node range.
+    // The range becomes the transclusion master so `$transclude` clones
+    // the WHOLE group per iteration/branch. An unterminated range routes
+    // `UnterminatedMultiElementDirectiveError` via '$compile' and goes
+    // inert with the DOM left UNTOUCHED — `collectMultiElementRange` is a
+    // pure read, so no partial mutation needs undoing.
+    let multiElementRange: Node[] | undefined;
+    if (
+      transcludingDirective !== null &&
+      transcludingDirective.transclude !== undefined &&
+      transcludingDirective.transclude.kind === 'element' &&
+      transcludingDirective.multiElement &&
+      isElement(node) &&
+      multiElementStarts.has(transcludingDirective.name)
+    ) {
+      const result = collectMultiElementRange(node, transcludingDirective.name);
+      if (!result.ok) {
+        // Unterminated — `directive.name` is the normalized base; the
+        // DOM-form `-start` / `-end` markers are derived for the message.
+        const startAttr = attrs.$attr[transcludingDirective.name] ?? `${transcludingDirective.name}Start`;
+        const endAttr = `${transcludingDirective.name}-end`;
+        invokeExceptionHandler(
+          exceptionHandler,
+          new UnterminatedMultiElementDirectiveError(transcludingDirective.name, startAttr, endAttr),
+          '$compile',
+        );
+        return noopLinker;
+      }
+      multiElementRange = result.nodes;
+    }
+
+    // ----- Spec 033 / Slice 3: multi-element (ranged) grouping (Mode B) -----
+    //
+    // A `multiElement` directive that does NOT declare `transclude`
+    // (`ng-show`, `ng-hide`, `ng-class`, and any custom opt-in directive)
+    // cannot capture/clone a range — instead the ranged form applies the
+    // SAME directive to EVERY node in the range. We achieve this by
+    // propagating the start element's directive expression — already
+    // populated as `attrs[base]` by the collector — onto each subsequent
+    // RANGE ELEMENT as its bare `<base>` DOM attribute. The outer
+    // walker's `compileNodes` map then visits those siblings (which sit
+    // AFTER this start element in the same snapshot), the collector
+    // matches the directive on each via the freshly-written attribute, and
+    // the normal per-element link installs the directive there. Net effect:
+    // one watch per grouped node, all bound to the same expression, so the
+    // whole range toggles/styles together.
+    //
+    // This is a DELIBERATE clarity-over-performance choice: AngularJS links
+    // the directive ONCE against a node collection, whereas we link it
+    // per node. The observable behavior is identical — every range node
+    // reflects the same expression in lock-step. Text / comment nodes in
+    // the range carry no directives and are skipped; the start element
+    // already matched directly via `<base>-start`, so it is skipped too.
+    //
+    // Dispatch is on `transclude === undefined`: a `multiElement`
+    // directive could be Mode A (transclude: 'element') OR Mode B
+    // (non-transclude). The Mode A path above already consumed the
+    // transclude case, so here we only handle non-transclude matches.
+    if (isElement(node) && multiElementStarts.size > 0) {
+      for (const directive of directives) {
+        if (!directive.multiElement || directive.transclude !== undefined) {
+          continue;
+        }
+        if (!multiElementStarts.has(directive.name)) {
+          continue;
+        }
+        const expr = attrs[directive.name];
+        if (typeof expr !== 'string') {
+          continue;
+        }
+        const result = collectMultiElementRange(node, directive.name);
+        if (!result.ok) {
+          const startAttr = attrs.$attr[directive.name] ?? `${directive.name}Start`;
+          const endAttr = `${directive.name}-end`;
+          invokeExceptionHandler(
+            exceptionHandler,
+            new UnterminatedMultiElementDirectiveError(directive.name, startAttr, endAttr),
+            '$compile',
+          );
+          return noopLinker;
+        }
+        const domAttrName = camelToKebab(directive.name);
+        // Skip the first node (the start element — already matched
+        // directly). Propagate the expression onto every other RANGE
+        // element so the per-element walker links the directive there.
+        for (let i = 1; i < result.nodes.length; i++) {
+          const rangeNode = result.nodes[i];
+          if (rangeNode !== undefined && isElement(rangeNode)) {
+            rangeNode.setAttribute(domAttrName, expr);
+          }
+        }
+      }
+    }
+
     if (transcludingDirective !== null && transcludingDirective.transclude !== undefined && isElement(node)) {
       transcludeDecl = transcludingDirective.transclude;
       // Defensively coerce the attribute lookup — `attrs[name]` may be
@@ -1012,7 +1114,7 @@ export function createCompile(options: CompileOptions): CompileService {
           enumerable: false,
         });
       }
-      const buckets = captureChildren(node, transcludeDecl, transcludingDirective.name, attrValue);
+      const buckets = captureChildren(node, transcludeDecl, transcludingDirective.name, attrValue, multiElementRange);
       const compiled = compileBuckets(
         { defaultBucket: buckets.defaultBucket, slotBuckets: buckets.slotBuckets },
         (nodes) => makeInternalLinker(nodes),
@@ -1020,6 +1122,30 @@ export function createCompile(options: CompileOptions): CompileService {
       defaultLinker = compiled.defaultLinker;
       slotLinkers = compiled.slotLinkers;
       transcludeMasters = buckets.defaultBucket;
+      // Spec 033 — for a multi-element range captured into a
+      // DocumentFragment, a NESTED ranged directive's compile (which ran
+      // inside `compileBuckets` above) may have REPLACED some range nodes
+      // with their own Comment placeholders inside the fragment. The
+      // default-bucket linker's per-node closures closed over the
+      // POST-capture nodes (each captured child's rebound placeholder),
+      // so the master list used for clone-pairing must be re-snapshotted
+      // from the fragment's CURRENT children — exactly mirroring the
+      // `masterChildren` re-snapshot for the nested single-host case
+      // below. The single-element form (host detached, `parentNode ===
+      // null`) is left untouched.
+      if (multiElementRange !== undefined) {
+        const firstMaster = buckets.defaultBucket[0];
+        const fragment = firstMaster?.parentNode ?? null;
+        if (fragment !== null) {
+          const reSnapshot: Node[] = [];
+          for (let i = 0; i < fragment.childNodes.length; i++) {
+            // `childNodes.item(i)` is non-null for every index in
+            // `[0, length)`; the loop bound guarantees the range.
+            reSnapshot.push(fragment.childNodes.item(i));
+          }
+          transcludeMasters = reSnapshot;
+        }
+      }
       transcludeNamedMasters = buckets.slotBuckets;
       transcludeUnfilledRequired = buckets.unfilledRequired;
       // Spec 027 Slice 2: rebind `node` to the Comment placeholder for

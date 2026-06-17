@@ -210,6 +210,11 @@ function ngClassFactory(): DirectiveFactoryReturn {
 
   return {
     restrict: 'A',
+    // Spec 033 — opt in to ranged `ng-class-start` / `ng-class-end`
+    // grouping. Non-transclude, so the compiler's Mode B path applies
+    // this directive to every node in the range (one watch per node,
+    // all bound to the same expression). The link logic is unchanged.
+    multiElement: true,
     link,
   };
 }

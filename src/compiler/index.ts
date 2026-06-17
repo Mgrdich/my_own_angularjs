@@ -36,6 +36,7 @@ export {
   TemplateFunctionReturnedNonStringError,
   TemplateUrlFunctionReturnedNonStringError,
   UndeclaredTranscludeSlotError,
+  UnterminatedMultiElementDirectiveError,
 } from './compile-error';
 export { parseBindingSpec, parseIsolateBindings, wireIsolateBindings } from './isolate-bindings';
 export type {

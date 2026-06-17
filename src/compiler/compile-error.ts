@@ -1062,3 +1062,37 @@ export class NgRefNoControllerError extends Error {
     );
   }
 }
+
+/**
+ * Thrown at COMPILE time (spec 033) when a ranged (multi-element)
+ * directive's `<name>-start` element has no matching `<name>-end`
+ * sibling — i.e. the forward sibling scan reaches the end of the parent's
+ * children with the depth counter still above zero. Mirrors AngularJS's
+ * `$compile:uterdir` ("Unterminated attribute") error.
+ *
+ * Routed via `$exceptionHandler('$compile')` from the compiler's range-
+ * grouping pass; the DOM is left UNTOUCHED (no capture, no node removal)
+ * so an unterminated range never leaves a half-grouped tree behind. No
+ * new `EXCEPTION_HANDLER_CAUSES` cause token — `'$compile'` is reused;
+ * the tuple stays at 10.
+ *
+ * The message names BOTH the unmatched `-start` attribute and the
+ * `-end` attribute that was expected, so the author can locate the
+ * offending element pair.
+ *
+ * @example
+ * ```ts
+ * // <div ng-repeat-start="i in items"></div> with no ng-repeat-end:
+ * // → UnterminatedMultiElementDirectiveError routed via
+ * //   $exceptionHandler('$compile'); no rows are mounted.
+ * ```
+ */
+export class UnterminatedMultiElementDirectiveError extends Error {
+  readonly name = 'UnterminatedMultiElementDirectiveError' as const;
+
+  constructor(directiveName: string, startAttr: string, endAttr: string) {
+    super(
+      `Unterminated multi-element directive "${directiveName}": found "${startAttr}" but no matching "${endAttr}" sibling.`,
+    );
+  }
+}

@@ -102,9 +102,14 @@ const COMMENT_DIRECTIVE_REGEX = /^\s*directive:\s*(\S+)\s*(.*?)\s*$/;
 export function collectDirectives(
   node: Element | Comment,
   getDirectivesByName: (name: string) => Directive[],
-): { directives: Directive[]; attrs: AttributesImpl } {
+): { directives: Directive[]; attrs: AttributesImpl; multiElementStarts: Set<string> } {
   const attrs = new AttributesImpl(node);
   const matched: Directive[] = [];
+  // Base directive names matched via the ranged `<base>-start` form
+  // (spec 033). The compiler reads this set to decide whether to build a
+  // node range before the transclude pre-pass.
+  const multiElementStarts = new Set<string>();
+  const writableAttrs = attrs as unknown as WritableAttrs;
 
   if (isElement(node)) {
     const element = node;
@@ -124,9 +129,38 @@ export function collectDirectives(
         continue;
       }
       const normalized = directiveNormalize(attr.name);
+      let matchedThisAttr = false;
       for (const directive of getDirectivesByName(normalized)) {
         if (directive.restrict.includes('A')) {
           matched.push(directive);
+          matchedThisAttr = true;
+        }
+      }
+      // Spec 033 — ranged `<base>-start` recognition. The bare
+      // `<base>` (handled above) is the single-element form and is
+      // unchanged. Only when the normalized attribute name ends in
+      // `Start` AND no plain directive matched it do we probe for a
+      // `multiElement` base directive: `ngRepeatStart` → base `ngRepeat`.
+      // The matched base directive(s) are added to the matched list with
+      // the directive's expression taken from the `-start` attribute's
+      // VALUE, exposed as `attrs[base]` (so `ng-repeat-start="i in items"`
+      // makes `attrs.ngRepeat === 'i in items'`). The `<base>End` name is
+      // recognized as part of the family but matches no directive on its
+      // own — it is purely the range terminator scanned in
+      // `multi-element-range.ts`.
+      if (!matchedThisAttr && normalized.length > 5 && normalized.endsWith('Start')) {
+        const base = normalized.slice(0, -'Start'.length);
+        let anyRanged = false;
+        for (const directive of getDirectivesByName(base)) {
+          if (directive.multiElement && directive.restrict.includes('A')) {
+            matched.push(directive);
+            anyRanged = true;
+          }
+        }
+        if (anyRanged) {
+          multiElementStarts.add(base);
+          writableAttrs[base] = attr.value;
+          attrs.$attr[base] = attr.name;
         }
       }
     }
@@ -163,6 +197,7 @@ export function collectDirectives(
   return {
     directives: applySortAndTerminalCutoff(sanitized, reentryStamp !== undefined),
     attrs,
+    multiElementStarts,
   };
 }
 

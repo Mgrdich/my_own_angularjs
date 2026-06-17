@@ -107,6 +107,7 @@ export {
   TemplateFunctionReturnedNonStringError,
   TemplateUrlFunctionReturnedNonStringError,
   UndeclaredTranscludeSlotError,
+  UnterminatedMultiElementDirectiveError,
   wireIsolateBindings,
 } from './compiler/index';
 export type {

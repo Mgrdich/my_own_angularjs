@@ -686,6 +686,7 @@ function normalizeDirective(name: string, factoryReturn: DirectiveFactoryReturn)
       link: linkFn,
       scope: false,
       bindToController: false,
+      multiElement: false,
     };
   }
 
@@ -874,6 +875,7 @@ function normalizeDirective(name: string, factoryReturn: DirectiveFactoryReturn)
     link: ddo.link,
     scope,
     bindToController,
+    multiElement: (ddo as { multiElement?: unknown }).multiElement === true,
   };
   if (transclude !== undefined) {
     directive.transclude = transclude;
