@@ -934,15 +934,20 @@ export function createCompile(options: CompileOptions): CompileService {
           alreadyElementTranscluded === directive.name &&
           directive.transclude.kind === 'element'
         ) {
-          // Re-entrancy guard: the master fragment's recompile pass
-          // sees the same directive whose `kind: 'element'` capture
-          // already ran. Strip transclude on a LOCAL copy so the
-          // directive's other behavior (compile / link / controller)
-          // still applies to the master, but the capture does NOT
-          // recur. Mirrors AngularJS's `terminalPriority`-based
-          // re-entry guard without introducing a new priority axis.
-          const stripped: Directive = { ...directive, transclude: undefined };
-          effectiveDirectives.push(stripped);
+          // Re-entrancy guard (spec 032 Slice 1): the master fragment's
+          // recompile pass sees the same `kind: 'element'` directive
+          // whose capture already ran on the OUTER pass. EXCLUDE it
+          // entirely from the clone's directive list — do NOT re-add it.
+          // The outer pass already created the Comment placeholder and
+          // runs the directive's link against that Comment; the clone is
+          // only the row/branch content and must NOT re-run the
+          // structural directive. Re-running it would fire the
+          // directive's link against a cloned Element and throw
+          // "expected placeholder to be a Comment" (caught + routed via
+          // '$compile') on every row/mount — the noise this fix removes.
+          // Skipping keeps `transcludingDirective` null on the
+          // re-entrant pass, so the capture does NOT recur — the
+          // AngularJS `maxPriority`/`terminalPriority` re-entry equivalent.
           continue;
         }
         if (transcludingDirective === null) {

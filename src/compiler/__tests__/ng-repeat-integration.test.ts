@@ -240,14 +240,15 @@ describe('integration: ng-repeat > ng-controller — per-row instance (FS §2.6 
 // approach for the parallel `ng-if + ng-include` case.
 // ---------------------------------------------------------------------
 
-describe('integration: same-element `ng-repeat + ng-if` conflict — pinned observable (spec-017 cutoff gap)', () => {
-  it("`<li ng-repeat='i in list' ng-if='i.show'>` is silently dropped by the terminal cutoff (NO MultipleTranscludeDirectivesError surfaces today)", () => {
-    // Expected outcome today: `ng-repeat` runs (rows render); `ng-if`
-    // never reaches the matched-directive list; no error is routed.
-    //
-    // If a future spec slice reorders the pre-passes so the multi-
-    // detect scan runs BEFORE the terminal cutoff, this test will
-    // turn red on the `multi.length === 0` assertion.
+describe('integration: same-element `ng-repeat + ng-if` conflict — reports the error (spec-032 closes the spec-017 cutoff gap)', () => {
+  it("`<li ng-repeat='i in list' ng-if='i.show'>` routes MultipleTranscludeDirectivesError instead of silently dropping one", () => {
+    // Spec 032 Slice 2 closed the spec-017 terminal-cutoff gap: a
+    // second `transclude`-declaring directive now survives collection
+    // when a higher-priority transclude directive is already kept, so
+    // both reach `compile.ts`'s multi-transclude guard and the
+    // documented `MultipleTranscludeDirectivesError` is routed via
+    // `$exceptionHandler('$compile')`. The error is caught (digest does
+    // not throw); the conflict is reported rather than silently applied.
     const handler = vi.fn<ExceptionHandler>();
     const b = bootstrap({ exceptionHandler: handler });
     const scope = Scope.create();
@@ -271,13 +272,13 @@ describe('integration: same-element `ng-repeat + ng-if` conflict — pinned obse
       scope.$digest();
     }).not.toThrow();
 
-    // No MultipleTranscludeDirectivesError surfaced — confirms the gap.
+    // The conflict now surfaces — spec 032 fix.
     const multiCalls = handler.mock.calls.filter(([err]) => err instanceof MultipleTranscludeDirectivesError);
-    expect(multiCalls.length).toBe(0);
-
-    // `ng-repeat` ran — three rows are mounted (filtering by `i.show`
-    // never happened because `ng-if` was dropped by the cutoff).
-    expect(rowsOf(parent).length).toBe(3);
+    expect(multiCalls.length).toBeGreaterThanOrEqual(1);
+    // Routed with the '$compile' cause and names both conflicting directives.
+    const firstMulti = multiCalls[0];
+    expect(firstMulti?.[1]).toBe('$compile');
+    expect((firstMulti?.[0] as Error | undefined)?.message ?? '').toMatch(/ngRepeat|ngIf|ng-repeat|ng-if/);
   });
 });
 

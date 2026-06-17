@@ -6,7 +6,7 @@ It is NOT a copy-paste implementation guide.
 # Technical Specification: Structural-Directive Correctness
 
 - **Functional Specification:** `context/spec/032-structural-directive-correctness/functional-spec.md`
-- **Status:** Draft
+- **Status:** Completed
 - **Author(s):** Mgrdich
 
 ---

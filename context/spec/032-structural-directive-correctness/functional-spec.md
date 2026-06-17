@@ -1,7 +1,7 @@
 # Functional Specification: Structural-Directive Correctness
 
 - **Roadmap Item:** Directives & DOM Compilation — structural-directive correctness cleanup.
-- **Status:** Draft
+- **Status:** Completed
 - **Author:** Mgrdich
 
 ---
@@ -29,16 +29,16 @@ The structural directives — `ng-if`, `ng-repeat`, `ng-switch`, `ng-include` �
 
 - **As a** developer, **I want** a clear error when I accidentally place two structural directives on one element, **so that** I fix the mistake immediately instead of debugging silently-wrong output.
   - **Acceptance Criteria:**
-    - [ ] `<div ng-if="show" ng-repeat="x in xs">` reports a clear error that names the conflicting directives; it does **not** silently render with only one of them applied.
-    - [ ] The same clear error appears for any pairing of two structural directives on one element (e.g. `ng-if` + `ng-include`, `ng-repeat` + `ng-switch-when`).
-    - [ ] The canonical workaround — nesting the directives on separate elements (`<div ng-if="show"><div ng-repeat="x in xs">…</div></div>`) — continues to work correctly.
+    - [x] `<div ng-if="show" ng-repeat="x in xs">` reports a clear error that names the conflicting directives; it does **not** silently render with only one of them applied.
+    - [x] The same clear error appears for any pairing of two structural directives on one element (e.g. `ng-if` + `ng-include`, `ng-repeat` + `ng-switch-when`).
+    - [x] The canonical workaround — nesting the directives on separate elements (`<div ng-if="show"><div ng-repeat="x in xs">…</div></div>`) — continues to work correctly.
 
 - **As a** developer, **I want** correct structural-directive usage to generate no internal error noise, **so that** my error handler and logs only show real problems.
   - **Acceptance Criteria:**
-    - [ ] A correct `<li ng-repeat="x in xs">{{x}}</li>` rendering several rows invokes the app's error handler **zero** times.
-    - [ ] The same zero-noise guarantee holds for `ng-if`, `ng-switch`, and `ng-include` across mount, update, and teardown.
-    - [ ] The rendered DOM, live updates on data change, and teardown behavior are all unchanged from today — this is a correctness cleanup, not a behavior change to output.
-    - [ ] Item reorder / reuse in `ng-repeat` (preserving focus, form values, and scroll position inside reused rows) continues to behave exactly as before.
+    - [x] A correct `<li ng-repeat="x in xs">{{x}}</li>` rendering several rows invokes the app's error handler **zero** times.
+    - [x] The same zero-noise guarantee holds for `ng-if`, `ng-switch`, and `ng-include` across mount, update, and teardown.
+    - [x] The rendered DOM, live updates on data change, and teardown behavior are all unchanged from today — this is a correctness cleanup, not a behavior change to output.
+    - [x] Item reorder / reuse in `ng-repeat` (preserving focus, form values, and scroll position inside reused rows) continues to behave exactly as before.
 
 ---
 

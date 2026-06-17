@@ -57,6 +57,7 @@
 import { AttributesImpl } from './attributes';
 import { directiveNormalize } from './directive-normalize';
 import type { Directive } from './directive-types';
+import { isNgManagedElement, NG_ELEMENT_TRANSCLUDED } from './element-slots';
 import { isElement } from './node-guards';
 
 /**
@@ -144,7 +145,25 @@ export function collectDirectives(
     collectCommentDirectives(node, attrs, matched, getDirectivesByName);
   }
 
-  return { directives: applySortAndTerminalCutoff(matched), attrs };
+  // On the re-entrant master pass of an element-form transclude (spec
+  // 027 Slice 2 / spec 032 Slice 1), the host carries the
+  // `NG_ELEMENT_TRANSCLUDED` stamp naming the winning structural
+  // directive. The same-element structural conflict (if any) was already
+  // reported on the OUTER pass; this pass only compiles the host as the
+  // CONTENT master. The winning directive is excluded downstream by
+  // `compile.ts`'s re-entrancy guard, but a SECOND transclude-declaring
+  // directive on the same host (e.g. `ng-repeat` alongside `ng-if`)
+  // would otherwise survive here, re-fire transclude capture, and recurse
+  // infinitely. Drop every NON-winner transclude directive on re-entry
+  // so the content master compiles with no competing structural directive.
+  const reentryStamp = isElement(node) && isNgManagedElement(node) ? node[NG_ELEMENT_TRANSCLUDED] : undefined;
+  const sanitized =
+    reentryStamp === undefined ? matched : matched.filter((d) => d.transclude === undefined || d.name === reentryStamp);
+
+  return {
+    directives: applySortAndTerminalCutoff(sanitized, reentryStamp !== undefined),
+    attrs,
+  };
 }
 
 /**
@@ -155,8 +174,32 @@ export function collectDirectives(
  * Shared helper used by both the Element and Comment branches of
  * `collectDirectives`. Keeps the priority + terminal contract
  * uniform regardless of how the directives were matched.
+ *
+ * **Spec 032 Slice 2 — same-element structural conflict exception.**
+ * The terminal cutoff would normally drop EVERY directive below the
+ * terminal's priority. That silently hid a structural-directive
+ * conflict: `<div ng-if="a" ng-repeat="x in xs">` sorts `ng-repeat`
+ * (1000, terminal) above `ng-if` (600), so the cutoff dropped `ng-if`
+ * at collection time and the documented `MultipleTranscludeDirectivesError`
+ * in `compile.ts` never fired (the spec-027 known gap). To close it,
+ * a SECOND directive declaring `transclude` (`!== undefined`) survives
+ * the cutoff when a higher-priority transclude-declaring directive is
+ * ALREADY in the kept list — so both reach `compile.ts`'s multi-
+ * transclude guard, which raises the error and strips the second's
+ * transclude.
+ *
+ * The exception is gated STRICTLY on `transclude !== undefined` — NOT
+ * on `terminal` — so an ordinary lower-priority directive below the
+ * cutoff is still dropped exactly as before (the spec-017
+ * `terminal.test.ts` contract is unaffected). Priority-DESCENDING
+ * ordering is preserved.
+ *
+ * `suppressConflictKeep` disables the exception on the re-entrant
+ * element-transclude master pass: the conflict was already reported on
+ * the outer pass, and keeping a second transclude directive there would
+ * recurse infinitely. See {@link collectDirectives} for the stamp check.
  */
-function applySortAndTerminalCutoff(matched: readonly Directive[]) {
+function applySortAndTerminalCutoff(matched: readonly Directive[], suppressConflictKeep: boolean) {
   const sorted = matched.slice().sort((a, b) => {
     if (a.priority !== b.priority) {
       return b.priority - a.priority;
@@ -165,15 +208,29 @@ function applySortAndTerminalCutoff(matched: readonly Directive[]) {
   });
 
   // Apply terminal cutoff. The list is priority-DESCENDING, so once
-  // we encounter anything below the cutoff, every subsequent entry
-  // is also below (and we can safely break).
+  // we encounter anything below the cutoff, every subsequent ordinary
+  // entry is also below it. We can no longer `break` outright because a
+  // below-cutoff `transclude`-declaring directive must survive to
+  // surface the same-element structural conflict (see the JSDoc above);
+  // ordinary below-cutoff directives are skipped via `continue`.
   let terminalPriority = -Infinity;
+  let transcludeKept = false;
   const directives: Directive[] = [];
   for (const directive of sorted) {
     if (directive.priority < terminalPriority) {
-      break;
+      // Narrow exception (spec 032 Slice 2): keep a second transclude
+      // directive so the conflict reaches `compile.ts`'s guard. Every
+      // other below-cutoff directive is dropped as before. Suppressed on
+      // the re-entrant element-transclude master pass to avoid recursion.
+      if (directive.transclude !== undefined && transcludeKept && !suppressConflictKeep) {
+        directives.push(directive);
+      }
+      continue;
     }
     directives.push(directive);
+    if (directive.transclude !== undefined) {
+      transcludeKept = true;
+    }
     if (directive.terminal && directive.priority > terminalPriority) {
       terminalPriority = directive.priority;
     }

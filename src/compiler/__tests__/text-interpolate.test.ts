@@ -32,16 +32,26 @@ interface InjectorLike {
 interface Bootstrap {
   $compile: CompileService;
   injector: InjectorLike;
+  /**
+   * Every call routed through the injected `$exceptionHandler` (spec 032
+   * Slice 1 — the transclusion-clone cases assert this stays empty, so
+   * the spec-031 `{{ }}`-in-clones path is pinned noise-free).
+   */
+  handlerCalls: { error: unknown; cause: unknown }[];
 }
 
 /**
  * Builds a `'ng'`-aware app graph so the built-in structural directives
  * are reachable. The optional `configure` callback runs in a config
  * block on the app module — used by the custom-delimiter case to swap
- * the `$interpolateProvider` start/end symbols.
+ * the `$interpolateProvider` start/end symbols. The app module's
+ * last-wins `$exceptionHandler` is a recording spy so the
+ * transclusion-clone cases can assert zero framework-internal noise on
+ * the spec-031 interpolation-in-clones path (spec 032 Slice 1).
  */
 function bootstrap(configure?: (interpolateProvider: $InterpolateProvider) => void): Bootstrap {
   resetRegistry();
+  const handlerCalls: { error: unknown; cause: unknown }[] = [];
   createModule('ng', [])
     .factory('$exceptionHandler', [() => (): void => undefined])
     .provider('$sceDelegate', $SceDelegateProvider)
@@ -56,6 +66,12 @@ function bootstrap(configure?: (interpolateProvider: $InterpolateProvider) => vo
     .provider('$compile', ['$provide', $CompileProvider]);
 
   const appModule = createModule('textInterpolateApp', ['ng']);
+  appModule.factory('$exceptionHandler', [
+    () =>
+      (error: unknown, cause: unknown): void => {
+        handlerCalls.push({ error, cause });
+      },
+  ]);
   if (configure !== undefined) {
     appModule.config([
       '$interpolateProvider',
@@ -68,6 +84,7 @@ function bootstrap(configure?: (interpolateProvider: $InterpolateProvider) => vo
   return {
     $compile: built.get('$compile'),
     injector: built,
+    handlerCalls,
   };
 }
 
@@ -257,6 +274,15 @@ describe('text interpolation — transclusion via ng-if (FS §2.1)', () => {
       scope.$digest();
     }).not.toThrow();
     expect(parent.querySelector('span')).toBeNull();
+
+    // Spec 032 Slice 1 — the ng-if clone re-link emits ZERO
+    // framework-internal noise: no "expected placeholder" throws routed
+    // via `$exceptionHandler`, and no handler calls at all across the
+    // mount → update → teardown cycle.
+    expect(
+      b.handlerCalls.filter((c) => c.error instanceof Error && /expected placeholder/i.test(c.error.message)),
+    ).toHaveLength(0);
+    expect(b.handlerCalls).toHaveLength(0);
   });
 });
 
@@ -290,6 +316,15 @@ describe('text interpolation — transclusion via ng-repeat (FS §2.1)', () => {
     expect(updated[0]?.textContent).toBe('Item: a');
     expect(updated[1]?.textContent).toBe('Item: B');
     expect(updated[2]?.textContent).toBe('Item: c');
+
+    // Spec 032 Slice 1 — each ng-repeat row's clone re-link emits ZERO
+    // framework-internal noise: no "expected placeholder" throws routed
+    // via `$exceptionHandler`, and no handler calls at all across the
+    // initial render + per-row update.
+    expect(
+      b.handlerCalls.filter((c) => c.error instanceof Error && /expected placeholder/i.test(c.error.message)),
+    ).toHaveLength(0);
+    expect(b.handlerCalls).toHaveLength(0);
   });
 });
 
