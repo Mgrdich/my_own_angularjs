@@ -65,6 +65,23 @@ import { camelToKebab } from './attribute-name-utils';
 import type { Attributes, AttributesObserveFn, AttributesSetFn } from './directive-types';
 import { directiveNormalize } from './directive-normalize';
 import { isComment, isElement } from './node-guards';
+import { sanitizeUri } from './sanitize-uri';
+
+/**
+ * The two config-phase URL safe-list patterns (spec 034 Slice 2),
+ * threaded from `$CompileProvider.$get` → `createCompile` →
+ * `bindAttrsToScope`. When present, the eager attribute-interpolation
+ * pass routes a resolved `a`/`area[href]` value through `sanitizeUri`
+ * against `aHref` and an `img[src]` / media value against `imgSrc`
+ * before writing the DOM attribute — a non-matching URL is neutralized
+ * with an `unsafe:` prefix. When `undefined` (standalone unit tests that
+ * never go through `createCompile`), URL attributes are written
+ * unchanged, preserving the pre-spec-034 passthrough.
+ */
+export interface UrlSanitizeConfig {
+  readonly aHref: RegExp;
+  readonly imgSrc: RegExp;
+}
 
 type ObserverFn = (value: string | undefined) => void;
 type BindToScopeFn = (scope: Scope, interpolate?: InterpolateService, exceptionHandler?: ExceptionHandler) => void;
@@ -576,10 +593,11 @@ export function bindAttrsToScope(
   interpolate?: InterpolateService,
   exceptionHandler?: ExceptionHandler,
   writeTarget?: Element | Comment,
+  urlSanitizeConfig?: UrlSanitizeConfig,
 ): void {
   (attrs as unknown as { bindToScope: BindToScopeFn }).bindToScope(scope, interpolate, exceptionHandler);
   if (interpolate !== undefined) {
-    eagerlyInterpolateAttributes(attrs, scope, interpolate, exceptionHandler, writeTarget);
+    eagerlyInterpolateAttributes(attrs, scope, interpolate, exceptionHandler, writeTarget, urlSanitizeConfig);
   }
 }
 
@@ -640,6 +658,7 @@ function eagerlyInterpolateAttributes(
   interpolate: InterpolateService,
   exceptionHandler?: ExceptionHandler,
   writeTarget?: Element | Comment,
+  urlSanitizeConfig?: UrlSanitizeConfig,
 ): void {
   const internals = attrs as unknown as AttributesInternals;
   const masterNode = internals.$$element;
@@ -679,6 +698,22 @@ function eagerlyInterpolateAttributes(
     // normalized name for attributes never present on the source DOM.
     const domName = (internals as unknown as AttributesImpl).$attr[name] ?? name;
     const ctx = resolveAttributeSceContext(tagName, domName);
+
+    // Spec 034 Slice 2 — resolve the URL safe-list kind for this
+    // `(tagName, attrName)` pair. `'href'` → link context (sanitize
+    // against `aHref`), `'media'` → image/source context (sanitize
+    // against `imgSrc`), `undefined` → not a URL attribute (no
+    // sanitization). When `urlSanitizeConfig` is absent (standalone unit
+    // tests bypassing `createCompile`), `sanitizeValue` is the identity
+    // so URL attributes pass through unchanged (pre-spec-034 behavior).
+    const urlKind = urlSanitizeConfig === undefined ? undefined : resolveUrlSanitizeKind(tagName, domName);
+    const sanitizeValue = (value: string): string => {
+      if (urlSanitizeConfig === undefined || urlKind === undefined) {
+        return value;
+      }
+      const isMediaUrl = urlKind === 'media';
+      return sanitizeUri(value, isMediaUrl, isMediaUrl ? urlSanitizeConfig.imgSrc : urlSanitizeConfig.aHref);
+    };
 
     // The eager pass runs at LINK time. Under SCE strict mode (default
     // ON) `$interpolate` THROWS synchronously when a trusted-context
@@ -724,7 +759,7 @@ function eagerlyInterpolateAttributes(
         if (newValue === undefined) {
           cloneElement.removeAttribute(writeDomName);
         } else {
-          cloneElement.setAttribute(writeDomName, newValue);
+          cloneElement.setAttribute(writeDomName, sanitizeValue(newValue));
         }
       });
       continue;
@@ -736,7 +771,7 @@ function eagerlyInterpolateAttributes(
     // existing iteration.
     internals.$$interpolators.set(name, interpolateFn);
     scope.$watch(interpolateFn, (newValue) => {
-      attrs.$set(name, newValue ?? null, true);
+      attrs.$set(name, newValue === undefined ? null : sanitizeValue(newValue), true);
     });
   }
 }
@@ -768,4 +803,44 @@ function resolveAttributeSceContext(tagName: string | undefined, attrName: strin
     return undefined;
   }
   return ATTRIBUTE_SCE_CONTEXTS[tagName]?.[attrName];
+}
+
+/**
+ * Discriminates which URL safe-list a `(tagName, attrName)` pair belongs
+ * to (spec 034 Slice 2):
+ *
+ * - `'href'` — link contexts (`a`/`area[href]`) → sanitize against the
+ *   `aHrefSanitizationTrustedUrlList` pattern.
+ * - `'media'` — image/source contexts (`img[src]`, `img[srcset]`,
+ *   `source[src]`, `source[srcset]`) → sanitize against the
+ *   `imgSrcSanitizationTrustedUrlList` pattern.
+ * - `undefined` — not a sanitized URL attribute.
+ *
+ * This is a SEPARATE map from {@link ATTRIBUTE_SCE_CONTEXTS} because the
+ * two layers answer different questions: SCE answers "which trust
+ * context governs interpolation", `sanitizeUri` answers "which scheme
+ * safe-list applies to the resolved string". Media `srcset` is included
+ * here (it is a URL-bearing attribute) even though it is not in the SCE
+ * map.
+ *
+ * @example
+ * ```ts
+ * resolveUrlSanitizeKind('a', 'href');     // → 'href'
+ * resolveUrlSanitizeKind('img', 'src');    // → 'media'
+ * resolveUrlSanitizeKind('img', 'srcset'); // → 'media'
+ * resolveUrlSanitizeKind('div', 'title');  // → undefined
+ * ```
+ */
+const URL_SANITIZE_KINDS: Readonly<Record<string, Readonly<Record<string, 'href' | 'media'>>>> = {
+  a: { href: 'href' },
+  area: { href: 'href' },
+  img: { src: 'media', srcset: 'media' },
+  source: { src: 'media', srcset: 'media' },
+};
+
+function resolveUrlSanitizeKind(tagName: string | undefined, attrName: string): 'href' | 'media' | undefined {
+  if (tagName === undefined) {
+    return undefined;
+  }
+  return URL_SANITIZE_KINDS[tagName]?.[attrName];
 }

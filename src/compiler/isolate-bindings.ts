@@ -47,10 +47,11 @@
 
 import type { Scope } from '@core/index';
 import { buildParentWriter } from '@compiler/expression-assign';
+import { invokeExceptionHandler, type ExceptionHandler } from '@exception-handler/index';
 import type { InterpolateService } from '@interpolate/interpolate-types';
 import { parse } from '@parser/index';
 
-import { InvalidIsolateBindingError } from './compile-error';
+import { InvalidIsolateBindingError, MissingComponentBindingError } from './compile-error';
 import type { Attributes } from './directive-types';
 
 /**
@@ -270,6 +271,32 @@ export interface WireIsolateBindingsArgs {
    * "bindings wired silently" behavior unchanged.
    */
   readonly onChange?: IsolateBindingChangeCallback;
+  /**
+   * Spec 034 Slice 3 — the config-phase `strictComponentBindingsEnabled`
+   * flag, threaded from {@link import('./directive-types').CompileOptions}.
+   * When `true`, a REQUIRED binding (`<` / `=` / `@` / `&` WITHOUT the
+   * `?` modifier) whose source attribute is ABSENT on the element routes
+   * {@link MissingComponentBindingError} via the supplied
+   * {@link WireIsolateBindingsArgs.exceptionHandler} with cause
+   * `'$compile'`. Omitted / `false` → today's lenient behavior (a missing
+   * required attribute leaves the local undefined / one-way degrades).
+   */
+  readonly strictComponentBindingsEnabled?: boolean;
+  /**
+   * Spec 034 Slice 3 — the run-phase `$exceptionHandler`, used to route
+   * {@link MissingComponentBindingError} when
+   * {@link WireIsolateBindingsArgs.strictComponentBindingsEnabled} is on
+   * and a required binding's source attribute is absent. Required for the
+   * strict report to fire; standalone callers that omit it (or omit the
+   * strict flag) skip the check entirely.
+   */
+  readonly exceptionHandler?: ExceptionHandler;
+  /**
+   * Spec 034 Slice 3 — the owning directive / component name, used only
+   * for the {@link MissingComponentBindingError} message under strict
+   * mode. Defaults to a stable placeholder when omitted.
+   */
+  readonly directiveName?: string;
 }
 
 /**
@@ -280,8 +307,38 @@ export interface WireIsolateBindingsArgs {
  * additional teardown into the cleanup closure.
  */
 export function wireIsolateBindings(args: WireIsolateBindingsArgs): () => void {
-  const { parentScope, isolateScope, attrs, bindings, target, interpolate, onChange } = args;
+  const {
+    parentScope,
+    isolateScope,
+    attrs,
+    bindings,
+    target,
+    interpolate,
+    onChange,
+    strictComponentBindingsEnabled,
+    exceptionHandler,
+    directiveName,
+  } = args;
+  const strict = strictComponentBindingsEnabled === true && exceptionHandler !== undefined;
   for (const [localName, spec] of Object.entries(bindings)) {
+    // Spec 034 Slice 3 — strict required-binding check. A binding is
+    // "absent" when its resolved source attribute (`spec.attrName`) is
+    // not present as a string on the element's attrs — the SAME bail
+    // condition every wiring strategy below already uses to leave the
+    // local undefined. Under strict mode a non-optional binding (no `?`)
+    // with an absent attribute routes `MissingComponentBindingError` via
+    // `$exceptionHandler('$compile')` and the binding is skipped (the
+    // local stays undefined exactly as in lenient mode — only the report
+    // is added). Optional (`?`) bindings and supplied attributes proceed
+    // unchanged.
+    if (strict && !spec.optional && typeof attrs[spec.attrName] !== 'string') {
+      invokeExceptionHandler(
+        exceptionHandler,
+        new MissingComponentBindingError(directiveName ?? '(unknown directive)', localName, spec.attrName),
+        '$compile',
+      );
+      continue;
+    }
     switch (spec.mode) {
       case '@':
         wireAtBinding(localName, spec, attrs, parentScope, isolateScope, target, interpolate, onChange);

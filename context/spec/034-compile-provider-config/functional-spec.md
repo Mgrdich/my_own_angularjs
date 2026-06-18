@@ -1,7 +1,7 @@
 # Functional Specification: `$compileProvider` Configuration Methods
 
 - **Roadmap Item:** Directives & DOM Compilation — `$compileProvider` config-phase configuration methods.
-- **Status:** Draft
+- **Status:** Completed
 - **Author:** Mgrdich
 
 ---
@@ -32,38 +32,38 @@ Each method below is callable only during the configuration phase. Called **with
 
 - **URL safe-list for links — `aHrefSanitizationTrustedUrlList`.**
   - **Acceptance Criteria:**
-    - [ ] Setting a custom pattern changes which link (`href`) URLs are treated as safe; a URL that does not match is neutralized so it cannot navigate to unsafe content (AngularJS marks it with an `unsafe:` prefix).
-    - [ ] A URL that matches the pattern is used unchanged.
-    - [ ] The no-argument form returns the current pattern; the default preserves today's behavior.
+    - [x] Setting a custom pattern changes which link (`href`) URLs are treated as safe; a URL that does not match is neutralized so it cannot navigate to unsafe content (AngularJS marks it with an `unsafe:` prefix).
+    - [x] A URL that matches the pattern is used unchanged.
+    - [x] The no-argument form returns the current pattern; the default preserves today's behavior.
 
 - **URL safe-list for media sources — `imgSrcSanitizationTrustedUrlList`.**
   - **Acceptance Criteria:**
-    - [ ] Setting a custom pattern changes which image / media source (`src`) URLs are treated as safe; non-matching URLs are neutralized.
-    - [ ] The no-argument form returns the current pattern; the default preserves today's behavior.
+    - [x] Setting a custom pattern changes which image / media source (`src`) URLs are treated as safe; non-matching URLs are neutralized.
+    - [x] The no-argument form returns the current pattern; the default preserves today's behavior.
 
 - **Comment-directive scanning — `commentDirectivesEnabled`.**
   - **Acceptance Criteria:**
-    - [ ] When disabled, comment-form directives (`<!-- directive: foo -->`) are no longer recognized during compilation.
-    - [ ] When enabled (the default), they are recognized as they are today.
-    - [ ] The no-argument form returns the current setting.
+    - [x] When disabled, comment-form directives (`<!-- directive: foo -->`) are no longer recognized during compilation.
+    - [x] When enabled (the default), they are recognized as they are today.
+    - [x] The no-argument form returns the current setting.
 
 - **Class-directive scanning — `cssClassDirectivesEnabled`.**
   - **Acceptance Criteria:**
-    - [ ] When disabled, class-name directives (matched via an element's CSS classes) are no longer recognized during compilation.
-    - [ ] When enabled (the default), they are recognized as they are today.
-    - [ ] The no-argument form returns the current setting.
+    - [x] When disabled, class-name directives (matched via an element's CSS classes) are no longer recognized during compilation.
+    - [x] When enabled (the default), they are recognized as they are today.
+    - [x] The no-argument form returns the current setting.
 
 - **Strict component bindings — `strictComponentBindingsEnabled`.**
   - **Acceptance Criteria:**
-    - [ ] When enabled, using a component or directive without providing one of its required (non-optional) inputs reports a clear error naming the missing input.
-    - [ ] When disabled (the default), a missing input is tolerated (today's lenient behavior).
-    - [ ] The no-argument form returns the current setting.
+    - [x] When enabled, using a component or directive without providing one of its required (non-optional) inputs reports a clear error naming the missing input.
+    - [x] When disabled (the default), a missing input is tolerated (today's lenient behavior).
+    - [x] The no-argument form returns the current setting.
 
 - **Debug information — `debugInfoEnabled`.**
   - **Acceptance Criteria:**
-    - [ ] When enabled (the default), compiled elements carry debugging metadata — the marker classes AngularJS adds (a scope marker, an isolate-scope marker, and a binding marker) plus the ability to retrieve an element's scope for inspection in dev tools.
-    - [ ] When disabled, that debugging metadata is not attached, so production output stays clean and slightly lighter.
-    - [ ] The no-argument form returns the current setting.
+    - [x] When enabled (the default), compiled elements carry debugging metadata — the marker classes AngularJS adds (a scope marker, an isolate-scope marker, and a binding marker) plus the ability to retrieve an element's scope for inspection in dev tools.
+    - [x] When disabled, that debugging metadata is not attached, so production output stays clean and slightly lighter.
+    - [x] The no-argument form returns the current setting.
 
 ---
 

@@ -85,6 +85,7 @@ export {
   InvalidTranscludeValueError,
   // eslint-disable-next-line @typescript-eslint/no-deprecated -- IsolateScopeNotSupportedError is intentionally re-exported (spec 022 Slice 1) for the one-release deprecation grace period. See @compiler/index.ts for context.
   IsolateScopeNotSupportedError,
+  MissingComponentBindingError,
   MissingRequiredControllerError,
   MultipleIsolateScopeError,
   MultipleTemplateDirectivesError,

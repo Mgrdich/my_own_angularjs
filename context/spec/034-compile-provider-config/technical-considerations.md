@@ -6,7 +6,7 @@ It is NOT a copy-paste implementation guide.
 # Technical Specification: `$compileProvider` Configuration Methods
 
 - **Functional Specification:** `context/spec/034-compile-provider-config/functional-spec.md`
-- **Status:** Draft
+- **Status:** Completed
 - **Author(s):** Mgrdich
 
 ---

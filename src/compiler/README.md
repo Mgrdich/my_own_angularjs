@@ -2692,6 +2692,118 @@ group and repeat with it. Toggling, styling, or selecting a range with
 `ng-if-start`/`-end`, `ng-show-start`/`-end`, `ng-class-start`/`-end`, or
 `ng-switch-when-start`/`-end` follows the same whole-range semantics.
 
+## `$compileProvider` configuration methods (spec 034)
+
+Real AngularJS apps tune compiler-wide policy during the **config phase**
+through `$compileProvider`. Spec 034 ships the six AngularJS-canonical
+getter/setters. Each follows the AngularJS idiom: called **with** a value
+it validates, stores, and returns the provider for chaining; called **with
+no** value it returns the current setting. Every method is **config-phase
+only** (the provider is reachable only from a `config` block) and its value
+is **frozen at `$get`** — the `$get` factory threads the current field
+values into `createCompile({ … })`, so a mutation after the run phase begins
+has no effect (AngularJS parity).
+
+| Method | Default | Effect |
+| --- | --- | --- |
+| `aHrefSanitizationTrustedUrlList(re?)` | AngularJS-standard safe-URL pattern | safe-list for `a`/`area[href]` URLs |
+| `imgSrcSanitizationTrustedUrlList(re?)` | AngularJS-standard media safe-URL pattern | safe-list for `img[src]` / `[srcset]` URLs |
+| `commentDirectivesEnabled(bool?)` | `true` | gate the collector's comment (`<!-- directive: … -->`) pass |
+| `cssClassDirectivesEnabled(bool?)` | `true` | gate the collector's class-name directive pass |
+| `strictComponentBindingsEnabled(bool?)` | `false` | require every non-`?` component/directive binding |
+| `debugInfoEnabled(bool?)` | `true` | attach `ng-scope` / `ng-isolate-scope` / `ng-binding` marker classes |
+
+### URL sanitization — a deliberate behavior change
+
+The two URL-list methods back a NEW compiler-level pass,
+`sanitizeUri(uri, isMediaUrl, pattern)` (`src/compiler/sanitize-uri.ts`,
+exposed as the internal `$$sanitizeUri` DI service). A resolved `href` /
+`src` that matches the configured pattern is written verbatim; a URL that
+does NOT match is neutralized by prefixing it with `unsafe:`, so the
+browser treats it as a relative navigation to a (nonexistent) `unsafe:`
+scheme instead of executing a `javascript:` / dangerous `data:` payload.
+
+This layer is **separate from and additive to `$sce`**: the project's
+`$sce` URL context passes plain strings through unchanged (a deliberate
+simplification), while `sanitizeUri` governs the literal scheme of the
+resolved URL string. It is wired at TWO write paths — the spec-031
+interpolated-attribute write (`attributes.ts`) and the spec-025
+`ng-href` / `ng-src` / `ng-srcset` alias directives (`ng-attribute-aliases.ts`),
+both routing through the SAME `$$sanitizeUri` service so the configured
+safe-list is a single source of truth.
+
+**This is the one deliberate behavior change in spec 034.** The defaults
+are the AngularJS-standard safe-URL patterns (allowing `http(s)`, `(s)ftp`,
+`mailto`, `tel`, `sms`, `file`, `data:image/` for media, `blob:` for media,
+and relative URLs), so a `javascript:` / unsafe-`data:` URL that passed
+through unchanged before spec 034 is now neutralized with an `unsafe:`
+prefix. Apps that need a different policy relax it via the config methods:
+
+```ts
+appModule.config([
+  '$compileProvider',
+  (cp) => {
+    // Only treat custom `myapp:` links as safe; everything else gets `unsafe:`.
+    cp.aHrefSanitizationTrustedUrlList(/^\s*myapp:/);
+  },
+]);
+```
+
+### Comment / class directive toggles
+
+`commentDirectivesEnabled` and `cssClassDirectivesEnabled` default to
+`true` (today's behavior). When set `false`, the directive collector skips
+the corresponding scan entirely — a performance lever and an attack-surface
+reduction matching AngularJS. With comment directives off,
+`<!-- directive: foo -->` markers no longer match; with class directives
+off, class-name (C-restrict) directives no longer match.
+
+### Strict component bindings
+
+`strictComponentBindingsEnabled` defaults to `false` (lenient — a missing
+required binding leaves the local undefined / one-way degrades). When set
+`true`, the isolate-binding wiring reports `MissingComponentBindingError`
+via `$exceptionHandler('$compile')` for any REQUIRED binding (`<` / `=` /
+`@` / `&` WITHOUT the `?` optional modifier) whose source attribute is
+ABSENT on the linked element — turning a silently-undefined value into a
+clear error that names both the missing input and its owning directive. No
+new `EXCEPTION_HANDLER_CAUSES` token — `'$compile'` is reused (the tuple
+stays at 10).
+
+```ts
+appModule.config(['$compileProvider', (cp) => cp.strictComponentBindingsEnabled(true)]);
+$compileProvider.component('userCard', { bindings: { user: '<' } });
+// <user-card></user-card> — no `user` attribute → at link time,
+// MissingComponentBindingError routes via $exceptionHandler('$compile').
+```
+
+### Debug info markers
+
+`debugInfoEnabled` defaults to `true`. When on, the per-element linker
+APPENDS (never replaces) the AngularJS marker classes — `ng-scope` on an
+element that gets a new (non-isolate) child scope, `ng-isolate-scope` on an
+isolate-scope element, and `ng-binding` on an element hosting an
+interpolation / `ng-bind`-family binding (a text-node binding marks the
+parent element). Scope retrieval for dev-tools inspection stays available
+via the existing `getElementScope` (`$$ngScope`) hook. When set `false`,
+none of the marker classes are attached — production output stays clean and
+slightly lighter.
+
+### Worked example — combining the toggles
+
+```ts
+appModule.config([
+  '$compileProvider',
+  (cp) => {
+    cp.debugInfoEnabled(false) // chainable — every setter returns the provider
+      .commentDirectivesEnabled(false)
+      .cssClassDirectivesEnabled(false)
+      .strictComponentBindingsEnabled(true)
+      .aHrefSanitizationTrustedUrlList(/^\s*(https?|mailto):/);
+  },
+]);
+```
+
 ## Deferred items
 
 Spec 017 deliberately stops at the compiler core. The following are
@@ -2760,9 +2872,10 @@ do not produce observable behavior in this spec:
   separate roadmap bullet.
 - **`$compileProvider` toggles** — `commentDirectivesEnabled`,
   `cssClassDirectivesEnabled`, `aHrefSanitizationTrustedUrlList`,
-  `imgSrcSanitizationTrustedUrlList`, `debugInfoEnabled`. Comment and
-  class directives are always on in spec 017; the URL-sanitization
-  toggles config the future `a` / `ng-href` / `ng-src` directives.
+  `imgSrcSanitizationTrustedUrlList`, `strictComponentBindingsEnabled`,
+  `debugInfoEnabled` shipped with spec 034 — see
+  [`$compileProvider` configuration methods (spec 034)](#compileprovider-configuration-methods-spec-034)
+  above.
 - **String-input compilation** — `$compile('<my-dir></my-dir>')` is NOT
   supported. Callers parse strings to DOM nodes themselves
   (`new DOMParser().parseFromString(...)` or a `<template>` element).

@@ -127,6 +127,34 @@ import { compileBuckets } from './transclude-compile';
 import { buildTranscludeFn } from './transclude-fn';
 import type { BoundTranscludeFn, NormalizedTransclude, TranscludeFn, TranscludeSlotMap } from './transclude-types';
 
+/**
+ * AngularJS debug-info marker class added to an element that gets a NEW
+ * (non-isolate) child scope (spec 034 Slice 4 — `debugInfoEnabled`).
+ * Matches AngularJS's `ng-scope` marker exactly.
+ */
+const NG_SCOPE_MARKER_CLASS = 'ng-scope';
+
+/**
+ * AngularJS debug-info marker class added to an isolate-scope element
+ * (spec 034 Slice 4). Matches AngularJS's `ng-isolate-scope` marker.
+ */
+const NG_ISOLATE_SCOPE_MARKER_CLASS = 'ng-isolate-scope';
+
+/**
+ * AngularJS debug-info marker class added to an element carrying an
+ * interpolation / `ng-bind`-family binding (spec 034 Slice 4). Matches
+ * AngularJS's `ng-binding` marker.
+ */
+const NG_BINDING_MARKER_CLASS = 'ng-binding';
+
+/**
+ * Normalized names of the `ng-bind`-family binding directives. An element
+ * matched by any of these carries the `ng-binding` debug marker (spec 034
+ * Slice 4), mirroring AngularJS's `addBindingClass` calls in `ngBind` /
+ * `ngBindTemplate` / `ngBindHtml`.
+ */
+const NG_BINDING_DIRECTIVE_NAMES = new Set(['ngBind', 'ngBindTemplate', 'ngBindHtml']);
+
 type LinkEntry = {
   pre?: LinkFn;
   post?: LinkFn;
@@ -402,7 +430,108 @@ function resolveRequiredControllersForLinkEntries(
  * ```
  */
 export function createCompile(options: CompileOptions): CompileService {
-  const { getDirectivesByName, controller: $controller, interpolate, exceptionHandler, templateRequest } = options;
+  const {
+    getDirectivesByName,
+    controller: $controller,
+    interpolate,
+    exceptionHandler,
+    templateRequest,
+    commentDirectivesEnabled,
+    cssClassDirectivesEnabled,
+    aHrefSanitizationTrustedUrlList,
+    imgSrcSanitizationTrustedUrlList,
+    strictComponentBindingsEnabled,
+    debugInfoEnabled,
+  } = options;
+
+  // Spec 034 Slice 2 — bundle the two config-phase URL safe-list
+  // patterns into a single config object passed to `bindAttrsToScope`,
+  // so the eager attribute-interpolation pass routes interpolated
+  // `href` / `src` / `srcset` values through `sanitizeUri` against the
+  // matching pattern before writing the DOM attribute.
+  const urlSanitizeConfig = {
+    aHref: aHrefSanitizationTrustedUrlList,
+    imgSrc: imgSrcSanitizationTrustedUrlList,
+  };
+
+  /**
+   * Spec 034 Slice 4 — compute (at COMPILE time) whether `node` carries
+   * an interpolation / `ng-bind`-family binding, so the per-element
+   * linker can append the `ng-binding` debug marker class at LINK time
+   * (when `debugInfoEnabled` is on).
+   *
+   * **Placement rule.** `ng-binding` lands on the element whose own
+   * attribute or whose own child text node carries the binding, OR which
+   * is matched by an `ng-bind` / `ng-bind-template` / `ng-bind-html`
+   * directive:
+   *
+   *  1. An own (enumerable) attribute value contains an interpolation
+   *     expression (`interpolate(value, true) !== undefined`).
+   *  2. The element is matched by an `ng-bind`-family directive.
+   *  3. A DIRECT child text node contains an interpolation expression —
+   *     AngularJS marks the PARENT element for text-node bindings (the
+   *     text node itself can't carry a class), so the binding marker is
+   *     applied to the enclosing element here.
+   *
+   * Detection is purely static and runs once per template (compile time);
+   * the boolean is then consumed at every link / clone invocation. When
+   * `debugInfoEnabled` is off the whole computation is skipped (the call
+   * site gates on the flag) so there is zero cost in production builds.
+   */
+  function detectBindingMarker(node: Element | Comment, directives: readonly Directive[], attrs: Attributes): boolean {
+    if (!isElement(node)) {
+      return false;
+    }
+    // (2) `ng-bind`-family directive match.
+    if (directives.some((d) => NG_BINDING_DIRECTIVE_NAMES.has(d.name))) {
+      return true;
+    }
+    // (1) interpolated own attribute. `Object.keys(attrs)` yields ONLY
+    // the normalized attribute names (the `$attr` / `$set` / `$observe`
+    // slots are non-enumerable), so this never inspects framework
+    // internals.
+    for (const name of Object.keys(attrs)) {
+      const value = attrs[name];
+      if (typeof value === 'string' && interpolate(value, true) !== undefined) {
+        return true;
+      }
+    }
+    // (3) interpolated direct child text node — mark the parent element.
+    for (let i = 0; i < node.childNodes.length; i++) {
+      const child = node.childNodes.item(i);
+      if (isText(child) && interpolate(child.textContent, true) !== undefined) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /**
+   * Spec 034 Slice 4 — attach the AngularJS debug-info marker classes to
+   * the live link target (the master element or a transclusion clone).
+   * APPENDS via `classList.add`, so consumer classes (`class="card"`) are
+   * preserved — never replaced. No-op when `debugInfoEnabled` is off, on
+   * non-Element targets (a Comment placeholder), or when none of the
+   * three conditions hold. The scope-retrieval inspection hook stays the
+   * existing non-enumerable `$$ngScope` slot (read via `getElementScope`)
+   * — no extra data is stored here.
+   */
+  function attachDebugMarkers(
+    target: Element | Comment | Node,
+    isNewScope: boolean,
+    isIsolate: boolean,
+    hasBindingMarker: boolean,
+  ): void {
+    if (!debugInfoEnabled || !isElement(target)) {
+      return;
+    }
+    if (isNewScope) {
+      target.classList.add(isIsolate ? NG_ISOLATE_SCOPE_MARKER_CLASS : NG_SCOPE_MARKER_CLASS);
+    }
+    if (hasBindingMarker) {
+      target.classList.add(NG_BINDING_MARKER_CLASS);
+    }
+  }
 
   /**
    * Per-element controller seam (spec 020 Slice 4, extended in spec 022
@@ -633,6 +762,9 @@ export function createCompile(options: CompileOptions): CompileService {
             bindings,
             target: instance as Record<string, unknown>,
             interpolate,
+            strictComponentBindingsEnabled,
+            exceptionHandler,
+            directiveName: directive.name,
             onChange: (localName, currentValue, _previousValue, isFirst) => {
               if (!hasHook(instance, '$onChanges')) {
                 return;
@@ -877,11 +1009,21 @@ export function createCompile(options: CompileOptions): CompileService {
     hasChildren: boolean,
     queue: DeferredTemplateEntry[],
   ): NodeLinker {
-    const { directives, attrs, multiElementStarts } = collectDirectives(node, getDirectivesByName);
+    const { directives, attrs, multiElementStarts } = collectDirectives(node, getDirectivesByName, {
+      commentDirectivesEnabled,
+      cssClassDirectivesEnabled,
+    });
 
     // Slice 10 — `scope: true` detection (FS §2.12). Decide ONCE at
     // compile time whether THIS node needs its own child scope.
     const needsChildScope = isElement(node) && directives.some((d) => d.scope);
+
+    // Spec 034 Slice 4 — compute the `ng-binding` debug marker decision
+    // ONCE at compile time. Gated on `debugInfoEnabled` so the
+    // interpolation probes (and the child-text-node walk) cost nothing in
+    // production. Applied to the live target at each link / clone
+    // invocation via `attachDebugMarkers`.
+    const hasBindingMarker = debugInfoEnabled && detectBindingMarker(node, directives, attrs as Attributes);
 
     // ----- Spec 022 Slice 1: isolate-scope pre-pass -----
     //
@@ -1585,6 +1727,12 @@ export function createCompile(options: CompileOptions): CompileService {
           setIsolateHostScope(target, parentScope);
         }
       }
+      // Spec 034 Slice 4 — attach debug-info marker classes to the live
+      // target (master or transclusion clone). Appends `ng-scope` /
+      // `ng-isolate-scope` (when this element got a new scope) and
+      // `ng-binding` (interpolation / `ng-bind`-family binding) without
+      // clobbering consumer classes. No-op when `debugInfoEnabled` is off.
+      attachDebugMarkers(target, needsChildScope, isolate, hasBindingMarker);
       // Wire isolate bindings AFTER scope creation and BEFORE attrs are
       // bound to the scope (binding `@` reads attrs and seeds the
       // initial value; binding `<` / `=` parse `attrs[attrName]` strings).
@@ -1616,6 +1764,9 @@ export function createCompile(options: CompileOptions): CompileService {
           bindings: isolateDirective.isolateBindings as NormalizedBindingMap,
           target: scope as unknown as Record<string, unknown>,
           interpolate,
+          strictComponentBindingsEnabled,
+          exceptionHandler,
+          directiveName: isolateDirective.name,
         });
       }
       const orphanForm2 = findOrphanedBindToControllerBindings(effectiveDirectives);
@@ -1627,6 +1778,9 @@ export function createCompile(options: CompileOptions): CompileService {
           bindings: orphanForm2.bindToControllerBindings as NormalizedBindingMap,
           target: scope as unknown as Record<string, unknown>,
           interpolate,
+          strictComponentBindingsEnabled,
+          exceptionHandler,
+          directiveName: orphanForm2.name,
         });
       }
 
@@ -1668,7 +1822,14 @@ export function createCompile(options: CompileOptions): CompileService {
       // DOM attribute and installs an independent per-clone watch (spec
       // 031 — text nodes already resolve their clone target the same way
       // via the cloneMap indirection).
-      bindAttrsToScope(attrs, scope, interpolate, exceptionHandler, isElement(target) ? target : undefined);
+      bindAttrsToScope(
+        attrs,
+        scope,
+        interpolate,
+        exceptionHandler,
+        isElement(target) ? target : undefined,
+        urlSanitizeConfig,
+      );
 
       // ----- Spec 020 / Slice 4: per-element controller seam.
       //
@@ -1910,6 +2071,13 @@ export function createCompile(options: CompileOptions): CompileService {
     // Determine `scope: true` requirement on the pending directives.
     const needsChildScope = pendingDirectives.some((d) => d.scope);
 
+    // Spec 034 Slice 4 — `ng-binding` debug marker decision for the
+    // post-template (templateUrl) link path. Computed against the
+    // post-install element + its pending directives, mirroring the
+    // synchronous path. Gated on `debugInfoEnabled` so it costs nothing
+    // when debug info is disabled.
+    const hasBindingMarker = debugInfoEnabled && detectBindingMarker(element, pendingDirectives, attrs);
+
     // Spec 022 Slice 1: detect isolate-scope directive among pending
     // directives (mirrors the synchronous-link pre-pass). At most one
     // is allowed; a second match routes `MultipleIsolateScopeError`
@@ -1986,6 +2154,9 @@ export function createCompile(options: CompileOptions): CompileService {
       if (needsChildScope) {
         setElementScope(element, scope);
       }
+      // Spec 034 Slice 4 — attach debug-info marker classes to the
+      // post-template element (append; never replace consumer classes).
+      attachDebugMarkers(element, needsChildScope, isolate, hasBindingMarker);
       // Wire isolate bindings BEFORE attrs are bound to scope so the
       // `@` binding's $observe seed reads the same `attrs[attrName]`
       // the synchronous path sees.
@@ -2001,6 +2172,9 @@ export function createCompile(options: CompileOptions): CompileService {
           bindings: pendingIsolateDirective.isolateBindings as NormalizedBindingMap,
           target: scope as unknown as Record<string, unknown>,
           interpolate,
+          strictComponentBindingsEnabled,
+          exceptionHandler,
+          directiveName: pendingIsolateDirective.name,
         });
       }
       const pendingOrphanForm2 = findOrphanedBindToControllerBindings(pendingDirectives);
@@ -2012,6 +2186,9 @@ export function createCompile(options: CompileOptions): CompileService {
           bindings: pendingOrphanForm2.bindToControllerBindings as NormalizedBindingMap,
           target: scope as unknown as Record<string, unknown>,
           interpolate,
+          strictComponentBindingsEnabled,
+          exceptionHandler,
+          directiveName: pendingOrphanForm2.name,
         });
       }
 
@@ -2021,7 +2198,7 @@ export function createCompile(options: CompileOptions): CompileService {
       const bound = isNgManagedElement(element) ? element[NG_BOUND_TRANSCLUDE] : undefined;
       const $transclude: TranscludeFn | undefined = bound?.fn;
 
-      bindAttrsToScope(attrs, scope, interpolate, exceptionHandler);
+      bindAttrsToScope(attrs, scope, interpolate, exceptionHandler, undefined, urlSanitizeConfig);
 
       // ----- Spec 020 / Slice 4: per-element controller seam (post-
       // templateUrl-install path). Same contract as the synchronous

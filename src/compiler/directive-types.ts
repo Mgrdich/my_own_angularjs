@@ -894,4 +894,85 @@ export interface CompileOptions {
    * new `EXCEPTION_HANDLER_CAUSES` entry; the tuple stays at 10.
    */
   readonly controller: ControllerService;
+  /**
+   * Comment-directive scanning toggle (spec 034 Slice 1 / FS §2 —
+   * `commentDirectivesEnabled`). Threaded from
+   * `$CompileProvider.commentDirectivesEnabled(…)` and read once at
+   * `$get` time (frozen at run-phase start). When `false`, the
+   * directive collector skips the comment (M-restrict) pass entirely,
+   * so `<!-- directive: foo -->` markers are no longer recognized.
+   * Default `true` preserves today's behavior.
+   */
+  readonly commentDirectivesEnabled: boolean;
+  /**
+   * Class-directive scanning toggle (spec 034 Slice 1 / FS §2 —
+   * `cssClassDirectivesEnabled`). Threaded from
+   * `$CompileProvider.cssClassDirectivesEnabled(…)` and read once at
+   * `$get` time (frozen at run-phase start). When `false`, the
+   * directive collector skips the class (C-restrict) pass entirely, so
+   * class-name directives are no longer recognized. Default `true`
+   * preserves today's behavior.
+   */
+  readonly cssClassDirectivesEnabled: boolean;
+  /**
+   * URL safe-list for link (`a`/`area[href]`) attributes (spec 034
+   * Slice 2 / FS §2 — `aHrefSanitizationTrustedUrlList`). Threaded from
+   * `$CompileProvider.aHrefSanitizationTrustedUrlList(…)` and read once
+   * at `$get` time (frozen at run-phase start). The compiler routes an
+   * interpolated / `ng-href` `href` value through
+   * {@link import('./sanitize-uri').sanitizeUri} against THIS pattern
+   * before writing the DOM attribute — a non-matching URL (e.g.
+   * `javascript:alert(1)`) is neutralized with an `unsafe:` prefix.
+   * Defaults to the AngularJS-standard safe-URL regex (allows
+   * `http(s)` / `ftp` / `mailto` / `tel` / `file` + relative URLs).
+   */
+  readonly aHrefSanitizationTrustedUrlList: RegExp;
+  /**
+   * URL safe-list for media-source (`img[src]`, `[srcset]`) attributes
+   * (spec 034 Slice 2 / FS §2 — `imgSrcSanitizationTrustedUrlList`).
+   * Threaded from `$CompileProvider.imgSrcSanitizationTrustedUrlList(…)`
+   * and read once at `$get` time (frozen at run-phase start). The
+   * compiler routes an interpolated / `ng-src` / `ng-srcset` value
+   * through {@link import('./sanitize-uri').sanitizeUri} against THIS
+   * pattern before writing the DOM attribute. Defaults to the
+   * AngularJS-standard media safe-URL regex (allows `http(s)` / `ftp` /
+   * `file` / `blob` + `data:image/`).
+   */
+  readonly imgSrcSanitizationTrustedUrlList: RegExp;
+  /**
+   * Strict-component-bindings toggle (spec 034 Slice 3 / FS §2 —
+   * `strictComponentBindingsEnabled`). Threaded from
+   * `$CompileProvider.strictComponentBindingsEnabled(…)` and read once at
+   * `$get` time (frozen at run-phase start). When `true`,
+   * {@link import('./isolate-bindings').wireIsolateBindings} reports
+   * {@link import('./compile-error').MissingComponentBindingError} via
+   * `$exceptionHandler('$compile')` for any REQUIRED binding (`<` / `=` /
+   * `@` / `&` WITHOUT the `?` modifier) whose source attribute is absent
+   * on the linked element. Default `false` preserves today's lenient
+   * behavior (a missing attribute leaves the local undefined / one-way
+   * degrades).
+   */
+  readonly strictComponentBindingsEnabled: boolean;
+  /**
+   * Debug-info toggle (spec 034 Slice 4 / FS §2 — `debugInfoEnabled`).
+   * Threaded from `$CompileProvider.debugInfoEnabled(…)` and read once at
+   * `$get` time (frozen at run-phase start). When `true` (the default),
+   * the per-element linker attaches AngularJS marker classes via
+   * `classList.add` (APPEND — consumer classes are never replaced):
+   *
+   *  - `ng-scope` on an element that gets a NEW non-isolate child scope
+   *    (the `scope: true` site).
+   *  - `ng-isolate-scope` on an isolate-scope element (the object-form
+   *    `scope: { … }` site).
+   *  - `ng-binding` on an element carrying an interpolation binding (a
+   *    `{{ … }}`-bearing attribute or child text node) OR an `ng-bind` /
+   *    `ng-bind-template` / `ng-bind-html` binding.
+   *
+   * Scope retrieval for dev-tools inspection is already available via the
+   * existing non-enumerable `$$ngScope` slot — read it with
+   * {@link import('./cleanup').getElementScope}. When `false`, NONE of
+   * the marker classes are added — production DOM stays clean and
+   * slightly lighter.
+   */
+  readonly debugInfoEnabled: boolean;
 }

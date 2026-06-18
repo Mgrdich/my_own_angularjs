@@ -85,6 +85,17 @@ type WritableAttrs = Record<string, string | undefined>;
 const COMMENT_DIRECTIVE_REGEX = /^\s*directive:\s*(\S+)\s*(.*?)\s*$/;
 
 /**
+ * Per-compile directive-scan toggles (spec 034 Slice 1). Threaded from
+ * `CompileOptions` (`commentDirectivesEnabled` / `cssClassDirectivesEnabled`)
+ * via `compile.ts`. Both default to `true` — when omitted, the collector
+ * behaves exactly as it did before the toggles existed.
+ */
+export interface CollectDirectivesOptions {
+  readonly commentDirectivesEnabled?: boolean;
+  readonly cssClassDirectivesEnabled?: boolean;
+}
+
+/**
  * Collect directives that match `node` under the E, A, C, and M
  * restrict modes, sort them by descending priority (registration
  * order tie-breaks ascending), and return the sorted list together
@@ -95,6 +106,12 @@ const COMMENT_DIRECTIVE_REGEX = /^\s*directive:\s*(\S+)\s*(.*?)\s*$/;
  * comments have no attributes or classes to walk, so the entire
  * Element path short-circuits.
  *
+ * **Spec 034 Slice 1 — scan toggles.** When `options.cssClassDirectivesEnabled`
+ * is `false`, the C (Class) pass is skipped; when
+ * `options.commentDirectivesEnabled` is `false`, the M (Comment) pass is
+ * skipped. Both default to `true` (today's behavior), so existing callers
+ * that omit `options` are unaffected.
+ *
  * The same {@link AttributesImpl} is reused across every directive
  * on the node — compile, pre-link, and post-link all see the
  * same instance.
@@ -102,7 +119,10 @@ const COMMENT_DIRECTIVE_REGEX = /^\s*directive:\s*(\S+)\s*(.*?)\s*$/;
 export function collectDirectives(
   node: Element | Comment,
   getDirectivesByName: (name: string) => Directive[],
+  options?: CollectDirectivesOptions,
 ): { directives: Directive[]; attrs: AttributesImpl; multiElementStarts: Set<string> } {
+  const commentDirectivesEnabled = options?.commentDirectivesEnabled ?? true;
+  const cssClassDirectivesEnabled = options?.cssClassDirectivesEnabled ?? true;
   const attrs = new AttributesImpl(node);
   const matched: Directive[] = [];
   // Base directive names matched via the ranged `<base>-start` form
@@ -168,15 +188,22 @@ export function collectDirectives(
     // C (Class) — parse `element.className` and match each token.
     // Runs BEFORE the terminal cutoff (which is applied below after
     // the priority sort) and AFTER the attribute pass (so `attrs.class`
-    // already holds the full original `class` string).
-    collectClassDirectives(element, attrs, matched, getDirectivesByName);
+    // already holds the full original `class` string). Spec 034 Slice 1:
+    // skipped entirely when `cssClassDirectivesEnabled === false`.
+    if (cssClassDirectivesEnabled) {
+      collectClassDirectives(element, attrs, matched, getDirectivesByName);
+    }
   } else {
     // M (Comment) — parse the comment text against the canonical
     // `<!-- directive: name value -->` syntax. Falls back to an empty
     // matched list when the comment is non-directive (the most common
     // case in practice). Comments contribute neither E/A/C matches
     // nor any DOM attributes — the entire Element path is skipped.
-    collectCommentDirectives(node, attrs, matched, getDirectivesByName);
+    // Spec 034 Slice 1: skipped entirely when
+    // `commentDirectivesEnabled === false`.
+    if (commentDirectivesEnabled) {
+      collectCommentDirectives(node, attrs, matched, getDirectivesByName);
+    }
   }
 
   // On the re-entrant master pass of an element-form transclude (spec
