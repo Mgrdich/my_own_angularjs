@@ -546,15 +546,14 @@ describe('parity: two structural directives on the same element route MultipleTr
     expect(message).toContain('secondDir');
   });
 
-  it("the FS §2.6 canonical `<div ng-if='a' ng-include='…'>` case is silently dropped by the spec-017 terminal cutoff (implementation gap)", () => {
-    // The FS expectation per technical-considerations §2.9 is that this
-    // case routes `MultipleTranscludeDirectivesError`. In practice the
-    // terminal cutoff in `directive-collector.ts:167-181` fires first
-    // (ng-if priority 600 with `terminal: true` truncates the matched
-    // list before ng-include at priority 400 reaches the transclude
-    // pre-pass scan). We pin the actually-observable behavior so a
-    // future fix that ROUTES the error before the cutoff lights up as
-    // a test failure (signaling the gap closed).
+  it("the FS §2.6 canonical `<div ng-if='a' ng-include='…'>` case now routes MultipleTranscludeDirectivesError (spec-032 closes the spec-017 cutoff gap)", () => {
+    // Spec 032 Slice 2 closed the gap: the terminal cutoff in
+    // `directive-collector.ts` no longer drops a second
+    // `transclude`-declaring directive (ng-include, priority 400) when a
+    // higher-priority transclude directive (ng-if, priority 600
+    // `terminal: true`) is already kept — both reach `compile.ts`'s
+    // multi-transclude guard, which routes
+    // `MultipleTranscludeDirectivesError` via `$exceptionHandler('$compile')`.
     const handler = vi.fn<ExceptionHandler>();
     const fetcher = vi.fn<TemplateFetcher>(() => Promise.resolve('<span class="inc"></span>'));
     const b = bootstrap({ exceptionHandler: handler, fetcher });
@@ -573,12 +572,13 @@ describe('parity: two structural directives on the same element route MultipleTr
       scope.$digest();
     }).not.toThrow();
 
-    // No MultipleTranscludeDirectivesError surfaced — confirms the gap.
+    // The conflict now surfaces — spec 032 fix. This is the observable
+    // contract: the developer is told to fix the same-element conflict.
+    // (Once the conflict guard strips ng-include's transclude, its link
+    // still runs on the recovery path; the exact post-conflict side
+    // effects are undefined-misuse behavior and are not pinned here.)
     const multi = handler.mock.calls.filter(([err]) => err instanceof MultipleTranscludeDirectivesError);
-    expect(multi.length).toBe(0);
-
-    // ng-include never reached the matched-directive list, so the
-    // fetcher was never called — the URL was not loaded.
-    expect(fetcher).not.toHaveBeenCalled();
+    expect(multi.length).toBeGreaterThanOrEqual(1);
+    expect(multi[0]?.[1]).toBe('$compile');
   });
 });

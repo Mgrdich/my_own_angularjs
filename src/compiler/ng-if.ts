@@ -161,7 +161,15 @@ function ngIfFactory(): DirectiveFactoryReturn {
     const placeholder = element;
     const scope = _scope;
 
+    // `clonedRoot` is the identity anchor for the active mount (the first
+    // cloned top-level node — for the single-element form the sole node,
+    // for the ranged `ng-if-start` / `ng-if-end` form the head of the
+    // group). `clonedNodes` carries EVERY cloned top-level node so the
+    // whole group mounts and unmounts as one unit (spec 033 Slice 2). For
+    // the single-element form `clonedNodes` is length 1 (`[clonedRoot]`),
+    // so the legacy path is byte-identical.
     let clonedRoot: Element | null = null;
+    let clonedNodes: Node[] = [];
     let cloneScope: Scope | null = null;
 
     const expr = attrs[NG_IF_NAME];
@@ -194,37 +202,53 @@ function ngIfFactory(): DirectiveFactoryReturn {
           // here ALWAYS produces a brand-new clone with a brand-new
           // scope — the fresh-mount semantic falls out for free.
           $transclude((clone, transcludedScope) => {
-            // `clone` is the array of cloned top-level nodes. For
-            // element-form transclusion the default bucket is the
-            // detached host itself (a single-element array), so
-            // `clone[0]` is the cloned host Element.
+            // `clone` is the array of cloned top-level nodes. For the
+            // single-element form the default bucket is the detached host
+            // itself (a single-element array), so `clone[0]` is the cloned
+            // host Element. For the ranged `ng-if-start` / `ng-if-end`
+            // form (spec 033 Slice 2) the bucket is the WHOLE captured
+            // group — `clone` is every cloned top-level node, in document
+            // order.
             const head = clone[0];
             if (head === undefined) {
-              // Defensive — the element-form default bucket is
-              // `[host]`, so `clone[0]` is always defined in practice.
-              // Bail cleanly rather than insert nothing and stash a
-              // null `clonedRoot` (which would block future toggles).
+              // Defensive — the element-form default bucket is non-empty
+              // (`[host]` or `[...range]`), so `clone[0]` is always
+              // defined in practice. Bail cleanly rather than insert
+              // nothing and stash a null `clonedRoot` (which would block
+              // future toggles).
               return;
             }
             if (!isElement(head)) {
               // Invariant — for `transclude: 'element'`, the default
-              // bucket is `[host]` where `host` is the original Element
-              // the directive matched on, so `clone[0]` is always an
-              // Element. A runtime mismatch here means the transclude
-              // machinery's contract has broken; surface it rather
-              // than silently casting through `unknown`.
+              // bucket's FIRST node is the `<name>-start` Element the
+              // directive matched on, so `clone[0]` is always an Element.
+              // A runtime mismatch here means the transclude machinery's
+              // contract has broken; surface it rather than silently
+              // casting through `unknown`.
               throw new Error(`ngIf: expected cloned host to be an Element, got nodeType ${String(head.nodeType)}`);
             }
             clonedRoot = head;
+            clonedNodes = clone;
             cloneScope = transcludedScope;
-            // Position preservation: insert the clone as the next
-            // sibling of the placeholder. `insertBefore(node, null)`
-            // is the canonical "append at end" shape but here
-            // `placeholder.nextSibling` may legitimately be `null`
-            // when the placeholder is the LAST child of its parent —
-            // in that case `insertBefore(clone, null)` correctly
-            // appends to the end of the parent's children.
-            placeholder.parentNode?.insertBefore(clonedRoot, placeholder.nextSibling);
+            // Position preservation: insert every clone node as the next
+            // sibling(s) of the placeholder, in document order. The last
+            // inserted node becomes the next anchor so a multi-node group
+            // lands contiguously right after the placeholder.
+            // `insertBefore(node, null)` is the canonical "append at end"
+            // shape but here `anchor.nextSibling` may legitimately be
+            // `null` when the anchor is the LAST child of its parent — in
+            // that case `insertBefore(node, null)` correctly appends to
+            // the end of the parent's children. For the single-element
+            // form `clone` is length 1, so this loop runs once and is
+            // byte-identical to the legacy single-insert path.
+            const parentNode = placeholder.parentNode;
+            if (parentNode !== null) {
+              let anchor: Node = placeholder;
+              for (const node of clone) {
+                parentNode.insertBefore(node, anchor.nextSibling);
+                anchor = node;
+              }
+            }
             // Register the cleanup callback so a parent
             // `destroyElementScope` reaching the placeholder still
             // tears the active clone down — Comment nodes have no
@@ -268,8 +292,17 @@ function ngIfFactory(): DirectiveFactoryReturn {
         // assertion.
         cloneScope?.$destroy();
         destroyElementScope(clonedRoot);
-        clonedRoot.remove();
+        // Remove EVERY node of the (possibly multi-element) group. For the
+        // single-element form `clonedNodes` is `[clonedRoot]`, so this
+        // loop removes the sole node — byte-identical to the legacy
+        // `clonedRoot.remove()` path.
+        for (const node of clonedNodes) {
+          if (node.parentNode !== null) {
+            node.parentNode.removeChild(node);
+          }
+        }
         clonedRoot = null;
+        clonedNodes = [];
         cloneScope = null;
       }
       // Falsy → falsy: no-op. Same identity-short-circuit
@@ -282,6 +315,7 @@ function ngIfFactory(): DirectiveFactoryReturn {
     priority: 600,
     terminal: true,
     transclude: 'element',
+    multiElement: true,
     link,
   };
 }

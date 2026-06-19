@@ -92,6 +92,7 @@ import type { Scope } from '@core/index';
 import { invokeExceptionHandler, type ExceptionHandler } from '@exception-handler/index';
 
 import { bindAttrsToScope } from './attributes';
+import { camelToKebab } from './attribute-name-utils';
 import { addElementCleanup, setElementScope, setIsolateHostScope } from './cleanup';
 import {
   MultipleIsolateScopeError,
@@ -100,6 +101,7 @@ import {
   RequiredTranscludeSlotUnfilledError,
   TemplateFunctionReturnedNonStringError,
   TemplateUrlFunctionReturnedNonStringError,
+  UnterminatedMultiElementDirectiveError,
 } from './compile-error';
 import { describeValue } from './describe-value';
 import { collectDirectives } from './directive-collector';
@@ -114,13 +116,44 @@ import type { CompileOptions, CompileService, Directive, Linker, LinkFn, Attribu
 import { wireIsolateBindings, type NormalizedBindingMap } from './isolate-bindings';
 import { ChangesQueue, flushChangesQueue, hasHook, invokeHook, UNINITIALIZED_VALUE } from './lifecycle';
 import { NG_NON_BINDABLE_NAME } from './ng-non-bindable';
-import { isComment, isElement } from './node-guards';
+import { SCRIPT_TEMPLATE_NAME } from './script-template';
+import { isComment, isElement, isText } from './node-guards';
+import { compileTextNode } from './text-interpolate';
 import { parseTemplate } from './template-parse';
 import { resolveRequireForm } from './require-resolver';
+import { collectMultiElementRange } from './multi-element-range';
 import { captureChildren } from './transclude-capture';
 import { compileBuckets } from './transclude-compile';
 import { buildTranscludeFn } from './transclude-fn';
 import type { BoundTranscludeFn, NormalizedTransclude, TranscludeFn, TranscludeSlotMap } from './transclude-types';
+
+/**
+ * AngularJS debug-info marker class added to an element that gets a NEW
+ * (non-isolate) child scope (spec 034 Slice 4 — `debugInfoEnabled`).
+ * Matches AngularJS's `ng-scope` marker exactly.
+ */
+const NG_SCOPE_MARKER_CLASS = 'ng-scope';
+
+/**
+ * AngularJS debug-info marker class added to an isolate-scope element
+ * (spec 034 Slice 4). Matches AngularJS's `ng-isolate-scope` marker.
+ */
+const NG_ISOLATE_SCOPE_MARKER_CLASS = 'ng-isolate-scope';
+
+/**
+ * AngularJS debug-info marker class added to an element carrying an
+ * interpolation / `ng-bind`-family binding (spec 034 Slice 4). Matches
+ * AngularJS's `ng-binding` marker.
+ */
+const NG_BINDING_MARKER_CLASS = 'ng-binding';
+
+/**
+ * Normalized names of the `ng-bind`-family binding directives. An element
+ * matched by any of these carries the `ng-binding` debug marker (spec 034
+ * Slice 4), mirroring AngularJS's `addBindingClass` calls in `ngBind` /
+ * `ngBindTemplate` / `ngBindHtml`.
+ */
+const NG_BINDING_DIRECTIVE_NAMES = new Set(['ngBind', 'ngBindTemplate', 'ngBindHtml']);
 
 type LinkEntry = {
   pre?: LinkFn;
@@ -397,7 +430,108 @@ function resolveRequiredControllersForLinkEntries(
  * ```
  */
 export function createCompile(options: CompileOptions): CompileService {
-  const { getDirectivesByName, controller: $controller, interpolate, exceptionHandler, templateRequest } = options;
+  const {
+    getDirectivesByName,
+    controller: $controller,
+    interpolate,
+    exceptionHandler,
+    templateRequest,
+    commentDirectivesEnabled,
+    cssClassDirectivesEnabled,
+    aHrefSanitizationTrustedUrlList,
+    imgSrcSanitizationTrustedUrlList,
+    strictComponentBindingsEnabled,
+    debugInfoEnabled,
+  } = options;
+
+  // Spec 034 Slice 2 — bundle the two config-phase URL safe-list
+  // patterns into a single config object passed to `bindAttrsToScope`,
+  // so the eager attribute-interpolation pass routes interpolated
+  // `href` / `src` / `srcset` values through `sanitizeUri` against the
+  // matching pattern before writing the DOM attribute.
+  const urlSanitizeConfig = {
+    aHref: aHrefSanitizationTrustedUrlList,
+    imgSrc: imgSrcSanitizationTrustedUrlList,
+  };
+
+  /**
+   * Spec 034 Slice 4 — compute (at COMPILE time) whether `node` carries
+   * an interpolation / `ng-bind`-family binding, so the per-element
+   * linker can append the `ng-binding` debug marker class at LINK time
+   * (when `debugInfoEnabled` is on).
+   *
+   * **Placement rule.** `ng-binding` lands on the element whose own
+   * attribute or whose own child text node carries the binding, OR which
+   * is matched by an `ng-bind` / `ng-bind-template` / `ng-bind-html`
+   * directive:
+   *
+   *  1. An own (enumerable) attribute value contains an interpolation
+   *     expression (`interpolate(value, true) !== undefined`).
+   *  2. The element is matched by an `ng-bind`-family directive.
+   *  3. A DIRECT child text node contains an interpolation expression —
+   *     AngularJS marks the PARENT element for text-node bindings (the
+   *     text node itself can't carry a class), so the binding marker is
+   *     applied to the enclosing element here.
+   *
+   * Detection is purely static and runs once per template (compile time);
+   * the boolean is then consumed at every link / clone invocation. When
+   * `debugInfoEnabled` is off the whole computation is skipped (the call
+   * site gates on the flag) so there is zero cost in production builds.
+   */
+  function detectBindingMarker(node: Element | Comment, directives: readonly Directive[], attrs: Attributes): boolean {
+    if (!isElement(node)) {
+      return false;
+    }
+    // (2) `ng-bind`-family directive match.
+    if (directives.some((d) => NG_BINDING_DIRECTIVE_NAMES.has(d.name))) {
+      return true;
+    }
+    // (1) interpolated own attribute. `Object.keys(attrs)` yields ONLY
+    // the normalized attribute names (the `$attr` / `$set` / `$observe`
+    // slots are non-enumerable), so this never inspects framework
+    // internals.
+    for (const name of Object.keys(attrs)) {
+      const value = attrs[name];
+      if (typeof value === 'string' && interpolate(value, true) !== undefined) {
+        return true;
+      }
+    }
+    // (3) interpolated direct child text node — mark the parent element.
+    for (let i = 0; i < node.childNodes.length; i++) {
+      const child = node.childNodes.item(i);
+      if (isText(child) && interpolate(child.textContent, true) !== undefined) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /**
+   * Spec 034 Slice 4 — attach the AngularJS debug-info marker classes to
+   * the live link target (the master element or a transclusion clone).
+   * APPENDS via `classList.add`, so consumer classes (`class="card"`) are
+   * preserved — never replaced. No-op when `debugInfoEnabled` is off, on
+   * non-Element targets (a Comment placeholder), or when none of the
+   * three conditions hold. The scope-retrieval inspection hook stays the
+   * existing non-enumerable `$$ngScope` slot (read via `getElementScope`)
+   * — no extra data is stored here.
+   */
+  function attachDebugMarkers(
+    target: Element | Comment | Node,
+    isNewScope: boolean,
+    isIsolate: boolean,
+    hasBindingMarker: boolean,
+  ): void {
+    if (!debugInfoEnabled || !isElement(target)) {
+      return;
+    }
+    if (isNewScope) {
+      target.classList.add(isIsolate ? NG_ISOLATE_SCOPE_MARKER_CLASS : NG_SCOPE_MARKER_CLASS);
+    }
+    if (hasBindingMarker) {
+      target.classList.add(NG_BINDING_MARKER_CLASS);
+    }
+  }
 
   /**
    * Per-element controller seam (spec 020 Slice 4, extended in spec 022
@@ -628,6 +762,9 @@ export function createCompile(options: CompileOptions): CompileService {
             bindings,
             target: instance as Record<string, unknown>,
             interpolate,
+            strictComponentBindingsEnabled,
+            exceptionHandler,
+            directiveName: directive.name,
             onChange: (localName, currentValue, _previousValue, isFirst) => {
               if (!hasHook(instance, '$onChanges')) {
                 return;
@@ -814,6 +951,9 @@ export function createCompile(options: CompileOptions): CompileService {
     if (isComment(node)) {
       return compileElementOrComment(node, /* hasChildren */ false, queue);
     }
+    if (isText(node)) {
+      return compileTextNode(node, interpolate);
+    }
     return noopLinker;
   }
 
@@ -869,11 +1009,21 @@ export function createCompile(options: CompileOptions): CompileService {
     hasChildren: boolean,
     queue: DeferredTemplateEntry[],
   ): NodeLinker {
-    const { directives, attrs } = collectDirectives(node, getDirectivesByName);
+    const { directives, attrs, multiElementStarts } = collectDirectives(node, getDirectivesByName, {
+      commentDirectivesEnabled,
+      cssClassDirectivesEnabled,
+    });
 
     // Slice 10 — `scope: true` detection (FS §2.12). Decide ONCE at
     // compile time whether THIS node needs its own child scope.
     const needsChildScope = isElement(node) && directives.some((d) => d.scope);
+
+    // Spec 034 Slice 4 — compute the `ng-binding` debug marker decision
+    // ONCE at compile time. Gated on `debugInfoEnabled` so the
+    // interpolation probes (and the child-text-node walk) cost nothing in
+    // production. Applied to the live target at each link / clone
+    // invocation via `attachDebugMarkers`.
+    const hasBindingMarker = debugInfoEnabled && detectBindingMarker(node, directives, attrs as Attributes);
 
     // ----- Spec 022 Slice 1: isolate-scope pre-pass -----
     //
@@ -929,15 +1079,20 @@ export function createCompile(options: CompileOptions): CompileService {
           alreadyElementTranscluded === directive.name &&
           directive.transclude.kind === 'element'
         ) {
-          // Re-entrancy guard: the master fragment's recompile pass
-          // sees the same directive whose `kind: 'element'` capture
-          // already ran. Strip transclude on a LOCAL copy so the
-          // directive's other behavior (compile / link / controller)
-          // still applies to the master, but the capture does NOT
-          // recur. Mirrors AngularJS's `terminalPriority`-based
-          // re-entry guard without introducing a new priority axis.
-          const stripped: Directive = { ...directive, transclude: undefined };
-          effectiveDirectives.push(stripped);
+          // Re-entrancy guard (spec 032 Slice 1): the master fragment's
+          // recompile pass sees the same `kind: 'element'` directive
+          // whose capture already ran on the OUTER pass. EXCLUDE it
+          // entirely from the clone's directive list — do NOT re-add it.
+          // The outer pass already created the Comment placeholder and
+          // runs the directive's link against that Comment; the clone is
+          // only the row/branch content and must NOT re-run the
+          // structural directive. Re-running it would fire the
+          // directive's link against a cloned Element and throw
+          // "expected placeholder to be a Comment" (caught + routed via
+          // '$compile') on every row/mount — the noise this fix removes.
+          // Skipping keeps `transcludingDirective` null on the
+          // re-entrant pass, so the capture does NOT recur — the
+          // AngularJS `maxPriority`/`terminalPriority` re-entry equivalent.
           continue;
         }
         if (transcludingDirective === null) {
@@ -977,6 +1132,105 @@ export function createCompile(options: CompileOptions): CompileService {
     let transcludeMasters: Node[] = [];
     let transcludeNamedMasters: Record<string, Node[]> = {};
     let transcludeUnfilledRequired: string[] = [];
+
+    // ----- Spec 033 / Slice 1: multi-element (ranged) grouping (Mode A) -----
+    //
+    // When the winning transcluding directive (`kind: 'element'`) matched
+    // via the `<name>-start` ranged form, group the start element through
+    // its matching depth-aware `<name>-end` sibling into one node range.
+    // The range becomes the transclusion master so `$transclude` clones
+    // the WHOLE group per iteration/branch. An unterminated range routes
+    // `UnterminatedMultiElementDirectiveError` via '$compile' and goes
+    // inert with the DOM left UNTOUCHED — `collectMultiElementRange` is a
+    // pure read, so no partial mutation needs undoing.
+    let multiElementRange: Node[] | undefined;
+    if (
+      transcludingDirective !== null &&
+      transcludingDirective.transclude !== undefined &&
+      transcludingDirective.transclude.kind === 'element' &&
+      transcludingDirective.multiElement &&
+      isElement(node) &&
+      multiElementStarts.has(transcludingDirective.name)
+    ) {
+      const result = collectMultiElementRange(node, transcludingDirective.name);
+      if (!result.ok) {
+        // Unterminated — `directive.name` is the normalized base; the
+        // DOM-form `-start` / `-end` markers are derived for the message.
+        const startAttr = attrs.$attr[transcludingDirective.name] ?? `${transcludingDirective.name}Start`;
+        const endAttr = `${transcludingDirective.name}-end`;
+        invokeExceptionHandler(
+          exceptionHandler,
+          new UnterminatedMultiElementDirectiveError(transcludingDirective.name, startAttr, endAttr),
+          '$compile',
+        );
+        return noopLinker;
+      }
+      multiElementRange = result.nodes;
+    }
+
+    // ----- Spec 033 / Slice 3: multi-element (ranged) grouping (Mode B) -----
+    //
+    // A `multiElement` directive that does NOT declare `transclude`
+    // (`ng-show`, `ng-hide`, `ng-class`, and any custom opt-in directive)
+    // cannot capture/clone a range — instead the ranged form applies the
+    // SAME directive to EVERY node in the range. We achieve this by
+    // propagating the start element's directive expression — already
+    // populated as `attrs[base]` by the collector — onto each subsequent
+    // RANGE ELEMENT as its bare `<base>` DOM attribute. The outer
+    // walker's `compileNodes` map then visits those siblings (which sit
+    // AFTER this start element in the same snapshot), the collector
+    // matches the directive on each via the freshly-written attribute, and
+    // the normal per-element link installs the directive there. Net effect:
+    // one watch per grouped node, all bound to the same expression, so the
+    // whole range toggles/styles together.
+    //
+    // This is a DELIBERATE clarity-over-performance choice: AngularJS links
+    // the directive ONCE against a node collection, whereas we link it
+    // per node. The observable behavior is identical — every range node
+    // reflects the same expression in lock-step. Text / comment nodes in
+    // the range carry no directives and are skipped; the start element
+    // already matched directly via `<base>-start`, so it is skipped too.
+    //
+    // Dispatch is on `transclude === undefined`: a `multiElement`
+    // directive could be Mode A (transclude: 'element') OR Mode B
+    // (non-transclude). The Mode A path above already consumed the
+    // transclude case, so here we only handle non-transclude matches.
+    if (isElement(node) && multiElementStarts.size > 0) {
+      for (const directive of directives) {
+        if (!directive.multiElement || directive.transclude !== undefined) {
+          continue;
+        }
+        if (!multiElementStarts.has(directive.name)) {
+          continue;
+        }
+        const expr = attrs[directive.name];
+        if (typeof expr !== 'string') {
+          continue;
+        }
+        const result = collectMultiElementRange(node, directive.name);
+        if (!result.ok) {
+          const startAttr = attrs.$attr[directive.name] ?? `${directive.name}Start`;
+          const endAttr = `${directive.name}-end`;
+          invokeExceptionHandler(
+            exceptionHandler,
+            new UnterminatedMultiElementDirectiveError(directive.name, startAttr, endAttr),
+            '$compile',
+          );
+          return noopLinker;
+        }
+        const domAttrName = camelToKebab(directive.name);
+        // Skip the first node (the start element — already matched
+        // directly). Propagate the expression onto every other RANGE
+        // element so the per-element walker links the directive there.
+        for (let i = 1; i < result.nodes.length; i++) {
+          const rangeNode = result.nodes[i];
+          if (rangeNode !== undefined && isElement(rangeNode)) {
+            rangeNode.setAttribute(domAttrName, expr);
+          }
+        }
+      }
+    }
+
     if (transcludingDirective !== null && transcludingDirective.transclude !== undefined && isElement(node)) {
       transcludeDecl = transcludingDirective.transclude;
       // Defensively coerce the attribute lookup — `attrs[name]` may be
@@ -1002,7 +1256,7 @@ export function createCompile(options: CompileOptions): CompileService {
           enumerable: false,
         });
       }
-      const buckets = captureChildren(node, transcludeDecl, transcludingDirective.name, attrValue);
+      const buckets = captureChildren(node, transcludeDecl, transcludingDirective.name, attrValue, multiElementRange);
       const compiled = compileBuckets(
         { defaultBucket: buckets.defaultBucket, slotBuckets: buckets.slotBuckets },
         (nodes) => makeInternalLinker(nodes),
@@ -1010,6 +1264,30 @@ export function createCompile(options: CompileOptions): CompileService {
       defaultLinker = compiled.defaultLinker;
       slotLinkers = compiled.slotLinkers;
       transcludeMasters = buckets.defaultBucket;
+      // Spec 033 — for a multi-element range captured into a
+      // DocumentFragment, a NESTED ranged directive's compile (which ran
+      // inside `compileBuckets` above) may have REPLACED some range nodes
+      // with their own Comment placeholders inside the fragment. The
+      // default-bucket linker's per-node closures closed over the
+      // POST-capture nodes (each captured child's rebound placeholder),
+      // so the master list used for clone-pairing must be re-snapshotted
+      // from the fragment's CURRENT children — exactly mirroring the
+      // `masterChildren` re-snapshot for the nested single-host case
+      // below. The single-element form (host detached, `parentNode ===
+      // null`) is left untouched.
+      if (multiElementRange !== undefined) {
+        const firstMaster = buckets.defaultBucket[0];
+        const fragment = firstMaster?.parentNode ?? null;
+        if (fragment !== null) {
+          const reSnapshot: Node[] = [];
+          for (let i = 0; i < fragment.childNodes.length; i++) {
+            // `childNodes.item(i)` is non-null for every index in
+            // `[0, length)`; the loop bound guarantees the range.
+            reSnapshot.push(fragment.childNodes.item(i));
+          }
+          transcludeMasters = reSnapshot;
+        }
+      }
       transcludeNamedMasters = buckets.slotBuckets;
       transcludeUnfilledRequired = buckets.unfilledRequired;
       // Spec 027 Slice 2: rebind `node` to the Comment placeholder for
@@ -1205,11 +1483,21 @@ export function createCompile(options: CompileOptions): CompileService {
     // narrower semantic with a custom `terminal: true` directive plus
     // a child directive that asserted child compilation runs. Per the
     // spec 023 risk-mitigation guidance (tech-considerations §3), we
-    // narrow the broadened semantic to the `ngNonBindable` name only —
-    // every existing `terminal: true` consumer keeps the spec-017
-    // same-element-only behavior. Slice 6 ships `ng-non-bindable` and
-    // is the sole consumer of this opt-out path.
-    const hasNonBindableTerminal = effectiveDirectives.some((d) => d.terminal && d.name === NG_NON_BINDABLE_NAME);
+    // narrow the broadened semantic to a fixed allow-list of directive
+    // names rather than every `terminal: true` consumer — so custom
+    // `terminal: true` directives keep the spec-017 same-element-only
+    // behavior pinned by `terminal.test.ts`.
+    //
+    // Spec 031 adds `script` to the allow-list: now that text nodes are
+    // compiled (`{{ }}` interpolation), the body of a
+    // `<script type="text/ng-template">` would otherwise be interpolated
+    // and rendered live. AngularJS treats script-template bodies as raw
+    // template text (never interpolated where they stand), so `script`
+    // joins `ngNonBindable` as a no-descent halt — keeping the body
+    // structurally inert.
+    const haltsChildDescent = effectiveDirectives.some(
+      (d) => d.terminal && (d.name === NG_NON_BINDABLE_NAME || d.name === SCRIPT_TEMPLATE_NAME),
+    );
 
     // Snapshot children AFTER the compile loop runs. For transcluding
     // hosts the capture pass above already drained children, so the
@@ -1222,11 +1510,11 @@ export function createCompile(options: CompileOptions): CompileService {
     // template and are compiled inside the drain.
     const masterChildren: Node[] = [];
     let childLinker: NodeLinker = noopLinker;
-    if (hasChildren && !isAsyncTemplateHost && !hasNonBindableTerminal && isElement(node)) {
+    if (hasChildren && !isAsyncTemplateHost && !haltsChildDescent && isElement(node)) {
       const preCaptureChildren: Node[] = [];
       for (let i = 0; i < node.childNodes.length; i++) {
         const child = node.childNodes.item(i);
-        if (isElement(child) || isComment(child)) {
+        if (isElement(child) || isComment(child) || isText(child)) {
           preCaptureChildren.push(child);
         }
       }
@@ -1258,7 +1546,7 @@ export function createCompile(options: CompileOptions): CompileService {
       // `pairChildren` depends on.
       for (let i = 0; i < node.childNodes.length; i++) {
         const child = node.childNodes.item(i);
-        if (isElement(child) || isComment(child)) {
+        if (isElement(child) || isComment(child) || isText(child)) {
           masterChildren.push(child);
         }
       }
@@ -1439,6 +1727,12 @@ export function createCompile(options: CompileOptions): CompileService {
           setIsolateHostScope(target, parentScope);
         }
       }
+      // Spec 034 Slice 4 — attach debug-info marker classes to the live
+      // target (master or transclusion clone). Appends `ng-scope` /
+      // `ng-isolate-scope` (when this element got a new scope) and
+      // `ng-binding` (interpolation / `ng-bind`-family binding) without
+      // clobbering consumer classes. No-op when `debugInfoEnabled` is off.
+      attachDebugMarkers(target, needsChildScope, isolate, hasBindingMarker);
       // Wire isolate bindings AFTER scope creation and BEFORE attrs are
       // bound to the scope (binding `@` reads attrs and seeds the
       // initial value; binding `<` / `=` parse `attrs[attrName]` strings).
@@ -1470,6 +1764,9 @@ export function createCompile(options: CompileOptions): CompileService {
           bindings: isolateDirective.isolateBindings as NormalizedBindingMap,
           target: scope as unknown as Record<string, unknown>,
           interpolate,
+          strictComponentBindingsEnabled,
+          exceptionHandler,
+          directiveName: isolateDirective.name,
         });
       }
       const orphanForm2 = findOrphanedBindToControllerBindings(effectiveDirectives);
@@ -1481,6 +1778,9 @@ export function createCompile(options: CompileOptions): CompileService {
           bindings: orphanForm2.bindToControllerBindings as NormalizedBindingMap,
           target: scope as unknown as Record<string, unknown>,
           interpolate,
+          strictComponentBindingsEnabled,
+          exceptionHandler,
+          directiveName: orphanForm2.name,
         });
       }
 
@@ -1516,7 +1816,20 @@ export function createCompile(options: CompileOptions): CompileService {
 
       const effectiveLinkEntries = deferCompileToLink ? liveLinkEntries : templateTimeLinkEntries;
 
-      bindAttrsToScope(attrs, scope, interpolate, exceptionHandler);
+      // Pass the resolved live `target` (the clone under a transclusion
+      // clone-map, else the master `node`) so the eager attribute-
+      // interpolation pass writes `{{...}}` results to the CLONE's live
+      // DOM attribute and installs an independent per-clone watch (spec
+      // 031 — text nodes already resolve their clone target the same way
+      // via the cloneMap indirection).
+      bindAttrsToScope(
+        attrs,
+        scope,
+        interpolate,
+        exceptionHandler,
+        isElement(target) ? target : undefined,
+        urlSanitizeConfig,
+      );
 
       // ----- Spec 020 / Slice 4: per-element controller seam.
       //
@@ -1749,7 +2062,7 @@ export function createCompile(options: CompileOptions): CompileService {
     const childNodes: Node[] = [];
     for (let i = 0; i < element.childNodes.length; i++) {
       const child = element.childNodes.item(i);
-      if (isElement(child) || isComment(child)) {
+      if (isElement(child) || isComment(child) || isText(child)) {
         childNodes.push(child);
       }
     }
@@ -1757,6 +2070,13 @@ export function createCompile(options: CompileOptions): CompileService {
 
     // Determine `scope: true` requirement on the pending directives.
     const needsChildScope = pendingDirectives.some((d) => d.scope);
+
+    // Spec 034 Slice 4 — `ng-binding` debug marker decision for the
+    // post-template (templateUrl) link path. Computed against the
+    // post-install element + its pending directives, mirroring the
+    // synchronous path. Gated on `debugInfoEnabled` so it costs nothing
+    // when debug info is disabled.
+    const hasBindingMarker = debugInfoEnabled && detectBindingMarker(element, pendingDirectives, attrs);
 
     // Spec 022 Slice 1: detect isolate-scope directive among pending
     // directives (mirrors the synchronous-link pre-pass). At most one
@@ -1834,6 +2154,9 @@ export function createCompile(options: CompileOptions): CompileService {
       if (needsChildScope) {
         setElementScope(element, scope);
       }
+      // Spec 034 Slice 4 — attach debug-info marker classes to the
+      // post-template element (append; never replace consumer classes).
+      attachDebugMarkers(element, needsChildScope, isolate, hasBindingMarker);
       // Wire isolate bindings BEFORE attrs are bound to scope so the
       // `@` binding's $observe seed reads the same `attrs[attrName]`
       // the synchronous path sees.
@@ -1849,6 +2172,9 @@ export function createCompile(options: CompileOptions): CompileService {
           bindings: pendingIsolateDirective.isolateBindings as NormalizedBindingMap,
           target: scope as unknown as Record<string, unknown>,
           interpolate,
+          strictComponentBindingsEnabled,
+          exceptionHandler,
+          directiveName: pendingIsolateDirective.name,
         });
       }
       const pendingOrphanForm2 = findOrphanedBindToControllerBindings(pendingDirectives);
@@ -1860,6 +2186,9 @@ export function createCompile(options: CompileOptions): CompileService {
           bindings: pendingOrphanForm2.bindToControllerBindings as NormalizedBindingMap,
           target: scope as unknown as Record<string, unknown>,
           interpolate,
+          strictComponentBindingsEnabled,
+          exceptionHandler,
+          directiveName: pendingOrphanForm2.name,
         });
       }
 
@@ -1869,7 +2198,7 @@ export function createCompile(options: CompileOptions): CompileService {
       const bound = isNgManagedElement(element) ? element[NG_BOUND_TRANSCLUDE] : undefined;
       const $transclude: TranscludeFn | undefined = bound?.fn;
 
-      bindAttrsToScope(attrs, scope, interpolate, exceptionHandler);
+      bindAttrsToScope(attrs, scope, interpolate, exceptionHandler, undefined, urlSanitizeConfig);
 
       // ----- Spec 020 / Slice 4: per-element controller seam (post-
       // templateUrl-install path). Same contract as the synchronous
@@ -1974,15 +2303,16 @@ export function createCompile(options: CompileOptions): CompileService {
  * child lists are guaranteed structurally aligned because the parent
  * is a deep clone produced by `Node.cloneNode(true)`.
  *
- * The filter mirrors the live walker — only Element and Comment
- * children participate in the per-node linkers, so only those are
- * paired (Text nodes carry no directive matches and are skipped).
+ * The filter mirrors the live walker — Element, Comment, and Text
+ * children all participate in the per-node linkers (text nodes carry
+ * `{{ }}` interpolation bindings since spec 031), so all three are
+ * paired index-by-index.
  */
 function pairChildren(masters: readonly Node[], cloneParent: Element, parentMap: Map<Node, Node>) {
   const cloneChildren: Node[] = [];
   for (let i = 0; i < cloneParent.childNodes.length; i++) {
     const child = cloneParent.childNodes.item(i);
-    if (isElement(child) || isComment(child)) {
+    if (isElement(child) || isComment(child) || isText(child)) {
       cloneChildren.push(child);
     }
   }

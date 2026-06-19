@@ -662,6 +662,44 @@ export class TemplateFetchFailedError extends Error {
 }
 
 /**
+ * Thrown at LINK time (spec 034 Slice 3) when
+ * `$compileProvider.strictComponentBindingsEnabled(true)` is in effect
+ * and a directive / component declares a REQUIRED isolate-scope or
+ * `bindToController` binding (`<` / `=` / `@` / `&` WITHOUT the `?`
+ * optional modifier) whose source attribute is ABSENT on the element it
+ * links against. In lenient mode (the default) a missing required binding
+ * is tolerated — the local is left undefined / one-way degrades; strict
+ * mode surfaces it as a clear error instead of a silently-undefined value.
+ *
+ * Routed via `$exceptionHandler('$compile')` from
+ * {@link import('./isolate-bindings').wireIsolateBindings}. No new
+ * `EXCEPTION_HANDLER_CAUSES` token — `'$compile'` is reused; the tuple
+ * stays at 10. The message names BOTH the missing source attribute and
+ * the owning directive / component so the author can locate the unbound
+ * input.
+ *
+ * @example
+ * ```ts
+ * appModule.config(['$compileProvider', (cp) => {
+ *   cp.strictComponentBindingsEnabled(true);
+ * }]);
+ * $compileProvider.component('userCard', { bindings: { user: '<' } });
+ * // <user-card></user-card> — no `user` attribute → at link time,
+ * // MissingComponentBindingError routes via $exceptionHandler('$compile').
+ * ```
+ */
+export class MissingComponentBindingError extends Error {
+  readonly name = 'MissingComponentBindingError' as const;
+
+  constructor(directiveName: string, localName: string, attrName: string) {
+    super(
+      `Required binding "${localName}" (attribute "${attrName}") was not provided on directive "${directiveName}" ` +
+        `while strictComponentBindingsEnabled is true.`,
+    );
+  }
+}
+
+/**
  * Thrown at LINK time (not registration) when a directive declaring
  * `require: '<name>'` (or a `^`/`^^`-prefixed variant, or an entry of
  * the array / object forms) cannot resolve the named controller and the
@@ -1059,6 +1097,40 @@ export class NgRefNoControllerError extends Error {
   constructor(requestedDirective: string, tagName: string) {
     super(
       `ngRef: ng-ref-read requested controller "${requestedDirective}" on element <${tagName}>, but no such controller is present on that element.`,
+    );
+  }
+}
+
+/**
+ * Thrown at COMPILE time (spec 033) when a ranged (multi-element)
+ * directive's `<name>-start` element has no matching `<name>-end`
+ * sibling — i.e. the forward sibling scan reaches the end of the parent's
+ * children with the depth counter still above zero. Mirrors AngularJS's
+ * `$compile:uterdir` ("Unterminated attribute") error.
+ *
+ * Routed via `$exceptionHandler('$compile')` from the compiler's range-
+ * grouping pass; the DOM is left UNTOUCHED (no capture, no node removal)
+ * so an unterminated range never leaves a half-grouped tree behind. No
+ * new `EXCEPTION_HANDLER_CAUSES` cause token — `'$compile'` is reused;
+ * the tuple stays at 10.
+ *
+ * The message names BOTH the unmatched `-start` attribute and the
+ * `-end` attribute that was expected, so the author can locate the
+ * offending element pair.
+ *
+ * @example
+ * ```ts
+ * // <div ng-repeat-start="i in items"></div> with no ng-repeat-end:
+ * // → UnterminatedMultiElementDirectiveError routed via
+ * //   $exceptionHandler('$compile'); no rows are mounted.
+ * ```
+ */
+export class UnterminatedMultiElementDirectiveError extends Error {
+  readonly name = 'UnterminatedMultiElementDirectiveError' as const;
+
+  constructor(directiveName: string, startAttr: string, endAttr: string) {
+    super(
+      `Unterminated multi-element directive "${directiveName}": found "${startAttr}" but no matching "${endAttr}" sibling.`,
     );
   }
 }

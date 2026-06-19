@@ -25,11 +25,14 @@
  * replaces, or rewrites the host node. `terminal: true` is upstream
  * parity — it triggers the spec-017 same-element directive-collector
  * cutoff so lower-priority same-element directives do not also run on
- * the `<script>`. (Unlike `ngNonBindable`, it does NOT trigger the
- * Slice 1 no-descent walker hook — that extension is narrowed to
- * `directive.name === 'ngNonBindable'`. Here the cutoff matters only
- * for the same element; this compiler has no text-node interpolation,
- * so a `<script>` body's content is structurally inert regardless.)
+ * the `<script>`. Since spec 031 (text-node interpolation) the `script`
+ * directive ALSO joins `ngNonBindable` on the no-descent walker hook
+ * (the allow-list in `compile.ts`'s `haltsChildDescent` gate): now that
+ * `{{ }}` in text nodes is compiled, the body of a
+ * `<script type="text/ng-template">` must NOT be walked, or its
+ * mustaches would be interpolated and rendered live where the script
+ * stands. AngularJS treats script-template bodies as raw template text,
+ * so the no-descent halt keeps the body structurally inert.
  *
  * **Last-wins semantics.** `$templateCache` is `Map`-backed, so two
  * `<script type="text/ng-template" id="x">` blocks with the same `id`

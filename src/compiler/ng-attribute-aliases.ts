@@ -52,6 +52,7 @@
  */
 
 import type { DirectiveFactory, DirectiveFactoryReturn, LinkFn } from './directive-types';
+import type { SanitizeUriService } from './sanitize-uri-types';
 
 /**
  * Mapping from DOM attribute name to the corresponding normalized
@@ -126,26 +127,42 @@ export const NG_ATTR_NAME: { readonly href: 'ngHref'; readonly src: 'ngSrc'; rea
  */
 function createUrlAliasDirective(domAttrName: 'href' | 'src' | 'srcset'): DirectiveFactory {
   const ngAttrName = NG_ATTR_NAME[domAttrName];
+  // `href` is the link context (sanitized against the
+  // `aHrefSanitizationTrustedUrlList`); `src` / `srcset` are media
+  // contexts (sanitized against the `imgSrcSanitizationTrustedUrlList`).
+  // Spec 034 Slice 2 — the `$$sanitizeUri` service selects the matching
+  // pattern from `isMediaUrl`.
+  const isMediaUrl = domAttrName !== 'href';
 
-  const link: LinkFn = (_scope, _element, attrs) => {
-    attrs.$observe(ngAttrName, (value) => {
-      // Non-empty string (including JS-falsy strings like `'0'`, valid
-      // relative URLs) → setAttribute via `$set`. Only `''` and
-      // `undefined` → `null` → removeAttribute via `$set` (spec 017
-      // `attributes.ts:273` removes when `value === null`). The
-      // explicit ternary deliberately rejects the looser `value || null`
-      // shape that would also strip `'0'` / `'false'`.
-      attrs.$set(domAttrName, value !== undefined && value !== '' ? value : null);
-    });
-  };
-
+  // The factory injects `$$sanitizeUri` (registered by `$CompileProvider`
+  // in its constructor, closing over the config-phase URL safe-list
+  // patterns) so `ng-href` / `ng-src` / `ng-srcset` apply the SAME
+  // configured safe-list as the eager attribute-interpolation write path
+  // in `attributes.ts`. A resolved URL that fails the safe-list is
+  // neutralized with an `unsafe:` prefix BEFORE the `$set` DOM write.
   return [
-    () =>
-      ({
+    '$$sanitizeUri',
+    ($$sanitizeUri: SanitizeUriService): DirectiveFactoryReturn => {
+      const link: LinkFn = (_scope, _element, attrs) => {
+        attrs.$observe(ngAttrName, (value) => {
+          // Non-empty string (including JS-falsy strings like `'0'`,
+          // valid relative URLs) → sanitize, then setAttribute via
+          // `$set`. Only `''` and `undefined` → `null` → removeAttribute
+          // via `$set` (spec 017 `attributes.ts:273` removes when
+          // `value === null`). The explicit ternary deliberately rejects
+          // the looser `value || null` shape that would also strip
+          // `'0'` / `'false'`.
+          const next = value !== undefined && value !== '' ? $$sanitizeUri(value, isMediaUrl) : null;
+          attrs.$set(domAttrName, next);
+        });
+      };
+
+      return {
         restrict: 'A',
         priority: 99,
         link,
-      }) satisfies DirectiveFactoryReturn,
+      };
+    },
   ];
 }
 

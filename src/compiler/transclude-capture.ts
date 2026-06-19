@@ -23,13 +23,16 @@
  *    carries keys for FILLED named slots — unfilled slots are absent
  *    from `slotBuckets`, and the caller reads the unfilled sets to
  *    drive error reporting (required) or fallback paths (optional).
- * 3. `{ kind: 'element' }` (spec 027 Slice 2) — the host element
- *    ITSELF is detached from the live DOM and replaced in-place by a
+ * 3. `{ kind: 'element' }` (spec 027 Slice 2; generalized to ranges in
+ *    spec 033 Slice 1) — the host element ITSELF (or, when a `range` is
+ *    supplied, the whole `<name>-start`…`<name>-end` sibling group) is
+ *    detached from the live DOM and replaced in-place by ONE
  *    `<!-- directiveName: attrValue -->` Comment placeholder
- *    (AngularJS-canonical naming, useful in dev tools). The host is
- *    pushed into the `defaultBucket` as a single-element array; the
- *    existing default-bucket linker compiles it once and re-links a
- *    deep clone per `$transclude(...)` call. This is the FIRST
+ *    (AngularJS-canonical naming, useful in dev tools). The captured
+ *    node(s) are pushed into the `defaultBucket` (a single-element array
+ *    for the single-host form, the whole range for the multi-element
+ *    form); the existing default-bucket linker compiles it once and
+ *    re-links a deep clone per `$transclude(...)` call. This is the FIRST
  *    capture mode that detaches the host element itself rather than
  *    its children, which is why the result also carries an optional
  *    `replacementNode` field — the per-element linker assembly in
@@ -105,22 +108,67 @@ export interface CapturedBuckets {
  * @param attrValue - The corresponding attribute value (used to label
  *   the placeholder). For `'content'` / `'slots'` the value is
  *   ignored.
+ * @param range - Spec 033 (Mode A). For `kind: 'element'` ONLY: the
+ *   inclusive multi-element range (start element through matching `-end`
+ *   sibling, plus any text / comments between) to capture as ONE unit.
+ *   When omitted the range defaults to `[host]` — byte-identical to the
+ *   pre-spec-033 single-host behavior. When supplied, ONE Comment
+ *   placeholder is inserted before the FIRST range node and EVERY range
+ *   node is removed from the DOM; the whole range becomes the
+ *   transclusion master (`defaultBucket: [...range]`). Ignored for
+ *   `'content'` / `'slots'`.
  */
 export function captureChildren(
   host: Element,
   transclude: NormalizedTransclude,
   directiveName: string,
   attrValue: string,
+  range?: readonly Node[],
 ): CapturedBuckets {
   if (transclude.kind === 'element') {
     const placeholder = host.ownerDocument.createComment(` ${directiveName}: ${attrValue} `);
-    const parent = host.parentNode;
+
+    // Single-element form (spec 027) — no `range`, or a length-1 range.
+    // Behavior is byte-identical to pre-spec-033: detach the host and
+    // leave it with `parentNode === null` in the default bucket.
+    if (range === undefined || range.length <= 1) {
+      const parent = host.parentNode;
+      if (parent !== null) {
+        parent.insertBefore(placeholder, host);
+        parent.removeChild(host);
+      }
+      return {
+        defaultBucket: [host],
+        slotBuckets: {},
+        unfilledRequired: [],
+        unfilledOptional: [],
+        replacementNode: placeholder,
+      };
+    }
+
+    // Multi-element form (spec 033 Mode A) — capture the WHOLE range as
+    // ONE unit. Insert one placeholder before the first range node, then
+    // MOVE every range node into a detached `DocumentFragment` so the
+    // captured nodes RETAIN their sibling links. Sibling links matter
+    // because the master fragment is compiled in place (via the
+    // default-bucket linker), and a NESTED ranged directive inside the
+    // group must be able to scan `nextSibling` to find its own `-end`
+    // marker. A plain per-node `removeChild` would sever those links and
+    // break nested-range grouping.
+    const firstNode = range[0] ?? host;
+    const parent = firstNode.parentNode;
+    const fragment = host.ownerDocument.createDocumentFragment();
     if (parent !== null) {
-      parent.insertBefore(placeholder, host);
-      parent.removeChild(host);
+      parent.insertBefore(placeholder, firstNode);
+    }
+    for (const rangeNode of range) {
+      // `appendChild` re-parents into the fragment, removing the node
+      // from `parent` while preserving document order inside the
+      // fragment (so `nextSibling` walks the captured group).
+      fragment.appendChild(rangeNode);
     }
     return {
-      defaultBucket: [host],
+      defaultBucket: [...range],
       slotBuckets: {},
       unfilledRequired: [],
       unfilledOptional: [],

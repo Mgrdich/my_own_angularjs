@@ -54,6 +54,8 @@ import {
   TemplateAndTemplateUrlCombinedError,
 } from './compile-error';
 import { parseIsolateBindings, type NormalizedBindingMap } from './isolate-bindings';
+import { sanitizeUri } from './sanitize-uri';
+import type { SanitizeUriService } from './sanitize-uri-types';
 import { describeValue } from './describe-value';
 import { directiveNormalize } from './directive-normalize';
 import type {
@@ -72,6 +74,36 @@ import type {
 import type { NormalizedTransclude, TranscludeSlot, TranscludeSlotMap } from './transclude-types';
 
 const VALID_DIRECTIVE_NAME = /^[a-zA-Z][a-zA-Z0-9]*$/;
+
+/**
+ * Default safe-list pattern for link (`a`/`area[href]`) URLs (spec 034
+ * Slice 2). Matches the AngularJS 1.7+ canonical
+ * `aHrefSanitizationTrustedUrlList` default: a small allow-list of
+ * known-safe schemes (`http(s)` / `ftp` / `mailto` / `tel` / `sms` /
+ * `file`) PLUS any relative URL (the trailing alternation matches a URL
+ * with no scheme — anything whose first `:`, if present, is preceded by
+ * a `/`, `?`, or `#`, i.e. NOT a scheme separator). A `javascript:`,
+ * `vbscript:`, or dangerous `data:` URL fails both alternatives and is
+ * neutralized with an `unsafe:` prefix by {@link sanitizeUri}.
+ *
+ * This mirrors AngularJS's `aHrefSanitizationTrustedUrlList` source
+ * default (`compile.js`):
+ * `/^\s*(https?|s?ftp|mailto|tel|file|sms):/` extended with the
+ * relative-URL alternative that AngularJS applies through `urlIsSafe`.
+ */
+const DEFAULT_A_HREF_SANITIZATION_TRUSTED_URL_LIST = /^\s*(https?|s?ftp|mailto|tel|sms|file):|^\s*[^:/?#]*(?:[/?#]|$)/i;
+
+/**
+ * Default safe-list pattern for media-source (`img[src]`, `[srcset]`)
+ * URLs (spec 034 Slice 2). Matches the AngularJS 1.7+ canonical
+ * `imgSrcSanitizationTrustedUrlList` default: known-safe fetch schemes
+ * (`http(s)` / `ftp` / `file` / `blob`) PLUS `data:image/` (inline
+ * images are safe) PLUS any relative URL. A `data:text/html` or
+ * `javascript:` source fails all alternatives and is neutralized with an
+ * `unsafe:` prefix by {@link sanitizeUri}.
+ */
+const DEFAULT_IMG_SRC_SANITIZATION_TRUSTED_URL_LIST =
+  /^\s*((https?|ftp|file|blob):|data:image\/)|^\s*[^:/?#]*(?:[/?#]|$)/i;
 
 /**
  * Suffix appended to every directive name when it is registered as a
@@ -115,8 +147,332 @@ export class $CompileProvider {
    */
   private readonly $$factoryMap = new Map<string, DirectiveFactory[]>();
 
+  /**
+   * Comment-directive scanning toggle (spec 034 Slice 1 / FS §2 —
+   * `commentDirectivesEnabled`). When `false`, the directive collector
+   * skips the comment (M-restrict) pass entirely, so `<!-- directive:
+   * foo -->` markers are no longer recognized during compilation — a
+   * performance lever and attack-surface reduction matching AngularJS.
+   * Defaults to `true` (today's behavior). Read once at `$get` time and
+   * threaded into `createCompile`, so the setting is frozen at run-phase
+   * start (AngularJS parity).
+   */
+  private $$commentDirectivesEnabled = true;
+
+  /**
+   * Class-directive scanning toggle (spec 034 Slice 1 / FS §2 —
+   * `cssClassDirectivesEnabled`). When `false`, the directive collector
+   * skips the class (C-restrict) pass entirely, so class-name directives
+   * are no longer recognized during compilation. Defaults to `true`
+   * (today's behavior). Read once at `$get` time and threaded into
+   * `createCompile`, so the setting is frozen at run-phase start.
+   */
+  private $$cssClassDirectivesEnabled = true;
+
+  /**
+   * Link-URL safe-list pattern (spec 034 Slice 2 / FS §2 —
+   * `aHrefSanitizationTrustedUrlList`). Used by the compiler-level
+   * {@link sanitizeUri} pass at the `a`/`area[href]` write path: a
+   * resolved `href` that does NOT match this RegExp is neutralized with
+   * an `unsafe:` prefix. Defaults to the AngularJS-standard safe-URL
+   * pattern — a DELIBERATE behavior change from spec 031's pass-through
+   * (see technical-considerations §3). Read once at `$get` time and
+   * threaded into `createCompile`, so the setting is frozen at run-phase
+   * start (AngularJS parity).
+   */
+  private $$aHrefSanitizationTrustedUrlList: RegExp = DEFAULT_A_HREF_SANITIZATION_TRUSTED_URL_LIST;
+
+  /**
+   * Media-source URL safe-list pattern (spec 034 Slice 2 / FS §2 —
+   * `imgSrcSanitizationTrustedUrlList`). Used by the compiler-level
+   * {@link sanitizeUri} pass at the `img[src]` / `[srcset]` write path:
+   * a resolved `src` that does NOT match this RegExp is neutralized with
+   * an `unsafe:` prefix. Defaults to the AngularJS-standard media
+   * safe-URL pattern. Read once at `$get` time and threaded into
+   * `createCompile`, so the setting is frozen at run-phase start.
+   */
+  private $$imgSrcSanitizationTrustedUrlList: RegExp = DEFAULT_IMG_SRC_SANITIZATION_TRUSTED_URL_LIST;
+
+  /**
+   * Strict-component-bindings toggle (spec 034 Slice 3 / FS §2 —
+   * `strictComponentBindingsEnabled`). When `true`, the isolate-binding
+   * wiring reports {@link MissingComponentBindingError} via
+   * `$exceptionHandler('$compile')` for any REQUIRED binding (`<` / `=` /
+   * `@` / `&` WITHOUT the `?` modifier) whose source attribute is absent
+   * on the linked element. Defaults to `false` — today's lenient behavior
+   * (a missing attribute leaves the local undefined / one-way degrades).
+   * Read once at `$get` time and threaded into `createCompile`, so the
+   * setting is frozen at run-phase start (AngularJS parity).
+   */
+  private $$strictComponentBindingsEnabled = false;
+
+  /**
+   * Debug-info toggle (spec 034 Slice 4 / FS §2 — `debugInfoEnabled`).
+   * When `true` (the default), the per-element linker attaches AngularJS
+   * marker classes — `ng-scope` on a new (non-isolate) child scope,
+   * `ng-isolate-scope` on an isolate-scope element, and `ng-binding` on
+   * an element carrying an interpolation / `ng-bind`-family binding — by
+   * APPENDING to the element's class list (consumer classes are never
+   * replaced). Scope retrieval for dev-tools inspection stays available
+   * via the existing non-enumerable `$$ngScope` slot
+   * ({@link import('./cleanup').getElementScope}). When `false`, none of
+   * the marker classes are added — production output stays clean. Read
+   * once at `$get` time and threaded into `createCompile`, so the setting
+   * is frozen at run-phase start (AngularJS parity).
+   */
+  private $$debugInfoEnabled = true;
+
   constructor($provide: ProvideService) {
     this.$$provide = $provide;
+
+    // Spec 034 Slice 2 — register the internal `$$sanitizeUri` service.
+    // Its `$get` closes over the provider's `$$` pattern fields, read
+    // LAZILY at run-phase resolution so a config-block setter call lands
+    // before the patterns are captured (same frozen-at-`$get` contract as
+    // every other config method). The built-in `ng-href` / `ng-src` /
+    // `ng-srcset` alias directives inject this service, so they apply the
+    // SAME configured safe-list as the eager attribute-interpolation
+    // write path in `attributes.ts`. A free factory (not a method on
+    // `this`) avoids a circular `$compile` ← directive ← `$compile` dep
+    // — `$$sanitizeUri` depends on nothing.
+    $provide.factory('$$sanitizeUri', [
+      (): SanitizeUriService =>
+        (uri: string, isMediaUrl: boolean): string =>
+          sanitizeUri(
+            uri,
+            isMediaUrl,
+            isMediaUrl ? this.$$imgSrcSanitizationTrustedUrlList : this.$$aHrefSanitizationTrustedUrlList,
+          ),
+    ]);
+  }
+
+  /**
+   * Config-phase getter/setter for comment-directive scanning
+   * (spec 034 Slice 1).
+   *
+   * - Called WITH a boolean → validates the argument, stores it, and
+   *   returns `this` for chaining.
+   * - Called with NO argument → returns the current value.
+   *
+   * Config-phase only — the provider is only reachable from a `config`
+   * block. The stored value is read once at `$get` time, so a mutation
+   * after `$get` has no effect (AngularJS parity).
+   *
+   * @example
+   * ```ts
+   * appModule.config([
+   *   '$compileProvider',
+   *   ($cp: $CompileProvider) => {
+   *     $cp.commentDirectivesEnabled(false); // disable `<!-- directive: … -->`
+   *   },
+   * ]);
+   * ```
+   */
+  commentDirectivesEnabled(): boolean;
+  commentDirectivesEnabled(value: boolean): this;
+  commentDirectivesEnabled(value?: boolean): boolean | this {
+    if (value === undefined) {
+      return this.$$commentDirectivesEnabled;
+    }
+    if (typeof value !== 'boolean') {
+      throw new TypeError('commentDirectivesEnabled expects a boolean argument');
+    }
+    this.$$commentDirectivesEnabled = value;
+    return this;
+  }
+
+  /**
+   * Config-phase getter/setter for class-directive scanning
+   * (spec 034 Slice 1).
+   *
+   * - Called WITH a boolean → validates the argument, stores it, and
+   *   returns `this` for chaining.
+   * - Called with NO argument → returns the current value.
+   *
+   * Config-phase only — the provider is only reachable from a `config`
+   * block. The stored value is read once at `$get` time, so a mutation
+   * after `$get` has no effect (AngularJS parity).
+   *
+   * @example
+   * ```ts
+   * appModule.config([
+   *   '$compileProvider',
+   *   ($cp: $CompileProvider) => {
+   *     $cp.cssClassDirectivesEnabled(false); // disable class-form directives
+   *   },
+   * ]);
+   * ```
+   */
+  cssClassDirectivesEnabled(): boolean;
+  cssClassDirectivesEnabled(value: boolean): this;
+  cssClassDirectivesEnabled(value?: boolean): boolean | this {
+    if (value === undefined) {
+      return this.$$cssClassDirectivesEnabled;
+    }
+    if (typeof value !== 'boolean') {
+      throw new TypeError('cssClassDirectivesEnabled expects a boolean argument');
+    }
+    this.$$cssClassDirectivesEnabled = value;
+    return this;
+  }
+
+  /**
+   * Config-phase getter/setter for the link (`a`/`area[href]`) URL
+   * safe-list (spec 034 Slice 2).
+   *
+   * - Called WITH a RegExp → validates the argument, stores it, and
+   *   returns `this` for chaining.
+   * - Called with NO argument → returns the current pattern.
+   *
+   * The compiler routes an interpolated / `ng-href` `href` value through
+   * {@link sanitizeUri} against this pattern before writing the DOM
+   * attribute: a non-matching URL is neutralized with an `unsafe:`
+   * prefix. Config-phase only — the stored value is read once at `$get`
+   * time, so a mutation after `$get` has no effect (AngularJS parity).
+   *
+   * @example
+   * ```ts
+   * appModule.config([
+   *   '$compileProvider',
+   *   ($cp: $CompileProvider) => {
+   *     // Only allow links under a custom `myapp:` scheme.
+   *     $cp.aHrefSanitizationTrustedUrlList(/^myapp:/);
+   *   },
+   * ]);
+   * ```
+   */
+  aHrefSanitizationTrustedUrlList(): RegExp;
+  aHrefSanitizationTrustedUrlList(value: RegExp): this;
+  aHrefSanitizationTrustedUrlList(value?: RegExp): RegExp | this {
+    if (value === undefined) {
+      return this.$$aHrefSanitizationTrustedUrlList;
+    }
+    if (!(value instanceof RegExp)) {
+      throw new TypeError('aHrefSanitizationTrustedUrlList expects a RegExp argument');
+    }
+    this.$$aHrefSanitizationTrustedUrlList = value;
+    return this;
+  }
+
+  /**
+   * Config-phase getter/setter for the media-source (`img[src]`,
+   * `[srcset]`) URL safe-list (spec 034 Slice 2).
+   *
+   * - Called WITH a RegExp → validates the argument, stores it, and
+   *   returns `this` for chaining.
+   * - Called with NO argument → returns the current pattern.
+   *
+   * The compiler routes an interpolated / `ng-src` / `ng-srcset` value
+   * through {@link sanitizeUri} against this pattern before writing the
+   * DOM attribute: a non-matching URL is neutralized with an `unsafe:`
+   * prefix. Config-phase only — the stored value is read once at `$get`
+   * time, so a mutation after `$get` has no effect (AngularJS parity).
+   *
+   * @example
+   * ```ts
+   * appModule.config([
+   *   '$compileProvider',
+   *   ($cp: $CompileProvider) => {
+   *     $cp.imgSrcSanitizationTrustedUrlList(/^\s*(https?|data:image\/):/);
+   *   },
+   * ]);
+   * ```
+   */
+  imgSrcSanitizationTrustedUrlList(): RegExp;
+  imgSrcSanitizationTrustedUrlList(value: RegExp): this;
+  imgSrcSanitizationTrustedUrlList(value?: RegExp): RegExp | this {
+    if (value === undefined) {
+      return this.$$imgSrcSanitizationTrustedUrlList;
+    }
+    if (!(value instanceof RegExp)) {
+      throw new TypeError('imgSrcSanitizationTrustedUrlList expects a RegExp argument');
+    }
+    this.$$imgSrcSanitizationTrustedUrlList = value;
+    return this;
+  }
+
+  /**
+   * Config-phase getter/setter for strict component bindings
+   * (spec 034 Slice 3).
+   *
+   * - Called WITH a boolean → validates the argument, stores it, and
+   *   returns `this` for chaining.
+   * - Called with NO argument → returns the current value.
+   *
+   * When `true`, using a component / directive without supplying one of
+   * its REQUIRED (non-`?`) inputs routes
+   * {@link MissingComponentBindingError} via
+   * `$exceptionHandler('$compile')`, naming the missing input. When
+   * `false` (the default), a missing required binding is tolerated —
+   * today's lenient behavior (the local stays undefined / one-way
+   * degrades). Config-phase only — the provider is only reachable from a
+   * `config` block; the stored value is read once at `$get` time, so a
+   * mutation after `$get` has no effect (AngularJS parity).
+   *
+   * @example
+   * ```ts
+   * appModule.config([
+   *   '$compileProvider',
+   *   ($cp: $CompileProvider) => {
+   *     $cp.strictComponentBindingsEnabled(true); // require every non-`?` binding
+   *   },
+   * ]);
+   * ```
+   */
+  strictComponentBindingsEnabled(): boolean;
+  strictComponentBindingsEnabled(value: boolean): this;
+  strictComponentBindingsEnabled(value?: boolean): boolean | this {
+    if (value === undefined) {
+      return this.$$strictComponentBindingsEnabled;
+    }
+    if (typeof value !== 'boolean') {
+      throw new TypeError('strictComponentBindingsEnabled expects a boolean argument');
+    }
+    this.$$strictComponentBindingsEnabled = value;
+    return this;
+  }
+
+  /**
+   * Config-phase getter/setter for debug information (spec 034 Slice 4).
+   *
+   * - Called WITH a boolean → validates the argument, stores it, and
+   *   returns `this` for chaining.
+   * - Called with NO argument → returns the current value.
+   *
+   * When `true` (the default), compiled elements carry AngularJS
+   * debugging metadata — the marker classes `ng-scope` (new child
+   * scope), `ng-isolate-scope` (isolate-scope element), and `ng-binding`
+   * (interpolation / `ng-bind`-family binding) — appended (never
+   * replacing) the consumer's classes, plus the ability to retrieve an
+   * element's scope for inspection via the existing
+   * {@link import('./cleanup').getElementScope} hook. When `false`, none
+   * of the marker classes are attached, so production output stays clean
+   * and slightly lighter. Config-phase only — the provider is only
+   * reachable from a `config` block; the stored value is read once at
+   * `$get` time, so a mutation after `$get` has no effect (AngularJS
+   * parity).
+   *
+   * @example
+   * ```ts
+   * appModule.config([
+   *   '$compileProvider',
+   *   ($cp: $CompileProvider) => {
+   *     $cp.debugInfoEnabled(false); // strip ng-scope / ng-binding markers
+   *   },
+   * ]);
+   * ```
+   */
+  debugInfoEnabled(): boolean;
+  debugInfoEnabled(value: boolean): this;
+  debugInfoEnabled(value?: boolean): boolean | this {
+    if (value === undefined) {
+      return this.$$debugInfoEnabled;
+    }
+    if (typeof value !== 'boolean') {
+      throw new TypeError('debugInfoEnabled expects a boolean argument');
+    }
+    this.$$debugInfoEnabled = value;
+    return this;
   }
 
   /**
@@ -412,6 +768,29 @@ export class $CompileProvider {
         interpolate: $interpolate,
         exceptionHandler: $exceptionHandler,
         templateRequest: $templateRequest,
+        // Spec 034 Slice 1 — config-phase directive-scan toggles read
+        // once here so the settings are frozen at run-phase start
+        // (AngularJS parity). Defaults `true` preserve today's behavior.
+        commentDirectivesEnabled: this.$$commentDirectivesEnabled,
+        cssClassDirectivesEnabled: this.$$cssClassDirectivesEnabled,
+        // Spec 034 Slice 2 — config-phase URL safe-list patterns read
+        // once here so they are frozen at run-phase start (AngularJS
+        // parity). The compiler routes interpolated `href` / `src`
+        // values through `sanitizeUri` against these patterns at the
+        // attribute write path; the `$$sanitizeUri` service (registered
+        // in the constructor) closes over the SAME fields for the
+        // `ng-href` / `ng-src` / `ng-srcset` alias directives.
+        aHrefSanitizationTrustedUrlList: this.$$aHrefSanitizationTrustedUrlList,
+        imgSrcSanitizationTrustedUrlList: this.$$imgSrcSanitizationTrustedUrlList,
+        // Spec 034 Slice 3 — config-phase strict-binding toggle read once
+        // here so the setting is frozen at run-phase start (AngularJS
+        // parity). Default `false` preserves today's lenient behavior.
+        strictComponentBindingsEnabled: this.$$strictComponentBindingsEnabled,
+        // Spec 034 Slice 4 — config-phase debug-info toggle read once
+        // here so the setting is frozen at run-phase start (AngularJS
+        // parity). Default `true` attaches the `ng-scope` /
+        // `ng-isolate-scope` / `ng-binding` marker classes at link time.
+        debugInfoEnabled: this.$$debugInfoEnabled,
       }),
   ] as const;
 }
@@ -686,6 +1065,7 @@ function normalizeDirective(name: string, factoryReturn: DirectiveFactoryReturn)
       link: linkFn,
       scope: false,
       bindToController: false,
+      multiElement: false,
     };
   }
 
@@ -874,6 +1254,7 @@ function normalizeDirective(name: string, factoryReturn: DirectiveFactoryReturn)
     link: ddo.link,
     scope,
     bindToController,
+    multiElement: (ddo as { multiElement?: unknown }).multiElement === true,
   };
   if (transclude !== undefined) {
     directive.transclude = transclude;

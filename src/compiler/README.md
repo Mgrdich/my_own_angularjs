@@ -2471,6 +2471,339 @@ compiler-internal — NOT exported from `@compiler/index` or the root
 barrel; it re-implements a narrow subset of the parser's internal `assign`
 machinery because the parser does not publicly expose that helper.
 
+## Template interpolation (spec 031)
+
+Spec 031 closes the biggest remaining hole in the templating story: the
+ability to write `{{ expression }}` directly in markup — inside element
+text AND inside attribute values — and have it evaluate and stay in sync
+with the data, with NO directive required. This mirrors AngularJS's two
+synthetic interpolation directives (`addTextInterpolateDirective` /
+`addAttrInterpolateDirective`), adapted to this codebase's existing seams
+(the walker + the `Attributes` instance) rather than as new directives.
+Both reuse the `$interpolate` collaborator already threaded through the
+walker, so custom delimiters and null/undefined→`''` are inherited for
+free. `EXCEPTION_HANDLER_CAUSES` stays at 10 — interpolation adds NO new
+cause token.
+
+### Text-node interpolation
+
+Before spec 031 the walker skipped `Text` nodes entirely. Now
+`compileNode` dispatches every text node to `compileTextNode`
+(`src/compiler/text-interpolate.ts`):
+
+- Text containing NO `{{ … }}` is **static** — `compileTextNode` returns
+  a no-op linker, so a pure-literal `<p>Just text</p>` installs ZERO
+  watches and costs nothing per digest.
+- Text containing at least one expression installs a single
+  `scope.$watch(interpolateFn, …)` whose listener writes the rendered
+  string to the node's `textContent`. Surrounding literal characters
+  (commas, whitespace, newlines) are preserved verbatim; non-string and
+  `null` / `undefined` values render as `''`, never `"undefined"`.
+
+```html
+<h1>Hello {{name}}</h1>   <!-- renders "Hello World", updates live -->
+<p>{{greeting}}, {{name}}!</p>  <!-- multiple expressions, literals kept -->
+<p>Just text</p>          <!-- static — left as written, no watch -->
+```
+
+Transcluded clones (an `ng-if` / `ng-repeat` row) bind their OWN text
+node: the linker resolves the live target through the same `cloneMap`
+indirection every element linker uses (`cloneMap?.get(node) ?? node`), so
+each clone gets an independent watch torn down with its transclusion
+scope. The master fragment is never inserted.
+
+### Attribute interpolation — eager classification in `bindAttrsToScope`
+
+Attribute interpolation runs EAGERLY at link time. `bindAttrsToScope`
+(`src/compiler/attributes.ts`) — already called once per element before
+any directive's pre-link — gains a pass over every own normalized
+attribute. For each value it calls `interpolate(value, true, ctx?)`:
+
+- **Static** (no `{{ … }}`) — cache the `null` sentinel in the shared
+  `$$interpolators` map; install NO watch.
+- **Dynamic** — cache the `InterpolateFn` AND install exactly ONE
+  `scope.$watch(interpolateFn, …)` whose listener writes the resolved
+  value to the REAL DOM attribute via `$set(name, value ?? null, true)`
+  (`writeAttr: true` — auto-interpolation now OWNS the live DOM write).
+
+```html
+<div title="{{tooltip}}">       <!-- live title attribute -->
+<div class="box {{state}}">     <!-- mixed literal + expression → "box active" -->
+<img alt="{{caption}}" data-id="{{id}}" aria-label="{{label}}">
+```
+
+The `$$interpolators` cache is the **single source of truth** shared with
+`$observe`: because the eager pass classifies every attribute up front, a
+later `attrs.$observe('title', fn)` always finds a cached entry and never
+installs a competing watch — guaranteeing ONE watch per interpolated
+attribute. Observers ride the existing `$set` → `$$observers` iteration.
+
+**Transclusion-clone attributes.** The `Attributes` instance is built
+once per master element and shared across clone re-links, so the eager
+pass receives the resolved live `target` (the clone under a clone-map,
+else the master). When `target` differs from the master it writes the
+interpolated value to the CLONE's live attribute and installs an
+INDEPENDENT per-clone watch — so `<li ng-repeat="item in items"
+data-label="{{item}}">` gives each row its own correct `data-label`.
+
+### `href` / `src` trusted-context routing
+
+Interpolated link/source attributes route through `$interpolate`'s
+already-wired trusted-context support so the framework's URL-safety rules
+apply uniformly. A static `(tagName, attrName) → SceContext` map resolves
+the context — `a`/`area[href] → URL`, `img[src] → URL` (the project has
+no `MEDIA_URL`, so the upstream `img[src] → MEDIA_URL` mapping collapses
+to `URL`). The context is passed as the 3rd argument to
+`interpolate(value, true, ctx)`; a safe plain URL passes through and
+renders into the live attribute after digest.
+
+```html
+<a href="{{profileUrl}}">      <!-- URL trusted context; safe URL renders -->
+<img src="{{imageUrl}}">       <!-- URL trusted context -->
+```
+
+**Known limitation — surrounding-text URL under SCE strict mode.** With
+SCE strict mode ON (default), `$interpolate` enforces the "exactly one
+`{{expression}}`, no surrounding literal text" rule for trusted contexts.
+So `href="/users/{{id}}"` (literal `/users/` + an expression) THROWS at
+classification time. The eager pass runs at LINK time, so a raw throw
+there would abort linking of the whole element. Instead the per-attribute
+`interpolate(...)` call is wrapped in `try/catch`: the throw is routed via
+the `$exceptionHandler` (cause `'$compile'` — no new cause token), that
+SINGLE attribute is skipped, and the rest of the element still links and
+keeps digesting. Plain (non-URL) attributes are unaffected by the rule.
+Use `ng-href` (which observes the `ng-*` name and writes the real `href`)
+when you need surrounding text in a URL attribute.
+
+### Custom delimiters & first-render flash
+
+Configured custom start/end symbols (`$interpolateProvider.startSymbol`/
+`endSymbol`) are honored for BOTH text and attributes — the compiler
+passes raw text through `$interpolate` unchanged. Until the first digest
+runs the raw `{{ }}` markup may briefly be visible (parity with
+AngularJS); `ng-cloak` / `ng-bind` / `ng-href` / `ng-src` remain the
+flash-free options.
+
+## Multi-element / ranged directives (spec 033)
+
+Some directives need to apply across a **range of sibling elements**, not
+just a single host — `<tr>` rows inside a `<table>`, `<option>`s inside a
+`<select>`, `<dt>`/`<dd>` pairs inside a `<dl>` — where there is no legal
+wrapper element to host a single directive. AngularJS solves this with
+paired `<name>-start` / `<name>-end` suffixes: the directive applies to
+the start element, the end element, and **everything between them**,
+treated as one group. Spec 033 ships the parity feature.
+
+### The `multiElement` flag
+
+Ranged support is opt-in via a single DDO field:
+
+```ts
+$compileProvider.directive('myRange', () => ({
+  multiElement: true, // opt in to <my-range-start> / <my-range-end>
+  link: (scope, element) => { /* … */ },
+}));
+```
+
+The flag normalizes to `false` by default; only directives that set
+`multiElement: true` participate in `-start` / `-end` grouping. The
+ordinary single-element form of EVERY ranged directive continues to work
+exactly as before — the feature is purely additive. A custom (developer-
+authored) directive opts in the same way the built-ins do.
+
+### The depth-aware range scan
+
+When an element carries `<name>-start` for a `multiElement` directive, the
+compiler walks `nextSibling` collecting the inclusive group up to the
+matching `<name>-end`. The scan in `src/compiler/multi-element-range.ts`
+(`collectMultiElementRange`) is **depth-aware**: a nested `<name>-start`
+increments depth and a `<name>-end` decrements it, so nested same-named
+ranges (`ng-repeat-start` inside another `ng-repeat-start`) resolve to the
+correct matching end. The helper is **pure-read** — it never mutates the
+DOM and never throws; it returns a discriminated union
+(`{ ok: true; nodes } | { ok: false; reason: 'unterminated' }`). The
+collected `nodes` array includes **text and comment nodes** between the
+endpoints, so spec-031 text interpolation and authored comments inside the
+range survive cloning.
+
+### Mode A — ranged `transclude: 'element'` directives
+
+`ng-repeat`, `ng-if`, `ng-switch-when`, and `ng-switch-default` are
+`transclude: 'element'` directives. For the ranged form, the WHOLE range
+is captured as the transclusion master — the spec-027 `kind: 'element'`
+capture in `src/compiler/transclude-capture.ts` is generalized from a
+single-host `defaultBucket: [host]` to `defaultBucket: [...range]`. The
+entire range is replaced by ONE Comment placeholder, and `$transclude`
+deep-clones the whole range per iteration / branch. The four directives'
+links were extended to insert / move / remove all top-level cloned nodes
+as one group; the single-element path is preserved unchanged.
+
+### Mode B — ranged non-transclude directives
+
+`ng-show`, `ng-hide`, and `ng-class` are not transclusion directives. For
+the ranged form the directive is applied to **every node** in the range:
+the start element's expression is propagated onto each range element, and
+the normal per-element link runs the directive there. The net effect is
+one watch per range node, all bound to the same expression, so the whole
+group toggles / styles together. This is a deliberate
+clarity-over-performance choice — AngularJS links once against a single
+node collection; this project links per node — with identical observable
+behavior.
+
+### Unterminated range
+
+A `<name>-start` with no matching `<name>-end` sibling routes
+`UnterminatedMultiElementDirectiveError` via `$exceptionHandler('$compile')`
+at compile time. The error is detected BEFORE any capture or node removal,
+so the DOM is left **untouched** — an unterminated range never leaves a
+half-grouped tree behind. No new `EXCEPTION_HANDLER_CAUSES` token — the
+existing `'$compile'` cause is reused (the tuple stays at 10).
+
+### The parity built-in set
+
+The seven built-ins that set `multiElement: true`:
+
+| Mode | Directives |
+| --- | --- |
+| **A** (`transclude: 'element'`) | `ng-repeat`, `ng-if`, `ng-switch-when`, `ng-switch-default` |
+| **B** (per-node link) | `ng-show`, `ng-hide`, `ng-class` |
+
+### Worked example — repeating `<tr>` pairs
+
+The canonical case: repeating two `<tr>` rows together for each record,
+where the rows cannot share a wrapper element inside the `<table>`:
+
+```html
+<table>
+  <tr ng-repeat-start="record in records">
+    <td>{{ record.name }}</td>
+  </tr>
+  <tr ng-repeat-end>
+    <td>{{ record.detail }}</td>
+  </tr>
+</table>
+```
+
+Both `<tr>` rows are captured as one transclusion master, replaced by a
+single `<!-- ngRepeat: record in records -->` Comment placeholder, and
+cloned together once per record — preserving order. Nodes between the two
+endpoints (whitespace, comments, additional elements) are part of the
+group and repeat with it. Toggling, styling, or selecting a range with
+`ng-if-start`/`-end`, `ng-show-start`/`-end`, `ng-class-start`/`-end`, or
+`ng-switch-when-start`/`-end` follows the same whole-range semantics.
+
+## `$compileProvider` configuration methods (spec 034)
+
+Real AngularJS apps tune compiler-wide policy during the **config phase**
+through `$compileProvider`. Spec 034 ships the six AngularJS-canonical
+getter/setters. Each follows the AngularJS idiom: called **with** a value
+it validates, stores, and returns the provider for chaining; called **with
+no** value it returns the current setting. Every method is **config-phase
+only** (the provider is reachable only from a `config` block) and its value
+is **frozen at `$get`** — the `$get` factory threads the current field
+values into `createCompile({ … })`, so a mutation after the run phase begins
+has no effect (AngularJS parity).
+
+| Method | Default | Effect |
+| --- | --- | --- |
+| `aHrefSanitizationTrustedUrlList(re?)` | AngularJS-standard safe-URL pattern | safe-list for `a`/`area[href]` URLs |
+| `imgSrcSanitizationTrustedUrlList(re?)` | AngularJS-standard media safe-URL pattern | safe-list for `img[src]` / `[srcset]` URLs |
+| `commentDirectivesEnabled(bool?)` | `true` | gate the collector's comment (`<!-- directive: … -->`) pass |
+| `cssClassDirectivesEnabled(bool?)` | `true` | gate the collector's class-name directive pass |
+| `strictComponentBindingsEnabled(bool?)` | `false` | require every non-`?` component/directive binding |
+| `debugInfoEnabled(bool?)` | `true` | attach `ng-scope` / `ng-isolate-scope` / `ng-binding` marker classes |
+
+### URL sanitization — a deliberate behavior change
+
+The two URL-list methods back a NEW compiler-level pass,
+`sanitizeUri(uri, isMediaUrl, pattern)` (`src/compiler/sanitize-uri.ts`,
+exposed as the internal `$$sanitizeUri` DI service). A resolved `href` /
+`src` that matches the configured pattern is written verbatim; a URL that
+does NOT match is neutralized by prefixing it with `unsafe:`, so the
+browser treats it as a relative navigation to a (nonexistent) `unsafe:`
+scheme instead of executing a `javascript:` / dangerous `data:` payload.
+
+This layer is **separate from and additive to `$sce`**: the project's
+`$sce` URL context passes plain strings through unchanged (a deliberate
+simplification), while `sanitizeUri` governs the literal scheme of the
+resolved URL string. It is wired at TWO write paths — the spec-031
+interpolated-attribute write (`attributes.ts`) and the spec-025
+`ng-href` / `ng-src` / `ng-srcset` alias directives (`ng-attribute-aliases.ts`),
+both routing through the SAME `$$sanitizeUri` service so the configured
+safe-list is a single source of truth.
+
+**This is the one deliberate behavior change in spec 034.** The defaults
+are the AngularJS-standard safe-URL patterns (allowing `http(s)`, `(s)ftp`,
+`mailto`, `tel`, `sms`, `file`, `data:image/` for media, `blob:` for media,
+and relative URLs), so a `javascript:` / unsafe-`data:` URL that passed
+through unchanged before spec 034 is now neutralized with an `unsafe:`
+prefix. Apps that need a different policy relax it via the config methods:
+
+```ts
+appModule.config([
+  '$compileProvider',
+  (cp) => {
+    // Only treat custom `myapp:` links as safe; everything else gets `unsafe:`.
+    cp.aHrefSanitizationTrustedUrlList(/^\s*myapp:/);
+  },
+]);
+```
+
+### Comment / class directive toggles
+
+`commentDirectivesEnabled` and `cssClassDirectivesEnabled` default to
+`true` (today's behavior). When set `false`, the directive collector skips
+the corresponding scan entirely — a performance lever and an attack-surface
+reduction matching AngularJS. With comment directives off,
+`<!-- directive: foo -->` markers no longer match; with class directives
+off, class-name (C-restrict) directives no longer match.
+
+### Strict component bindings
+
+`strictComponentBindingsEnabled` defaults to `false` (lenient — a missing
+required binding leaves the local undefined / one-way degrades). When set
+`true`, the isolate-binding wiring reports `MissingComponentBindingError`
+via `$exceptionHandler('$compile')` for any REQUIRED binding (`<` / `=` /
+`@` / `&` WITHOUT the `?` optional modifier) whose source attribute is
+ABSENT on the linked element — turning a silently-undefined value into a
+clear error that names both the missing input and its owning directive. No
+new `EXCEPTION_HANDLER_CAUSES` token — `'$compile'` is reused (the tuple
+stays at 10).
+
+```ts
+appModule.config(['$compileProvider', (cp) => cp.strictComponentBindingsEnabled(true)]);
+$compileProvider.component('userCard', { bindings: { user: '<' } });
+// <user-card></user-card> — no `user` attribute → at link time,
+// MissingComponentBindingError routes via $exceptionHandler('$compile').
+```
+
+### Debug info markers
+
+`debugInfoEnabled` defaults to `true`. When on, the per-element linker
+APPENDS (never replaces) the AngularJS marker classes — `ng-scope` on an
+element that gets a new (non-isolate) child scope, `ng-isolate-scope` on an
+isolate-scope element, and `ng-binding` on an element hosting an
+interpolation / `ng-bind`-family binding (a text-node binding marks the
+parent element). Scope retrieval for dev-tools inspection stays available
+via the existing `getElementScope` (`$$ngScope`) hook. When set `false`,
+none of the marker classes are attached — production output stays clean and
+slightly lighter.
+
+### Worked example — combining the toggles
+
+```ts
+appModule.config([
+  '$compileProvider',
+  (cp) => {
+    cp.debugInfoEnabled(false) // chainable — every setter returns the provider
+      .commentDirectivesEnabled(false)
+      .cssClassDirectivesEnabled(false)
+      .strictComponentBindingsEnabled(true)
+      .aHrefSanitizationTrustedUrlList(/^\s*(https?|mailto):/);
+  },
+]);
+```
+
 ## Deferred items
 
 Spec 017 deliberately stops at the compiler core. The following are
@@ -2530,16 +2863,19 @@ do not produce observable behavior in this spec:
   & element-override directives (spec 030)" above). The remaining
   built-ins (`ng-model` and the rest) ship under their own roadmap items.
 - **Multi-element directives** (`multiElement: true`, `*-start` /
-  `*-end` pairs) — deferred; lands alongside `ng-repeat`.
+  `*-end` pairs) shipped with spec 033 — see
+  [Multi-element / ranged directives (spec 033)](#multi-element--ranged-directives-spec-033)
+  above.
 - **Module DSL `.directive(...)` shorthand** on `createModule` —
   registration in spec 017 is config-block-only via
   `$compileProvider.directive`. The `module.directive` shorthand is a
   separate roadmap bullet.
 - **`$compileProvider` toggles** — `commentDirectivesEnabled`,
   `cssClassDirectivesEnabled`, `aHrefSanitizationTrustedUrlList`,
-  `imgSrcSanitizationTrustedUrlList`, `debugInfoEnabled`. Comment and
-  class directives are always on in spec 017; the URL-sanitization
-  toggles config the future `a` / `ng-href` / `ng-src` directives.
+  `imgSrcSanitizationTrustedUrlList`, `strictComponentBindingsEnabled`,
+  `debugInfoEnabled` shipped with spec 034 — see
+  [`$compileProvider` configuration methods (spec 034)](#compileprovider-configuration-methods-spec-034)
+  above.
 - **String-input compilation** — `$compile('<my-dir></my-dir>')` is NOT
   supported. Callers parse strings to DOM nodes themselves
   (`new DOMParser().parseFromString(...)` or a `<template>` element).

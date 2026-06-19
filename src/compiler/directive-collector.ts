@@ -57,6 +57,7 @@
 import { AttributesImpl } from './attributes';
 import { directiveNormalize } from './directive-normalize';
 import type { Directive } from './directive-types';
+import { isNgManagedElement, NG_ELEMENT_TRANSCLUDED } from './element-slots';
 import { isElement } from './node-guards';
 
 /**
@@ -84,6 +85,17 @@ type WritableAttrs = Record<string, string | undefined>;
 const COMMENT_DIRECTIVE_REGEX = /^\s*directive:\s*(\S+)\s*(.*?)\s*$/;
 
 /**
+ * Per-compile directive-scan toggles (spec 034 Slice 1). Threaded from
+ * `CompileOptions` (`commentDirectivesEnabled` / `cssClassDirectivesEnabled`)
+ * via `compile.ts`. Both default to `true` — when omitted, the collector
+ * behaves exactly as it did before the toggles existed.
+ */
+export interface CollectDirectivesOptions {
+  readonly commentDirectivesEnabled?: boolean;
+  readonly cssClassDirectivesEnabled?: boolean;
+}
+
+/**
  * Collect directives that match `node` under the E, A, C, and M
  * restrict modes, sort them by descending priority (registration
  * order tie-breaks ascending), and return the sorted list together
@@ -94,6 +106,12 @@ const COMMENT_DIRECTIVE_REGEX = /^\s*directive:\s*(\S+)\s*(.*?)\s*$/;
  * comments have no attributes or classes to walk, so the entire
  * Element path short-circuits.
  *
+ * **Spec 034 Slice 1 — scan toggles.** When `options.cssClassDirectivesEnabled`
+ * is `false`, the C (Class) pass is skipped; when
+ * `options.commentDirectivesEnabled` is `false`, the M (Comment) pass is
+ * skipped. Both default to `true` (today's behavior), so existing callers
+ * that omit `options` are unaffected.
+ *
  * The same {@link AttributesImpl} is reused across every directive
  * on the node — compile, pre-link, and post-link all see the
  * same instance.
@@ -101,9 +119,17 @@ const COMMENT_DIRECTIVE_REGEX = /^\s*directive:\s*(\S+)\s*(.*?)\s*$/;
 export function collectDirectives(
   node: Element | Comment,
   getDirectivesByName: (name: string) => Directive[],
-): { directives: Directive[]; attrs: AttributesImpl } {
+  options?: CollectDirectivesOptions,
+): { directives: Directive[]; attrs: AttributesImpl; multiElementStarts: Set<string> } {
+  const commentDirectivesEnabled = options?.commentDirectivesEnabled ?? true;
+  const cssClassDirectivesEnabled = options?.cssClassDirectivesEnabled ?? true;
   const attrs = new AttributesImpl(node);
   const matched: Directive[] = [];
+  // Base directive names matched via the ranged `<base>-start` form
+  // (spec 033). The compiler reads this set to decide whether to build a
+  // node range before the transclude pre-pass.
+  const multiElementStarts = new Set<string>();
+  const writableAttrs = attrs as unknown as WritableAttrs;
 
   if (isElement(node)) {
     const element = node;
@@ -123,9 +149,38 @@ export function collectDirectives(
         continue;
       }
       const normalized = directiveNormalize(attr.name);
+      let matchedThisAttr = false;
       for (const directive of getDirectivesByName(normalized)) {
         if (directive.restrict.includes('A')) {
           matched.push(directive);
+          matchedThisAttr = true;
+        }
+      }
+      // Spec 033 — ranged `<base>-start` recognition. The bare
+      // `<base>` (handled above) is the single-element form and is
+      // unchanged. Only when the normalized attribute name ends in
+      // `Start` AND no plain directive matched it do we probe for a
+      // `multiElement` base directive: `ngRepeatStart` → base `ngRepeat`.
+      // The matched base directive(s) are added to the matched list with
+      // the directive's expression taken from the `-start` attribute's
+      // VALUE, exposed as `attrs[base]` (so `ng-repeat-start="i in items"`
+      // makes `attrs.ngRepeat === 'i in items'`). The `<base>End` name is
+      // recognized as part of the family but matches no directive on its
+      // own — it is purely the range terminator scanned in
+      // `multi-element-range.ts`.
+      if (!matchedThisAttr && normalized.length > 5 && normalized.endsWith('Start')) {
+        const base = normalized.slice(0, -'Start'.length);
+        let anyRanged = false;
+        for (const directive of getDirectivesByName(base)) {
+          if (directive.multiElement && directive.restrict.includes('A')) {
+            matched.push(directive);
+            anyRanged = true;
+          }
+        }
+        if (anyRanged) {
+          multiElementStarts.add(base);
+          writableAttrs[base] = attr.value;
+          attrs.$attr[base] = attr.name;
         }
       }
     }
@@ -133,18 +188,44 @@ export function collectDirectives(
     // C (Class) — parse `element.className` and match each token.
     // Runs BEFORE the terminal cutoff (which is applied below after
     // the priority sort) and AFTER the attribute pass (so `attrs.class`
-    // already holds the full original `class` string).
-    collectClassDirectives(element, attrs, matched, getDirectivesByName);
+    // already holds the full original `class` string). Spec 034 Slice 1:
+    // skipped entirely when `cssClassDirectivesEnabled === false`.
+    if (cssClassDirectivesEnabled) {
+      collectClassDirectives(element, attrs, matched, getDirectivesByName);
+    }
   } else {
     // M (Comment) — parse the comment text against the canonical
     // `<!-- directive: name value -->` syntax. Falls back to an empty
     // matched list when the comment is non-directive (the most common
     // case in practice). Comments contribute neither E/A/C matches
     // nor any DOM attributes — the entire Element path is skipped.
-    collectCommentDirectives(node, attrs, matched, getDirectivesByName);
+    // Spec 034 Slice 1: skipped entirely when
+    // `commentDirectivesEnabled === false`.
+    if (commentDirectivesEnabled) {
+      collectCommentDirectives(node, attrs, matched, getDirectivesByName);
+    }
   }
 
-  return { directives: applySortAndTerminalCutoff(matched), attrs };
+  // On the re-entrant master pass of an element-form transclude (spec
+  // 027 Slice 2 / spec 032 Slice 1), the host carries the
+  // `NG_ELEMENT_TRANSCLUDED` stamp naming the winning structural
+  // directive. The same-element structural conflict (if any) was already
+  // reported on the OUTER pass; this pass only compiles the host as the
+  // CONTENT master. The winning directive is excluded downstream by
+  // `compile.ts`'s re-entrancy guard, but a SECOND transclude-declaring
+  // directive on the same host (e.g. `ng-repeat` alongside `ng-if`)
+  // would otherwise survive here, re-fire transclude capture, and recurse
+  // infinitely. Drop every NON-winner transclude directive on re-entry
+  // so the content master compiles with no competing structural directive.
+  const reentryStamp = isElement(node) && isNgManagedElement(node) ? node[NG_ELEMENT_TRANSCLUDED] : undefined;
+  const sanitized =
+    reentryStamp === undefined ? matched : matched.filter((d) => d.transclude === undefined || d.name === reentryStamp);
+
+  return {
+    directives: applySortAndTerminalCutoff(sanitized, reentryStamp !== undefined),
+    attrs,
+    multiElementStarts,
+  };
 }
 
 /**
@@ -155,8 +236,32 @@ export function collectDirectives(
  * Shared helper used by both the Element and Comment branches of
  * `collectDirectives`. Keeps the priority + terminal contract
  * uniform regardless of how the directives were matched.
+ *
+ * **Spec 032 Slice 2 — same-element structural conflict exception.**
+ * The terminal cutoff would normally drop EVERY directive below the
+ * terminal's priority. That silently hid a structural-directive
+ * conflict: `<div ng-if="a" ng-repeat="x in xs">` sorts `ng-repeat`
+ * (1000, terminal) above `ng-if` (600), so the cutoff dropped `ng-if`
+ * at collection time and the documented `MultipleTranscludeDirectivesError`
+ * in `compile.ts` never fired (the spec-027 known gap). To close it,
+ * a SECOND directive declaring `transclude` (`!== undefined`) survives
+ * the cutoff when a higher-priority transclude-declaring directive is
+ * ALREADY in the kept list — so both reach `compile.ts`'s multi-
+ * transclude guard, which raises the error and strips the second's
+ * transclude.
+ *
+ * The exception is gated STRICTLY on `transclude !== undefined` — NOT
+ * on `terminal` — so an ordinary lower-priority directive below the
+ * cutoff is still dropped exactly as before (the spec-017
+ * `terminal.test.ts` contract is unaffected). Priority-DESCENDING
+ * ordering is preserved.
+ *
+ * `suppressConflictKeep` disables the exception on the re-entrant
+ * element-transclude master pass: the conflict was already reported on
+ * the outer pass, and keeping a second transclude directive there would
+ * recurse infinitely. See {@link collectDirectives} for the stamp check.
  */
-function applySortAndTerminalCutoff(matched: readonly Directive[]) {
+function applySortAndTerminalCutoff(matched: readonly Directive[], suppressConflictKeep: boolean) {
   const sorted = matched.slice().sort((a, b) => {
     if (a.priority !== b.priority) {
       return b.priority - a.priority;
@@ -165,15 +270,29 @@ function applySortAndTerminalCutoff(matched: readonly Directive[]) {
   });
 
   // Apply terminal cutoff. The list is priority-DESCENDING, so once
-  // we encounter anything below the cutoff, every subsequent entry
-  // is also below (and we can safely break).
+  // we encounter anything below the cutoff, every subsequent ordinary
+  // entry is also below it. We can no longer `break` outright because a
+  // below-cutoff `transclude`-declaring directive must survive to
+  // surface the same-element structural conflict (see the JSDoc above);
+  // ordinary below-cutoff directives are skipped via `continue`.
   let terminalPriority = -Infinity;
+  let transcludeKept = false;
   const directives: Directive[] = [];
   for (const directive of sorted) {
     if (directive.priority < terminalPriority) {
-      break;
+      // Narrow exception (spec 032 Slice 2): keep a second transclude
+      // directive so the conflict reaches `compile.ts`'s guard. Every
+      // other below-cutoff directive is dropped as before. Suppressed on
+      // the re-entrant element-transclude master pass to avoid recursion.
+      if (directive.transclude !== undefined && transcludeKept && !suppressConflictKeep) {
+        directives.push(directive);
+      }
+      continue;
     }
     directives.push(directive);
+    if (directive.transclude !== undefined) {
+      transcludeKept = true;
+    }
     if (directive.terminal && directive.priority > terminalPriority) {
       terminalPriority = directive.priority;
     }

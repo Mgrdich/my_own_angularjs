@@ -139,7 +139,22 @@ export const NG_REPEAT_NAME = 'ngRepeat';
  */
 interface RowEntry {
   scope: Scope;
+  /**
+   * The cloned host element — `clone[0]` of the transcluded fragment.
+   * For single-element `ng-repeat` this is the sole node of the row; for
+   * the multi-element ranged form (`ng-repeat-start` / `ng-repeat-end`,
+   * spec 033) it is the FIRST of {@link cloneNodes}, retained as the
+   * identity anchor for reuse / move / teardown ordering.
+   */
   cloneRoot: Element;
+  /**
+   * Every cloned top-level node of the row, in document order. Length 1
+   * for the single-element form (`[cloneRoot]`); length N for the ranged
+   * form (the whole `start`…`end` group). Reorder MOVES every node and
+   * teardown REMOVES every node, so a multi-node group travels as one
+   * unit and leaves nothing behind.
+   */
+  cloneNodes: Node[];
   index: number;
   value: unknown;
   key: string | number;
@@ -273,9 +288,14 @@ function ngRepeatFactory($exceptionHandler: ExceptionHandler): DirectiveFactoryR
       for (const entry of currentRows.values()) {
         // Order mirrors ng-if / ng-switch: destroy the scope BEFORE
         // removing from the DOM so any `$on('$destroy', …)` listeners
-        // that read DOM state still observe the live tree.
+        // that read DOM state still observe the live tree. Every node of
+        // the (possibly multi-element) row is removed.
         entry.scope.$destroy();
-        entry.cloneRoot.remove();
+        for (const node of entry.cloneNodes) {
+          if (node.parentNode !== null) {
+            node.parentNode.removeChild(node);
+          }
+        }
       }
       currentRows.clear();
     }
@@ -405,8 +425,17 @@ function ngRepeatFactory($exceptionHandler: ExceptionHandler): DirectiveFactoryR
           existing.index = i;
           existing.value = entry.value;
           existing.key = entry.key;
-          placeholder.parentNode?.insertBefore(existing.cloneRoot, anchor.nextSibling);
-          anchor = existing.cloneRoot;
+          // Move every node of the (possibly multi-element) row as one
+          // unit, in document order, after the current anchor. The last
+          // moved node becomes the next anchor so following rows insert
+          // after the whole group.
+          const parentNode = placeholder.parentNode;
+          if (parentNode !== null) {
+            for (const node of existing.cloneNodes) {
+              parentNode.insertBefore(node, anchor.nextSibling);
+              anchor = node;
+            }
+          }
           nextRows.set(key, existing);
           continue;
         }
@@ -433,12 +462,23 @@ function ngRepeatFactory($exceptionHandler: ExceptionHandler): DirectiveFactoryR
           }
           updatePerRowLocals(transcludedScope, i, totalCount);
 
-          placeholder.parentNode?.insertBefore(cloneRoot, anchor.nextSibling);
-          anchor = cloneRoot;
+          // Insert EVERY cloned top-level node of the row (length 1 for
+          // the single-element form, length N for the ranged
+          // `ng-repeat-start` / `ng-repeat-end` group — spec 033). The
+          // last inserted node becomes the next anchor so the following
+          // row appends after the whole group.
+          const parentNode = placeholder.parentNode;
+          if (parentNode !== null) {
+            for (const node of clone) {
+              parentNode.insertBefore(node, anchor.nextSibling);
+              anchor = node;
+            }
+          }
 
           nextRows.set(key, {
             scope: transcludedScope,
             cloneRoot,
+            cloneNodes: clone,
             index: i,
             value: entry.value,
             key: entry.key,
@@ -447,10 +487,15 @@ function ngRepeatFactory($exceptionHandler: ExceptionHandler): DirectiveFactoryR
       }
 
       // Tear down identities that disappeared. `previousRows` holds
-      // only the unreused entries. Same order as `tearDownAllRows`.
+      // only the unreused entries. Same order as `tearDownAllRows` —
+      // destroy scope first, then remove EVERY node of the row.
       for (const entry of previousRows.values()) {
         entry.scope.$destroy();
-        entry.cloneRoot.remove();
+        for (const node of entry.cloneNodes) {
+          if (node.parentNode !== null) {
+            node.parentNode.removeChild(node);
+          }
+        }
       }
 
       currentRows = nextRows;
@@ -487,6 +532,7 @@ function ngRepeatFactory($exceptionHandler: ExceptionHandler): DirectiveFactoryR
     priority: 1000,
     terminal: true,
     transclude: 'element',
+    multiElement: true,
     link,
   };
 }

@@ -190,7 +190,15 @@ interface NgSwitchControllerShape {
   cases: Map<string, CaseEntry[]>;
   selectedTranscludes: TranscludeFn[];
   selectedScopes: Scope[];
-  selectedClones: Element[];
+  /**
+   * One entry per mounted case, each carrying EVERY cloned top-level node
+   * of that case's group, in document order. For the single-element form
+   * the inner array is length 1; for the ranged
+   * `ng-switch-when-start` / `-end` (or `ng-switch-default-start` / `-end`)
+   * form (spec 033 Slice 2) it is the whole captured group, so teardown
+   * removes the whole range as one unit.
+   */
+  selectedClones: Node[][];
 }
 
 /**
@@ -212,7 +220,8 @@ function isNgSwitchController(value: unknown): value is NgSwitchControllerShape 
     candidate.cases instanceof Map &&
     Array.isArray(candidate.selectedTranscludes) &&
     Array.isArray(candidate.selectedScopes) &&
-    Array.isArray(candidate.selectedClones)
+    Array.isArray(candidate.selectedClones) &&
+    candidate.selectedClones.every((c) => Array.isArray(c))
   );
 }
 
@@ -261,9 +270,16 @@ function clearSelected(ctrl: NgSwitchControllerShape): void {
     }
   }
   for (let i = 0; i < ctrl.selectedClones.length; i++) {
-    const c = ctrl.selectedClones[i];
-    if (c !== undefined) {
-      c.remove();
+    const group = ctrl.selectedClones[i];
+    if (group !== undefined) {
+      // Remove every node of the (possibly multi-element) group. For the
+      // single-element form `group` is length 1, so this matches the
+      // legacy single-`remove()` behavior.
+      for (const node of group) {
+        if (node.parentNode !== null) {
+          node.parentNode.removeChild(node);
+        }
+      }
     }
   }
   ctrl.selectedTranscludes = [];
@@ -315,24 +331,37 @@ function ngSwitchFactory(): DirectiveFactoryReturn {
         entry.transclude((clone, transcludedScope) => {
           const head = clone[0];
           if (head === undefined) {
-            // Defensive — the element-form default bucket is `[host]`,
-            // so `clone[0]` is always defined in practice.
+            // Defensive — the element-form default bucket is non-empty
+            // (`[host]` or the captured `[...range]`), so `clone[0]` is
+            // always defined in practice.
             return;
           }
           if (!isElement(head)) {
             // Invariant — for `transclude: 'element'`, the default
-            // bucket is `[host]` where `host` is the original Element
-            // the matched `ng-switch-when` / `ng-switch-default`
-            // declared on. A runtime mismatch means the transclude
-            // machinery's contract has broken; surface it rather than
-            // silently casting through `unknown`.
+            // bucket's FIRST node is the matched `ng-switch-when` /
+            // `ng-switch-default` (`-start`) Element. A runtime mismatch
+            // means the transclude machinery's contract has broken;
+            // surface it rather than silently casting through `unknown`.
             throw new Error(`ngSwitch: expected cloned host to be an Element, got nodeType ${String(head.nodeType)}`);
           }
-          const cloneElement = head;
-          entry.placeholder.parentNode?.insertBefore(cloneElement, entry.placeholder.nextSibling);
+          // Insert EVERY cloned top-level node of the case's group, in
+          // document order, after the case's own Comment placeholder. The
+          // last inserted node becomes the next anchor so a multi-element
+          // (`ng-switch-when-start` / `-end`, spec 033 Slice 2) group
+          // lands contiguously next to its placeholder. For the
+          // single-element form `clone` is length 1, so this loop runs
+          // once — byte-identical to the legacy single-insert path.
+          const parentNode = entry.placeholder.parentNode;
+          if (parentNode !== null) {
+            let anchor: Node = entry.placeholder;
+            for (const node of clone) {
+              parentNode.insertBefore(node, anchor.nextSibling);
+              anchor = node;
+            }
+          }
           ctrl.selectedTranscludes.push(entry.transclude);
           ctrl.selectedScopes.push(transcludedScope);
-          ctrl.selectedClones.push(cloneElement);
+          ctrl.selectedClones.push(clone);
         });
       }
     });
@@ -446,6 +475,7 @@ function ngSwitchWhenFactory(): DirectiveFactoryReturn {
     restrict: 'EA',
     priority: 1200,
     transclude: 'element',
+    multiElement: true,
     require: `^${NG_SWITCH_NAME}`,
     link: createSwitchChildLink((attrs) => {
       const raw = attrs[NG_SWITCH_WHEN_NAME];
@@ -462,6 +492,7 @@ function ngSwitchDefaultFactory(): DirectiveFactoryReturn {
     restrict: 'EA',
     priority: 1200,
     transclude: 'element',
+    multiElement: true,
     require: `^${NG_SWITCH_NAME}`,
     link: createSwitchChildLink(() => DEFAULT_KEY),
   };
