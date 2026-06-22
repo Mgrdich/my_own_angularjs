@@ -6,6 +6,10 @@ plus its frozen tag / attribute / URI allow-lists. See `CLAUDE.md` for the
 module surface and invariants. This file documents the swap-in pattern for
 replacing the built-in implementation with [DOMPurify](https://github.com/cure53/DOMPurify).
 
+For an end-to-end picture of how `$sanitize` works (tokenizer → tag/attribute/URI
+allow-list filter) and where `$sce` delegates to it, see the text diagram at
+[`context/diagrams/sanitize.md`](../../context/diagrams/sanitize.md).
+
 ## Why swap?
 
 The built-in scrubber is a faithful AngularJS 1.x port — useful for parity
