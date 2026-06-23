@@ -15,6 +15,10 @@ in `@compiler` — see `src/compiler/README.md` for the registration
 surface and `src/compiler/compile.ts` for the template-install pre-pass
 and `drainDeferredTemplateQueue`.
 
+For an end-to-end picture of `$templateCache` ↔ `$templateRequest` (cache-first
+resolution, in-flight deduplication, `$compile` as consumer), see the text diagram
+at [`context/diagrams/template-loading.md`](../../context/diagrams/template-loading.md).
+
 ## When to use `template` vs `templateUrl`
 
 Reach for inline `template` when the template is small, static, and
