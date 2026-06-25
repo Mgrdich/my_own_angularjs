@@ -167,3 +167,12 @@ export type {
   DeferredControllerResult,
   IControllerProvider,
 } from './controller/index';
+
+export {
+  AlreadyBootstrappedError,
+  autoBootstrap,
+  bootstrap,
+  bootstrapInjector,
+  BootstrapTargetMissingError,
+} from './bootstrap/index';
+export type { BootstrapConfig, BootstrapInjectorConfig, BootstrapRegistry, BootstrapResult } from './bootstrap/index';

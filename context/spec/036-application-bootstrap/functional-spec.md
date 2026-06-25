@@ -1,7 +1,7 @@
 # Functional Specification: Application Bootstrap
 
 - **Roadmap Item:** Application Bootstrap — `bootstrapInjector` / `bootstrap` / `autoBootstrap`
-- **Status:** Draft
+- **Status:** Completed
 - **Author:** AWOS spec workflow
 
 ---
@@ -32,10 +32,10 @@ Behavior is validated against original AngularJS wherever the two overlap — th
 - The framework's own built-in capabilities are always available without the developer having to list them explicitly.
 - By default the start is **strict about wiring**: a service that doesn't clearly declare what it needs is reported as an error rather than silently guessed. The developer can relax this if they choose.
 - **Acceptance Criteria:**
-  - [ ] Given a developer provides a list of their modules, when they perform a headless start, then they receive a handle from which they can retrieve any service registered by those modules or by the framework.
-  - [ ] Retrieving a service that exists returns it; retrieving one that doesn't is reported clearly (see 2.5).
-  - [ ] No part of a page is required, accessed, or modified for a headless start.
-  - [ ] Strictness about declared wiring is on by default and can be turned off via an option.
+  - [x] Given a developer provides a list of their modules, when they perform a headless start, then they receive a handle from which they can retrieve any service registered by those modules or by the framework.
+  - [x] Retrieving a service that exists returns it; retrieving one that doesn't is reported clearly (see 2.5).
+  - [x] No part of a page is required, accessed, or modified for a headless start.
+  - [x] Strictness about declared wiring is on by default and can be turned off via an option.
 
 ### 2.2 Page start
 
@@ -43,10 +43,10 @@ Behavior is validated against original AngularJS wherever the two overlap — th
 - The call returns a single handle bundling: the service-retrieval handle, the root context, and the element that was started.
 - The framework does **not** attach any of its own bookkeeping to the page element by default. A developer who wants the classic behavior of attaching it can opt in with a flag (see 2.8).
 - **Acceptance Criteria:**
-  - [ ] Given a developer provides a page element and their module list, when they perform a page start, then the element and its contents are processed and rendered, and dynamic content reflects the current data without any further action.
-  - [ ] The call returns a handle containing the service-retrieval handle, the root context, and the started element.
-  - [ ] By default, nothing the framework uses internally is attached to the page element; a developer can opt in to attaching it.
-  - [ ] The startup steps always happen in a fixed order so behavior is predictable across runs.
+  - [x] Given a developer provides a page element and their module list, when they perform a page start, then the element and its contents are processed and rendered, and dynamic content reflects the current data without any further action.
+  - [x] The call returns a handle containing the service-retrieval handle, the root context, and the started element.
+  - [x] By default, nothing the framework uses internally is attached to the page element; a developer can opt in to attaching it.
+  - [x] The startup steps always happen in a fixed order so behavior is predictable across runs.
 
 ### 2.3 Automatic start via the classic attribute
 
@@ -56,40 +56,40 @@ Behavior is validated against original AngularJS wherever the two overlap — th
 - If more than one marker attribute is present, the **first one in document order wins**; the rest are ignored.
 - It only applies on a real page; in a non-page environment it does nothing.
 - **Acceptance Criteria:**
-  - [ ] Given a region of the page contains the classic application-marker attribute naming a module, when the developer triggers the automatic start, then the app starts on that element using that module (equivalent to a page start).
-  - [ ] Each of the four recognized attribute spellings is honored.
-  - [ ] When more than one marker attribute is present, the first in document order is used and the others are ignored.
-  - [ ] When no marker attribute is found, the automatic start does nothing and reports nothing (silent no-op).
-  - [ ] In an environment with no page, the automatic start does nothing.
+  - [x] Given a region of the page contains the classic application-marker attribute naming a module, when the developer triggers the automatic start, then the app starts on that element using that module (equivalent to a page start).
+  - [x] Each of the four recognized attribute spellings is honored.
+  - [x] When more than one marker attribute is present, the first in document order is used and the others are ignored.
+  - [x] When no marker attribute is found, the automatic start does nothing and reports nothing (silent no-op).
+  - [x] In an environment with no page, the automatic start does nothing.
 
 ### 2.4 A canonical root context is always available
 
 - After any start that involves a page, a single shared root context exists and is retrievable as a standard service, so the rest of the framework and the developer's code have one agreed starting point.
 - **Acceptance Criteria:**
-  - [ ] After a page start, the root context is retrievable as a named service from the handle.
-  - [ ] The root context retrieved as a service is the same one returned in the start handle.
+  - [x] After a page start, the root context is retrievable as a named service from the handle.
+  - [x] The root context retrieved as a service is the same one returned in the start handle.
 
 ### 2.5 Clear failures
 
 - When a start cannot proceed, the framework **throws a clear, descriptive error directly to the caller** at the point of the start call — rather than failing silently, cryptically, or being swallowed. This matches AngularJS, where startup, module-resolution, and target-element problems surface synchronously.
   - Examples: a named module that was never registered; a page-start target that doesn't exist.
 - **Acceptance Criteria:**
-  - [ ] Starting with a module name that isn't registered throws a clear error naming the missing module.
-  - [ ] A page start whose target element is missing throws a clear error identifying that problem.
-  - [ ] Startup failures are raised at the call site (synchronously), not deferred or suppressed.
+  - [x] Starting with a module name that isn't registered throws a clear error naming the missing module.
+  - [x] A page start whose target element is missing throws a clear error identifying that problem.
+  - [x] Startup failures are raised at the call site (synchronously), not deferred or suppressed.
 
 ### 2.6 Guard against starting the same content twice
 
 - If a developer starts the runtime on an element that has already been started (including an automatic start landing on content nested inside an already-started region), the framework **throws a clear "already bootstrapped" error** rather than running two independent copies over the same content. This is parity with AngularJS's existing double-bootstrap guard.
 - **Acceptance Criteria:**
-  - [ ] Given an element has already been started, when a second start targets the same element, then the framework throws a clear error indicating the element is already started.
-  - [ ] The first, already-running start continues to work normally after the rejected second attempt.
+  - [x] Given an element has already been started, when a second start targets the same element, then the framework throws a clear error indicating the element is already started.
+  - [x] The first, already-running start continues to work normally after the rejected second attempt.
 
 ### 2.7 Typed result
 
 - The handle returned from a start is typed against the modules the developer passed, so retrieving a known service gives back a correctly typed result without manual casting.
 - **Acceptance Criteria:**
-  - [ ] Retrieving a service that the provided modules (or the framework) registered yields a result of the correct type, with no manual type assertion required by the developer.
+  - [x] Retrieving a service that the provided modules (or the framework) registered yields a result of the correct type, with no manual type assertion required by the developer.
 
 ### 2.8 Intentional parity deviations
 
@@ -100,7 +100,7 @@ These differences from classic AngularJS are deliberate and should be treated as
 - **No automatic attachment to the page element.** The framework does not attach its internal bookkeeping to the started element by default, whereas classic AngularJS always does. Attaching it is opt-in (per 2.2). Because of this, the "already started" guard (2.6) recognizes a prior start through the framework's own private marker rather than through attached bookkeeping.
 - **Automatic start is opt-in.** The `ng-app` scan only runs when the developer explicitly asks for it (per 2.3), whereas classic AngularJS scans the page automatically when the library loads.
 - **Acceptance Criteria:**
-  - [ ] Each deviation above is observable and behaves as described (strict-on default, bundled result handle, no default attachment with opt-in, opt-in automatic start).
+  - [x] Each deviation above is observable and behaves as described (strict-on default, bundled result handle, no default attachment with opt-in, opt-in automatic start).
 
 ---
 

@@ -87,6 +87,7 @@ import { NG_TRANSCLUDE_NAME, ngTranscludeDirective } from '@compiler/ng-transclu
 import { $ControllerProvider } from '@controller/controller-provider';
 import type { ControllerService } from '@controller/controller-types';
 import { createModule } from '@di/module';
+import { Scope } from './scope';
 import { consoleErrorExceptionHandler, type ExceptionHandler } from '@exception-handler/index';
 import { lowercaseFilterFactory, uppercaseFilterFactory } from '@filter/case';
 import { currencyFilterFactory } from '@filter/currency';
@@ -114,6 +115,7 @@ declare module '@di/di-types' {
     ng: {
       registry: {
         $exceptionHandler: ExceptionHandler;
+        $rootScope: Scope;
         $interpolate: InterpolateService;
         $sceDelegate: SceDelegateService;
         $sce: SceService;
@@ -147,14 +149,23 @@ declare module '@di/di-types' {
   }
 }
 
-// TODO(spec-016 Slice 4): when `$rootScope` lands as a registered factory
-// (Bootstrap roadmap item), construct it via
+// NOTE(spec-036 Slice 2): `$rootScope` is the canonical, injector-resolvable
+// root scope singleton (FS §2.4). It is a LAZY factory — `Scope.create()`
+// runs only on the first `injector.get('$rootScope')`, and the DI cache makes
+// every subsequent `get` return the SAME reference (singleton). The factory is
+// array-wrapped (`[() => …]`) to satisfy strict `annotate`, which rejects bare
+// un-annotated functions.
+//
+// TODO(future): construct the root scope via
 // `Scope.create({ filterLookup: $filter, exceptionHandler: $exceptionHandler })`
 // so filter expressions resolve out of the box on the injector-built scope
-// tree. Until then, scope's `filterLookup` option is exercised by tests
-// directly — see `src/filter/__tests__/scope-watch-integration.test.ts`.
+// tree. Today the dependency-free form keeps `@core`'s `ngModule` from pulling
+// `$filter` into the construction path; scope's `filterLookup` option is
+// exercised by tests directly — see
+// `src/filter/__tests__/scope-watch-integration.test.ts`.
 export const ngModule = createModule('ng', [])
   .factory('$exceptionHandler', [() => consoleErrorExceptionHandler])
+  .factory('$rootScope', [() => Scope.create()])
   .provider('$sceDelegate', $SceDelegateProvider)
   .provider('$sce', $SceProvider)
   .provider('$interpolate', $InterpolateProvider)

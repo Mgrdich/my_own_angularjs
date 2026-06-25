@@ -28,6 +28,7 @@ const entries = [
   { name: 'filter/index', input: 'src/filter/index.ts' },
   { name: 'template/index', input: 'src/template/index.ts' },
   { name: 'controller/index', input: 'src/controller/index.ts' },
+  { name: 'bootstrap/index', input: 'src/bootstrap/index.ts' },
 ];
 
 // Path aliases declared in `tsconfig.json` are used across the codebase
@@ -48,6 +49,7 @@ const tsPathAliases = {
   '@compiler/*': ['src/compiler/*'],
   '@template/*': ['src/template/*'],
   '@controller/*': ['src/controller/*'],
+  '@bootstrap/*': ['src/bootstrap/*'],
 };
 
 const bundleConfigs = entries.map((entry) => ({

@@ -15,6 +15,7 @@ export default defineConfig({
       '@compiler': path.resolve(__dirname, 'src/compiler'),
       '@template': path.resolve(__dirname, 'src/template'),
       '@controller': path.resolve(__dirname, 'src/controller'),
+      '@bootstrap': path.resolve(__dirname, 'src/bootstrap'),
     },
   },
   test: {
