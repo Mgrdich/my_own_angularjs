@@ -1,0 +1,55 @@
+# Tasks: Promises & Async (`$q`, `$timeout`, `$interval`)
+
+- **Specification:** `context/spec/037-promises-and-async/`
+- **Status:** Draft
+
+---
+
+- [ ] **Slice 1: `$q` core — module scaffold + `createQ` deferred/promise + DI registration**
+  - [ ] Scaffold `src/async/`: create `index.ts` barrel, `q.ts`, `q-types.ts`, and add packaging wiring — `@async/*` in `tsconfig.json`, `@async` alias in `vitest.config.ts`, `./async` in `package.json` `exports`, the `src/async/index.ts` entry + `@async/*` dts alias in `rollup.config.mjs`, and a root-barrel re-export in `src/index.ts`. **[Agent: rollup-build]**
+  - [ ] Implement the `createQ({ exceptionHandler, scheduleDigest })` core in `src/async/q.ts`: the module-private internal `Promise` class + `Deferred` (`{ promise, resolve, reject, notify }`), the `pending → resolved | rejected` state machine (final-once-settled), and `.then(onOk?, onErr?, onNotify?)` chaining (callback return resolves the derived promise; a throw rejects it; a returned thenable is awaited). Settlement schedules continuation processing via the injected `scheduleDigest` seam so callbacks run asynchronously. Define public types (`QService`, `QPromise<T>`, `QDeferred<T>`) in `q-types.ts`. **[Agent: typescript-framework]**
+  - [ ] Register `$q` on `ngModule` (`src/core/ng-module.ts`) via `.factory('$q', ['$rootScope', '$exceptionHandler', factory])` binding `scheduleDigest: (fn) => $rootScope.$evalAsync(fn)`; widen the `ng` `ModuleRegistry` with `$q: QService`. **[Agent: typescript-framework]**
+  - [ ] Create `src/async/__tests__/q-core.test.ts`: deferred resolve/reject finality (second settle ignored); `.then` success/failure routing; chaining where a returned pending promise defers the next step; **digest integration** — a resolution originating OUTSIDE a digest triggers a digest and refreshes a value read by a `$watch` (FS 2.5); callbacks run asynchronously (not in the settling turn). Use `bootstrapInjector`/`injector.get('$q')` + `injector.get('$rootScope')` and vitest fake timers. **[Agent: vitest-testing]**
+  - [ ] Run `pnpm lint`, `pnpm format:check`, `pnpm typecheck`, `pnpm test`, `pnpm build`. New `./async` entry emits ESM+CJS+`.d.ts`. **[Agent: rollup-build]**
+
+- [ ] **Slice 2: `$q` construction surface, combiners & unhandled-rejection reporting**
+  - [ ] Extend `createQ` with the construction surface: the ES6-style `$q(executor)` constructor (a thrown executor → rejection), `$q.resolve` / `$q.when` (alias), `$q.reject`, thenable adoption in `resolve` (no double-wrap), `.catch(onErr)`, and `.finally(cb)` (pass-through unless `cb` throws / returns a rejecting thenable). **[Agent: typescript-framework]**
+  - [ ] Add the three combiners to `createQ`: `$q.all` (array AND object grouping; rejects on first failure), `$q.race` (adopts first settlement), `$q.allSettled` (never rejects; per-item `{ status, value } | { status, reason }`). **[Agent: typescript-framework]**
+  - [ ] Implement always-on unhandled-rejection reporting: a rejected promise with no failure handler anywhere in its chain is reported via `invokeExceptionHandler(exceptionHandler, reason, '$q')` (per-promise `handled` flag flipped when a failure handler attaches; check deferred to the scheduled digest turn). Extend `EXCEPTION_HANDLER_CAUSES` (`src/exception-handler/exception-handler-types.ts`) with `'$q'`, `'$timeout'`, `'$interval'` (10 → 13) and update the JSDoc cause tables; `ExceptionHandlerCause` widens automatically. **[Agent: typescript-framework]**
+  - [ ] Create `src/async/__tests__/q-surface.test.ts`: `$q(executor)` success/throw; `resolve`/`when`/`reject`; thenable adoption (no promise-of-promise); `.catch`; `.finally` pass-through + throw; `all` (positional + keyed, first-failure); `race`; `allSettled` (never rejects, per-item report); unhandled rejection → routed via `$exceptionHandler('$q')`; handled-later → NOT reported. Add a guard assertion that `EXCEPTION_HANDLER_CAUSES.length === 13` and grep-confirm no prior test hardcodes `=== 10`. **[Agent: vitest-testing]**
+  - [ ] Run all five gates; full prior-spec suite green with the larger cause tuple. **[Agent: rollup-build]**
+
+- [ ] **Slice 3: `$timeout`**
+  - [ ] Implement `createTimeout({ q, exceptionHandler, apply, rootPhase, defer, cancelDefer })` in `src/async/timeout.ts` (+ `TimeoutService` / option types in `async-types.ts`): `$timeout(fn?, delay = 0, invokeApply = true, ...args)` creates a `Deferred`, arms a global `setTimeout`, and on fire runs `fn(...args)` phase-guarded (`rootPhase() === null ? apply(run) : run()+scheduleDigest`), resolves with `fn`'s return value, and routes a callback throw via `invokeExceptionHandler(..., '$timeout')` (rejecting the promise). `$timeout.cancel(promise)` clears the pending timer, rejects the promise, returns `true`; unknown/settled → `false`, no throw (backing `Map<QPromise, TimerId>`). **[Agent: typescript-framework]**
+  - [ ] Register `$timeout` on `ngModule` via `.factory('$timeout', ['$rootScope', '$q', '$exceptionHandler', factory])` binding `apply: (fn) => $rootScope.$apply(fn)`, `rootPhase: () => $rootScope.$$phase`, `defer: setTimeout`, `cancelDefer: clearTimeout`; widen `ModuleRegistry` with `$timeout: TimeoutService`. **[Agent: typescript-framework]**
+  - [ ] Create `src/async/__tests__/timeout.test.ts` (vitest fake timers): fires after delay + resolves with return value; cancel-before-fire rejects and the work never runs; cancel-after-settle → `false`, no throw; `invokeApply: false` runs without an automatic refresh; extra args passed through; bound data refreshes by default; callback throw rejects + routes `'$timeout'`. **[Agent: vitest-testing]**
+  - [ ] Run all five gates. **[Agent: rollup-build]**
+
+- [ ] **Slice 4: `$interval`**
+  - [ ] Implement `createInterval({ q, exceptionHandler, apply, rootPhase, setIntervalFn, clearIntervalFn })` in `src/async/interval.ts`: `$interval(fn, delay, count = 0, invokeApply = true, ...args)` creates a `Deferred`, arms a global `setInterval`, and on each tick runs `fn(iteration, ...args)` phase-guarded, then `notify(iteration)`; a `count > 0` cap clears the interval and resolves with the final count, `count === 0` runs indefinitely (never self-settles); a callback throw routes via `invokeExceptionHandler(..., '$interval')` and does NOT auto-cancel. `$interval.cancel(promise)` clears the interval, rejects, returns `true`; unknown/settled → `false`, no throw. **[Agent: typescript-framework]**
+  - [ ] Register `$interval` on `ngModule` via `.factory('$interval', ['$rootScope', '$q', '$exceptionHandler', factory])` (same seams as `$timeout`, with `setIntervalFn: setInterval`, `clearIntervalFn: clearInterval`); widen `ModuleRegistry` with `$interval: IntervalService`. **[Agent: typescript-framework]**
+  - [ ] Create `src/async/__tests__/interval.test.ts` (vitest fake timers): per-tick progress notification; capped count resolves after the final tick; indefinite never self-settles; cancel rejects + stops further ticks; cancel-unknown/settled → `false`, no throw; `invokeApply: false`; args pass-through; callback throw routes `'$interval'` and does NOT auto-cancel. **[Agent: vitest-testing]**
+  - [ ] Run all five gates. **[Agent: rollup-build]**
+
+- [ ] **Slice 5: Type-level safety + AngularJS parity hardening**
+  - [ ] Create `src/async/__tests__/async-types.test.ts` (type-level, `expectTypeOf`): `injector.get('$q')` narrows to `QService`; `$timeout(fn).then(v => …)` infers the callback's value type; `$q.all([p1, p2])` infers positional value types and `$q.all({ a, b })` the keyed shape; `$q.allSettled` per-item discriminated union narrows. **[Agent: vitest-testing]**
+  - [ ] Create `src/async/__tests__/parity.test.ts`: port the relevant upstream `$q` / `$timeout` / `$interval` scenarios (promise digest-scheduling, unhandled-rejection vectors, cancellation semantics, `all`/`race` edge cases) per the architecture's reference-implementation rule; mark the intentional additions (`race`, `allSettled`, executor constructor, `.catch`/`.finally`) as deliberate, not parity gaps (FS §3). **[Agent: vitest-testing]**
+  - [ ] Run all five gates. **[Agent: rollup-build]**
+
+- [ ] **Slice 6: Docs, coverage & final regression**
+  - [ ] Add `src/async/README.md` (the three services, the digest-integration contract, the intentional additions/deviations from §3, worked `$q` / `$timeout` / `$interval` examples). Update `CLAUDE.md` (`./async` Modules row + "Non-obvious invariants" bullets: `$q` schedules digests via `$rootScope.$evalAsync`; timers use the `$$phase`-guarded `apply` vs `evalAsync` seam; the three new cause tokens / `EXCEPTION_HANDLER_CAUSES.length === 13`; always-on unhandled-rejection reporting; direct-global timers) and the "Where to look when…" table. Tick the **Promises & Async** roadmap items in `context/product/roadmap.md`. **[Agent: typedoc-docs]**
+  - [ ] TSDoc audit on the new public surface (`createQ`, `createTimeout`, `createInterval`, `QService`, `QPromise`, `QDeferred`, `TimeoutService`, `IntervalService`), each with a runnable `@example`. Add `async` to the per-module 90% coverage set in `vitest.config.ts` if modules are enumerated there. **[Agent: typedoc-docs]**
+  - [ ] Final regression: `pnpm lint`, `pnpm format:check`, `pnpm typecheck`, `pnpm test`, `pnpm build` — all green; full prior-spec suite (017–036) green; **`EXCEPTION_HANDLER_CAUSES.length === 13`**; `./async` exports resolve from both `dist` root entries (ESM + CJS + `.d.ts`). **[Agent: rollup-build]**
+
+---
+
+## Notes for the Implementation Agent
+
+- **Verification is vitest + the five gates** — these are non-DOM runtime services, so no browser MCP or external services are required. Every slice is provable with `pnpm test` (vitest fake timers for the async/timer paths) plus `lint` / `format:check` / `typecheck` / `build`.
+- **Keep `createQ` / `createTimeout` / `createInterval` pure** — they take injected seams (`scheduleDigest`, `apply`, `rootPhase`, timer fns) and must be unit-testable WITHOUT an injector; the DI factories on `ngModule` bind those seams to the real `$rootScope` / `$exceptionHandler`.
+- **Inject `$exceptionHandler` directly** into all three services — do NOT read `$rootScope.$$exceptionHandler` (it can diverge from the DI handler today; see `ng-module.ts:159-165`).
+- **`$apply` is `try/finally`, not `try/catch`** (`scope.ts:498`) — every timer/promise callback invocation wraps in its own `try/catch` → `invokeExceptionHandler` with the right cause, mirroring `ng-event-directives.ts`.
+- **Phase guard before `apply`** — call `apply` only when `rootPhase() === null`; otherwise queue via `scheduleDigest` to avoid the `'$digest already in progress'` throw.
+- **The cause-tuple extension (10 → 13) is the single public-API touch** — additive append only; grep the suite for any hardcoded `=== 10` / `length` assertion before changing.
+- **Unhandled-rejection reporting is always on** — no `$qProvider.errorOnUnhandledRejections(false)` toggle in this spec (documented deviation; may be added later).
+- **Tick task checkboxes in the SAME commit as the implementation** per `CLAUDE.md`.
