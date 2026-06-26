@@ -176,3 +176,18 @@ export {
   BootstrapTargetMissingError,
 } from './bootstrap/index';
 export type { BootstrapConfig, BootstrapInjectorConfig, BootstrapRegistry, BootstrapResult } from './bootstrap/index';
+export { createInterval, createQ, createTimeout } from './async/index';
+export type {
+  IntervalOptions,
+  IntervalService,
+  QService,
+  QPromise,
+  QDeferred,
+  QOptions,
+  QExecutor,
+  QSettledResult,
+  Thenable,
+  TimeoutService,
+  TimeoutOptions,
+  TimerId,
+} from './async/index';

@@ -1,9 +1,10 @@
 /**
  * Locks the `$exceptionHandler` cause-descriptor vocabulary at the nine
  * tokens declared in FS § 2.13 (spec 014) plus `'$filter'` introduced by
- * spec 016 slice 4 plus `'$compile'` introduced by spec 017 slice 11.
- * The `length === 10` assertion is intentionally a "trap" — adding an
- * eleventh cause is a public-API change that must update both
+ * spec 016 slice 4, `'$compile'` introduced by spec 017 slice 11, and the
+ * `'$q'` / `'$timeout'` / `'$interval'` trio introduced by spec 037 slice 2.
+ * The `length === 13` assertion is intentionally a "trap" — adding a
+ * fourteenth cause is a public-API change that must update both
  * `EXCEPTION_HANDLER_CAUSES` and the FS § 2.13 vocabulary table in lockstep.
  *
  * The `satisfies ExceptionHandlerCause` block below is a compile-time guard
@@ -20,13 +21,13 @@ describe('EXCEPTION_HANDLER_CAUSES', () => {
     expect(Object.isFrozen(EXCEPTION_HANDLER_CAUSES)).toBe(true);
   });
 
-  it('declares exactly ten cause descriptors', () => {
+  it('declares exactly thirteen cause descriptors', () => {
     // Lock-in trap: bumping this number is a public-API change that must
     // update FS § 2.13 in the same commit.
-    expect(EXCEPTION_HANDLER_CAUSES.length).toBe(10);
+    expect(EXCEPTION_HANDLER_CAUSES.length).toBe(13);
   });
 
-  it('lists the ten tokens in declared order', () => {
+  it('lists the thirteen tokens in declared order', () => {
     expect(EXCEPTION_HANDLER_CAUSES).toEqual([
       'watchFn',
       'watchListener',
@@ -38,11 +39,20 @@ describe('EXCEPTION_HANDLER_CAUSES', () => {
       '$interpolate',
       '$filter',
       '$compile',
+      '$q',
+      '$timeout',
+      '$interval',
     ]);
   });
 
   it('contains the spec-017 $compile cause descriptor', () => {
     expect(EXCEPTION_HANDLER_CAUSES).toContain('$compile');
+  });
+
+  it('contains the spec-037 async cause descriptors', () => {
+    expect(EXCEPTION_HANDLER_CAUSES).toContain('$q');
+    expect(EXCEPTION_HANDLER_CAUSES).toContain('$timeout');
+    expect(EXCEPTION_HANDLER_CAUSES).toContain('$interval');
   });
 
   it('locks each entry to the ExceptionHandlerCause union (compile-time)', () => {
@@ -56,6 +66,9 @@ describe('EXCEPTION_HANDLER_CAUSES', () => {
     EXCEPTION_HANDLER_CAUSES[7] satisfies ExceptionHandlerCause;
     EXCEPTION_HANDLER_CAUSES[8] satisfies ExceptionHandlerCause;
     EXCEPTION_HANDLER_CAUSES[9] satisfies ExceptionHandlerCause;
+    EXCEPTION_HANDLER_CAUSES[10] satisfies ExceptionHandlerCause;
+    EXCEPTION_HANDLER_CAUSES[11] satisfies ExceptionHandlerCause;
+    EXCEPTION_HANDLER_CAUSES[12] satisfies ExceptionHandlerCause;
 
     expect(true).toBe(true);
   });

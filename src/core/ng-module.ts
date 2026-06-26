@@ -15,6 +15,11 @@
  * before the run phase begins.
  */
 
+import { createQ } from '@async/q';
+import type { QService } from '@async/q-types';
+import { createTimeout } from '@async/timeout';
+import { createInterval } from '@async/interval';
+import type { IntervalService, TimeoutService } from '@async/async-types';
 import { $CompileProvider } from '@compiler/compile-provider';
 import type { CompileService } from '@compiler/directive-types';
 import {
@@ -116,6 +121,9 @@ declare module '@di/di-types' {
       registry: {
         $exceptionHandler: ExceptionHandler;
         $rootScope: Scope;
+        $q: QService;
+        $timeout: TimeoutService;
+        $interval: IntervalService;
         $interpolate: InterpolateService;
         $sceDelegate: SceDelegateService;
         $sce: SceService;
@@ -165,7 +173,83 @@ declare module '@di/di-types' {
 // `src/filter/__tests__/scope-watch-integration.test.ts`.
 export const ngModule = createModule('ng', [])
   .factory('$exceptionHandler', [() => consoleErrorExceptionHandler])
+  // `$rootScope` (spec 036 Slice 2 / spec 037 Slice 1) — the injector-resolvable root scope.
+  // Previously unregistered (see the TODO above); `$q` / `$timeout` /
+  // `$interval` need it as their digest seam, so it lands here as a
+  // dependency-free factory. `Scope.create()` carries the default TTL and
+  // the `consoleErrorExceptionHandler` default — `$q` injects
+  // `$exceptionHandler` DIRECTLY (not via `$rootScope.$$exceptionHandler`)
+  // so the two cannot diverge.
   .factory('$rootScope', [() => Scope.create()])
+  // `$q` (spec 037 Slice 1) — the promise toolkit. `scheduleDigest` is bound
+  // to `$rootScope.$evalAsync` so a settlement from outside a digest
+  // schedules one (FS §2.5); the pure `createQ` factory keeps the seam
+  // injectable so it is unit-testable without an injector.
+  .factory('$q', [
+    '$rootScope',
+    '$exceptionHandler',
+    ($rootScope: Scope, $exceptionHandler: ExceptionHandler): QService =>
+      createQ({
+        exceptionHandler: $exceptionHandler,
+        scheduleDigest: (fn) => {
+          $rootScope.$evalAsync(fn);
+        },
+      }),
+  ])
+  // `$timeout` (spec 037 Slice 3) — a one-off deferred task that settles a
+  // `$q` promise (FS §2.7). `apply` / `rootPhase` are the `$$phase`-guarded
+  // seams onto `$rootScope.$apply` / `$rootScope.$$phase` (the event-directive
+  // pattern); `defer` / `cancelDefer` are the GLOBAL `setTimeout` /
+  // `clearTimeout` called directly (matching the `scope.ts` precedent). The
+  // pure `createTimeout` factory keeps every seam injectable so it is
+  // unit-testable with fake timers and stubs. `$exceptionHandler` is injected
+  // DIRECTLY (not via `$rootScope.$$exceptionHandler`) so a callback throw
+  // routes through the SAME handler `$q` uses, cause `'$timeout'`.
+  .factory('$timeout', [
+    '$rootScope',
+    '$q',
+    '$exceptionHandler',
+    ($rootScope: Scope, $q: QService, $exceptionHandler: ExceptionHandler): TimeoutService =>
+      createTimeout({
+        q: $q,
+        exceptionHandler: $exceptionHandler,
+        apply: (fn) => {
+          $rootScope.$apply(fn);
+        },
+        rootPhase: () => $rootScope.$$phase,
+        defer: (fn, delay) => setTimeout(fn, delay),
+        cancelDefer: (id) => {
+          clearTimeout(id);
+        },
+      }),
+  ])
+  // `$interval` (spec 037 Slice 4) — a repeating deferred task that reports
+  // per-tick progress and (when capped) succeeds with the final count
+  // (FS §2.8). Same `apply` / `rootPhase` `$$phase`-guarded seams as `$timeout`,
+  // with `setIntervalFn` / `clearIntervalFn` bound to the GLOBAL `setInterval` /
+  // `clearInterval` called directly (matching the `scope.ts` precedent). The
+  // pure `createInterval` factory keeps every seam injectable so it is
+  // unit-testable with fake timers and stubs. `$exceptionHandler` is injected
+  // DIRECTLY (not via `$rootScope.$$exceptionHandler`) so a callback throw
+  // routes through the SAME handler `$q` uses, cause `'$interval'`.
+  .factory('$interval', [
+    '$rootScope',
+    '$q',
+    '$exceptionHandler',
+    ($rootScope: Scope, $q: QService, $exceptionHandler: ExceptionHandler): IntervalService =>
+      createInterval({
+        q: $q,
+        exceptionHandler: $exceptionHandler,
+        apply: (fn) => {
+          $rootScope.$apply(fn);
+        },
+        rootPhase: () => $rootScope.$$phase,
+        setIntervalFn: (fn, delay) => setInterval(fn, delay),
+        clearIntervalFn: (id) => {
+          clearInterval(id);
+        },
+      }),
+  ])
   .provider('$sceDelegate', $SceDelegateProvider)
   .provider('$sce', $SceProvider)
   .provider('$interpolate', $InterpolateProvider)

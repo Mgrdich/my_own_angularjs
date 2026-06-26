@@ -1,7 +1,7 @@
 # Functional Specification: Promises & Async (`$q`, `$timeout`, `$interval`)
 
 - **Roadmap Item:** Promises & Async — `$q` promise implementation, `$timeout`, `$interval`
-- **Status:** Draft
+- **Status:** Completed
 - **Author:** AWOS spec workflow
 
 ---
@@ -35,9 +35,9 @@ Behavior is validated against original AngularJS wherever the two overlap — th
 - A developer can create a **pending result** they control directly: they obtain a controller object, hand its associated promise to other code, and later mark the result as either succeeded (with a value) or failed (with a reason).
 - Once settled, the result is **final** — a later attempt to succeed or fail the same result has no effect.
 - **Acceptance Criteria:**
-  - [ ] Given a developer creates a pending result, when they later mark it as succeeded with a value, then any success follow-up attached to its promise receives that value.
-  - [ ] Given a developer creates a pending result, when they later mark it as failed with a reason, then any failure follow-up attached to its promise receives that reason.
-  - [ ] Once a result has settled, a subsequent attempt to succeed or fail it again is ignored (the first outcome stands).
+  - [x] Given a developer creates a pending result, when they later mark it as succeeded with a value, then any success follow-up attached to its promise receives that value.
+  - [x] Given a developer creates a pending result, when they later mark it as failed with a reason, then any failure follow-up attached to its promise receives that reason.
+  - [x] Once a result has settled, a subsequent attempt to succeed or fail it again is ignored (the first outcome stands).
 
 ### 2.2 Construct a promise directly
 
@@ -45,10 +45,10 @@ Behavior is validated against original AngularJS wherever the two overlap — th
 - A developer can wrap an **already-known value** as an immediately-succeeded promise, and wrap an **already-known reason** as an immediately-failed promise.
 - Wrapping something that is already a promise returns an equivalent promise (it is not double-wrapped).
 - **Acceptance Criteria:**
-  - [ ] Given a developer constructs a promise from a single unit of work, when that work signals success with a value, then success follow-ups receive the value; when it signals failure, failure follow-ups receive the reason.
-  - [ ] Wrapping a plain value yields a promise that immediately succeeds with that value.
-  - [ ] Wrapping a reason as a failure yields a promise that immediately fails with that reason.
-  - [ ] Wrapping a value that is itself a promise yields a promise equivalent to it, not a promise-of-a-promise.
+  - [x] Given a developer constructs a promise from a single unit of work, when that work signals success with a value, then success follow-ups receive the value; when it signals failure, failure follow-ups receive the reason.
+  - [x] Wrapping a plain value yields a promise that immediately succeeds with that value.
+  - [x] Wrapping a reason as a failure yields a promise that immediately fails with that reason.
+  - [x] Wrapping a value that is itself a promise yields a promise equivalent to it, not a promise-of-a-promise.
 
 ### 2.3 React to success and failure, and chain follow-ups
 
@@ -57,12 +57,12 @@ Behavior is validated against original AngularJS wherever the two overlap — th
 - A developer can attach a **failure-only** follow-up as a shorthand, and a **finally** follow-up that runs once the promise settles regardless of success or failure (for cleanup).
 - A failure that is not handled at one step **propagates** down the chain until a failure follow-up handles it; a handled failure allows the chain to continue on the success path.
 - **Acceptance Criteria:**
-  - [ ] Given a promise that succeeds, when a developer attaches a success follow-up, then it runs with the delivered value.
-  - [ ] Given a promise that fails, when a developer attaches a failure follow-up, then it runs with the delivered reason.
-  - [ ] When follow-ups are chained, the value returned by one is passed to the next; if a follow-up returns a pending result, the next step waits for that result to settle first.
-  - [ ] A failure-only shorthand follow-up runs when (and only when) the promise fails.
-  - [ ] A finally follow-up runs once the promise settles, whether it succeeded or failed, and does not alter the value or reason passing through (unless it itself fails).
-  - [ ] An unhandled failure continues down the chain until a failure follow-up handles it.
+  - [x] Given a promise that succeeds, when a developer attaches a success follow-up, then it runs with the delivered value.
+  - [x] Given a promise that fails, when a developer attaches a failure follow-up, then it runs with the delivered reason.
+  - [x] When follow-ups are chained, the value returned by one is passed to the next; if a follow-up returns a pending result, the next step waits for that result to settle first.
+  - [x] A failure-only shorthand follow-up runs when (and only when) the promise fails.
+  - [x] A finally follow-up runs once the promise settles, whether it succeeded or failed, and does not alter the value or reason passing through (unless it itself fails).
+  - [x] An unhandled failure continues down the chain until a failure follow-up handles it.
 
 ### 2.4 Combine several pending results
 
@@ -70,25 +70,25 @@ Behavior is validated against original AngularJS wherever the two overlap — th
 - A developer can wait for the **first** of several pending results to settle and adopt its outcome (success or failure), ignoring the rest.
 - A developer can wait for **every** result to settle and receive a per-item report of each one's outcome (succeeded-with-value or failed-with-reason) — this form never fails as a whole, even if some items failed.
 - **Acceptance Criteria:**
-  - [ ] Given several pending results, when all of them succeed, then the combined result succeeds with their values grouped the same way they were provided (positional list or named keys).
-  - [ ] Given several pending results, when at least one fails, then the "wait for all" combined result fails with the first such reason.
-  - [ ] Given several pending results, when the first one settles, then the "wait for first" combined result adopts that outcome and disregards the others.
-  - [ ] Given several pending results, when every one has settled, then the "wait for every" combined result succeeds with a per-item report distinguishing succeeded-with-value from failed-with-reason, and it does not fail as a whole.
+  - [x] Given several pending results, when all of them succeed, then the combined result succeeds with their values grouped the same way they were provided (positional list or named keys).
+  - [x] Given several pending results, when at least one fails, then the "wait for all" combined result fails with the first such reason.
+  - [x] Given several pending results, when the first one settles, then the "wait for first" combined result adopts that outcome and disregards the others.
+  - [x] Given several pending results, when every one has settled, then the "wait for every" combined result succeeds with a per-item report distinguishing succeeded-with-value from failed-with-reason, and it does not fail as a whole.
 
 ### 2.5 Bound content refreshes automatically when a result settles
 
 - When a pending result settles, the framework runs an **update cycle on its own**, so content bound to the resulting data refreshes without the developer manually triggering a refresh — even when the work that settled the result originated outside an update cycle.
 - **Acceptance Criteria:**
-  - [ ] Given content is bound to data that a success follow-up will set, when the pending result succeeds (including from work that started outside an update cycle), then the bound content reflects the new data without any further developer action.
-  - [ ] Follow-ups run asynchronously (not in the same step that settled the result), consistent with promise behavior.
+  - [x] Given content is bound to data that a success follow-up will set, when the pending result succeeds (including from work that started outside an update cycle), then the bound content reflects the new data without any further developer action.
+  - [x] Follow-ups run asynchronously (not in the same step that settled the result), consistent with promise behavior.
 
 ### 2.6 Unhandled failures are reported, not swallowed
 
 - When a pending result **fails and no failure follow-up ever handles it**, the framework reports the failure through its **central error-reporting channel** (the same place other framework-internal errors are surfaced), rather than failing silently.
 - A failure that *is* handled somewhere in the chain is **not** reported as unhandled.
 - **Acceptance Criteria:**
-  - [ ] Given a pending result fails and no failure follow-up handles it anywhere in its chain, then the failure is reported through the framework's central error-reporting channel.
-  - [ ] Given a pending result fails but a failure follow-up handles it, then nothing is reported as unhandled.
+  - [x] Given a pending result fails and no failure follow-up handles it anywhere in its chain, then the failure is reported through the framework's central error-reporting channel.
+  - [x] Given a pending result fails but a failure follow-up handles it, then nothing is reported as unhandled.
 
 ### 2.7 Schedule a one-off deferred task
 
@@ -97,11 +97,11 @@ Behavior is validated against original AngularJS wherever the two overlap — th
 - By default, completing the task triggers an **update cycle** so bound content refreshes; a developer can opt out of that automatic refresh for a task that does not touch bound data.
 - A developer may pass through extra inputs to the scheduled work.
 - **Acceptance Criteria:**
-  - [ ] Given a developer schedules a one-off task with a delay, when the delay elapses, then the work runs once and the returned promise succeeds with the work's result.
-  - [ ] Given a developer schedules a one-off task, when they cancel it before the delay elapses, then the work never runs and the returned promise fails to indicate cancellation.
-  - [ ] Cancelling a task that has already completed (or was already cancelled) reports that nothing was cancelled, and does not throw.
-  - [ ] By default, after the task runs, bound content that the task changed is refreshed without further developer action; when the developer opts out of the automatic refresh, the task still runs but no automatic refresh occurs.
-  - [ ] Extra inputs provided at scheduling time are passed through to the scheduled work.
+  - [x] Given a developer schedules a one-off task with a delay, when the delay elapses, then the work runs once and the returned promise succeeds with the work's result.
+  - [x] Given a developer schedules a one-off task, when they cancel it before the delay elapses, then the work never runs and the returned promise fails to indicate cancellation.
+  - [x] Cancelling a task that has already completed (or was already cancelled) reports that nothing was cancelled, and does not throw.
+  - [x] By default, after the task runs, bound content that the task changed is refreshed without further developer action; when the developer opts out of the automatic refresh, the task still runs but no automatic refresh occurs.
+  - [x] Extra inputs provided at scheduling time are passed through to the scheduled work.
 
 ### 2.8 Schedule a repeating task
 
@@ -111,19 +111,19 @@ Behavior is validated against original AngularJS wherever the two overlap — th
 - By default, each repetition triggers an **update cycle**; a developer can opt out for a task that does not touch bound data.
 - A developer may pass through extra inputs to the repeated work.
 - **Acceptance Criteria:**
-  - [ ] Given a developer schedules a repeating task with a repetition cap, when the interval elapses repeatedly, then the work runs once per interval, a progress notification is reported on each repetition, and the promise succeeds after the final capped repetition.
-  - [ ] Given a developer schedules an indefinite repeating task, then it keeps running and reporting progress on each interval and does not settle on its own.
-  - [ ] Given a repeating task is running, when the developer cancels it, then no further repetitions occur and the promise fails to indicate cancellation.
-  - [ ] Cancelling an already-finished or already-cancelled repeating task reports that nothing was cancelled, and does not throw.
-  - [ ] By default, each repetition refreshes bound content the task changed without further developer action; when the developer opts out, repetitions still run but no automatic refresh occurs.
-  - [ ] Extra inputs provided at scheduling time are passed through to the repeated work.
+  - [x] Given a developer schedules a repeating task with a repetition cap, when the interval elapses repeatedly, then the work runs once per interval, a progress notification is reported on each repetition, and the promise succeeds after the final capped repetition.
+  - [x] Given a developer schedules an indefinite repeating task, then it keeps running and reporting progress on each interval and does not settle on its own.
+  - [x] Given a repeating task is running, when the developer cancels it, then no further repetitions occur and the promise fails to indicate cancellation.
+  - [x] Cancelling an already-finished or already-cancelled repeating task reports that nothing was cancelled, and does not throw.
+  - [x] By default, each repetition refreshes bound content the task changed without further developer action; when the developer opts out, repetitions still run but no automatic refresh occurs.
+  - [x] Extra inputs provided at scheduling time are passed through to the repeated work.
 
 ### 2.9 Results carry their correct value type
 
 - The promises, follow-ups, and scheduling results are **typed against the value they carry**, so a developer reading a delivered value or a combined result gets a correctly typed result without manual type assertions.
 - **Acceptance Criteria:**
-  - [ ] Retrieving the value delivered to a success follow-up yields a result of the correct type, with no manual type assertion required.
-  - [ ] The grouped result of a "wait for all" reflects the correct type for each grouped item (positional or named), with no manual type assertion required.
+  - [x] Retrieving the value delivered to a success follow-up yields a result of the correct type, with no manual type assertion required.
+  - [x] The grouped result of a "wait for all" reflects the correct type for each grouped item (positional or named), with no manual type assertion required.
 
 ---
 
@@ -135,7 +135,7 @@ These differences from classic AngularJS are deliberate and should be treated as
 - **Direct promise construction with a single unit of work is included.** The modern "hand me the means to succeed or fail" construction style is supported alongside the classic controller-object style.
 - **Failure-only and finally follow-ups are first-class.** Provided as ergonomic shorthands in addition to the classic two-argument success/failure form.
 - **Acceptance Criteria:**
-  - [ ] Each addition above is observable and behaves as described, and is covered by a test that marks it as an intentional addition rather than a parity gap.
+  - [x] Each addition above is observable and behaves as described, and is covered by a test that marks it as an intentional addition rather than a parity gap.
 
 ---
 

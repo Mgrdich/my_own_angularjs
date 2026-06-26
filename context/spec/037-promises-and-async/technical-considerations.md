@@ -6,7 +6,7 @@ It is NOT a copy-paste implementation guide.
 # Technical Specification: Promises & Async (`$q`, `$timeout`, `$interval`)
 
 - **Functional Specification:** `context/spec/037-promises-and-async/functional-spec.md`
-- **Status:** Draft
+- **Status:** Completed
 - **Author(s):** AWOS tech workflow
 
 ---

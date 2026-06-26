@@ -69,6 +69,11 @@
       "import": "./dist/esm/bootstrap/index.mjs",
       "require": "./dist/cjs/bootstrap/index.cjs",
       "types": "./dist/types/bootstrap/index.d.ts"
+    },
+    "./async": {
+      "import": "./dist/esm/async/index.mjs",
+      "require": "./dist/cjs/async/index.cjs",
+      "types": "./dist/types/async/index.d.ts"
     }
   },
   "repository": "https://github.com/Mgrdich/my_own_angularjs.git",

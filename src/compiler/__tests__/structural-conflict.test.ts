@@ -238,7 +238,7 @@ describe('canonical nested workaround (spec 032 Slice 2 / FS §2.1)', () => {
 });
 
 describe('no new exception-handler cause token (spec 032 Slice 2)', () => {
-  it('EXCEPTION_HANDLER_CAUSES stays at 10', () => {
-    expect(EXCEPTION_HANDLER_CAUSES.length).toBe(10);
+  it('EXCEPTION_HANDLER_CAUSES has no structural-conflict token (count is 13 since spec 037)', () => {
+    expect(EXCEPTION_HANDLER_CAUSES.length).toBe(13);
   });
 });

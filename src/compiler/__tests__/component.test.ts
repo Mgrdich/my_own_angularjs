@@ -782,7 +782,7 @@ describe('$compileProvider.component — worked end-to-end example (userCard, FS
 });
 
 describe('EXCEPTION_HANDLER_CAUSES regression', () => {
-  it('tuple stays at 10 entries (no new cause for spec 022 Slice 5)', () => {
-    expect(EXCEPTION_HANDLER_CAUSES.length).toBe(10);
+  it('tuple has no spec-022 Slice 5 token (count is 13 since spec 037)', () => {
+    expect(EXCEPTION_HANDLER_CAUSES.length).toBe(13);
   });
 });

@@ -16,6 +16,7 @@ export default defineConfig({
       '@template': path.resolve(__dirname, 'src/template'),
       '@controller': path.resolve(__dirname, 'src/controller'),
       '@bootstrap': path.resolve(__dirname, 'src/bootstrap'),
+      '@async': path.resolve(__dirname, 'src/async'),
     },
   },
   test: {
