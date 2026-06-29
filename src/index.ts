@@ -191,3 +191,43 @@ export type {
   TimeoutOptions,
   TimerId,
 } from './async/index';
+
+export { createCacheFactory } from './cache/index';
+export type { Cache, CacheFactory, CacheInfo, CacheOptions } from './cache/index';
+
+export {
+  applyRequestTransforms,
+  applyResponseTransforms,
+  buildUrl,
+  createHttp,
+  createHttpBackend,
+  defaultTransformRequest,
+  defaultTransformResponse,
+  HttpTransportError,
+  isHttpTransportError,
+  mergeHeaders,
+  paramSerializer,
+  paramSerializerJQLike,
+  parseHeaders,
+  resolveTransforms,
+  $HttpProvider,
+} from './http/index';
+export type {
+  CreateHttpArgs,
+  CreateHttpBackendArgs,
+  FetchFn,
+  HttpBackend,
+  HttpBackendOptions,
+  HttpConfig,
+  HttpDefaults,
+  HttpHeaders,
+  HttpHeadersGetter,
+  HttpResponse,
+  HttpService,
+  HttpTransportErrorKind,
+  InterceptorRegistration,
+  ParamSerializer,
+  RawResponse,
+  RequestTransform,
+  ResponseTransform,
+} from './http/index';

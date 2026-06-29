@@ -74,6 +74,16 @@
       "import": "./dist/esm/async/index.mjs",
       "require": "./dist/cjs/async/index.cjs",
       "types": "./dist/types/async/index.d.ts"
+    },
+    "./cache": {
+      "import": "./dist/esm/cache/index.mjs",
+      "require": "./dist/cjs/cache/index.cjs",
+      "types": "./dist/types/cache/index.d.ts"
+    },
+    "./http": {
+      "import": "./dist/esm/http/index.mjs",
+      "require": "./dist/cjs/http/index.cjs",
+      "types": "./dist/types/http/index.d.ts"
     }
   },
   "repository": "https://github.com/Mgrdich/my_own_angularjs.git",
@@ -92,7 +102,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "dev": "vitest",
-    "build": "rollup -c"
+    "build": "node --max-old-space-size=8192 ./node_modules/rollup/dist/bin/rollup -c"
   },
   "devDependencies": {
     "@rollup/plugin-node-resolve": "^16.0.3",

@@ -1,7 +1,7 @@
 # Functional Specification: HTTP & Networking (`$http`)
 
 - **Roadmap Item:** HTTP & Networking — `$http` service, interceptors, request/response transformations
-- **Status:** Draft
+- **Status:** Completed
 - **Author:** AWOS spec workflow
 
 ---
@@ -37,45 +37,45 @@ Behavior is validated against original AngularJS wherever the two overlap — th
 - On a **successful** response, the result delivers a single bundle containing: the **response body**, the numeric **status**, a **status description**, the **response headers**, and the **request description** that produced it.
 - When the result settles, the framework runs an **update cycle on its own**, so content bound to the response data refreshes without any further developer action.
 - **Acceptance Criteria:**
-  - [ ] Given a developer describes a request, when they issue it, then they receive a result they can attach success/failure follow-ups to.
-  - [ ] On a successful response, the success follow-up receives a bundle with the body, status, status description, headers, and the originating request description.
-  - [ ] When a response arrives, content bound to the response data refreshes without any further developer action.
-  - [ ] The response headers are retrievable by name from the delivered bundle, case-insensitively.
+  - [x] Given a developer describes a request, when they issue it, then they receive a result they can attach success/failure follow-ups to.
+  - [x] On a successful response, the success follow-up receives a bundle with the body, status, status description, headers, and the originating request description.
+  - [x] When a response arrives, content bound to the response data refreshes without any further developer action.
+  - [x] The response headers are retrievable by name from the delivered bundle, case-insensitively.
 
 ### 2.2 Short method calls for the common verbs
 
 - A developer can use concise per-action calls for the everyday verbs — fetch, create, replace, remove, partially-update, headers-only — and a dedicated call for the legacy cross-origin-script approach. A single general form remains available for full control.
 - The "send a body" actions accept the body to send; the "no body" actions accept just the destination and options.
 - **Acceptance Criteria:**
-  - [ ] Each of the common actions can be issued through its own concise call (fetch / create / replace / remove / partially-update / headers-only) and through the general form, producing equivalent results.
-  - [ ] The body-carrying actions accept a body; the bodyless actions do not require one.
-  - [ ] The legacy cross-origin-script action is available and only proceeds when its destination is explicitly trusted (see 2.12); an untrusted destination is refused.
+  - [x] Each of the common actions can be issued through its own concise call (fetch / create / replace / remove / partially-update / headers-only) and through the general form, producing equivalent results.
+  - [x] The body-carrying actions accept a body; the bodyless actions do not require one.
+  - [x] The legacy cross-origin-script action is available and only proceeds when its destination is explicitly trusted (see 2.12); an untrusted destination is refused.
 
 ### 2.3 Describe a request with options
 
 - A developer can describe a request with a set of options, including: the destination, the action, a body to send, query parameters (provided as a structured set of name/value pairs), per-request headers, a response-body interpretation hint, whether to include credentials on cross-origin calls, a time limit or cancellation signal, and a caching choice.
 - **Acceptance Criteria:**
-  - [ ] A request can carry query parameters supplied as a structured set, a body, and per-request headers, and all three reach the outgoing request.
-  - [ ] A request can specify how the response body should be interpreted and whether credentials are included on cross-origin calls.
-  - [ ] Unspecified options fall back to the application-wide defaults (2.4).
+  - [x] A request can carry query parameters supplied as a structured set, a body, and per-request headers, and all three reach the outgoing request.
+  - [x] A request can specify how the response body should be interpreted and whether credentials are included on cross-origin calls.
+  - [x] Unspecified options fall back to the application-wide defaults (2.4).
 
 ### 2.4 Application-wide and per-action defaults
 
 - A developer can set, once, defaults that apply to every request: common headers (including headers that apply only to body-carrying actions), the default query-parameter serialization, and the default JSON handling.
 - Per-request options always override the application-wide defaults for that one request.
 - **Acceptance Criteria:**
-  - [ ] A header set as an application-wide default is present on requests that don't override it.
-  - [ ] A header set only for body-carrying actions appears on those actions and not on bodyless ones.
-  - [ ] A per-request option overrides the matching application-wide default for that request only, leaving the default intact for others.
+  - [x] A header set as an application-wide default is present on requests that don't override it.
+  - [x] A header set only for body-carrying actions appears on those actions and not on bodyless ones.
+  - [x] A per-request option overrides the matching application-wide default for that request only, leaving the default intact for others.
 
 ### 2.5 Query-parameter serialization
 
 - The structured set of query parameters a developer provides is turned into a proper query string automatically, with correct escaping. Nested or repeated values follow a consistent, documented rule.
 - A developer can replace the default serialization strategy with their own, both application-wide and per request.
 - **Acceptance Criteria:**
-  - [ ] A structured set of parameters is converted into a correctly-escaped query string on the outgoing request.
-  - [ ] Repeated/array and structured values are serialized by a consistent, documented rule.
-  - [ ] A developer-supplied serialization strategy replaces the default when configured.
+  - [x] A structured set of parameters is converted into a correctly-escaped query string on the outgoing request.
+  - [x] Repeated/array and structured values are serialized by a consistent, documented rule.
+  - [x] A developer-supplied serialization strategy replaces the default when configured.
 
 ### 2.6 Automatic JSON handling
 
@@ -83,34 +83,34 @@ Behavior is validated against original AngularJS wherever the two overlap — th
 - Sending a plain string body, or other non-structured content, is passed through unchanged.
 - A developer can adjust or replace this automatic conversion (see 2.9).
 - **Acceptance Criteria:**
-  - [ ] A structured request body is sent as JSON text with the appropriate content label, by default.
-  - [ ] A JSON response body is delivered to the success follow-up as already-parsed structured data, by default.
-  - [ ] A plain-string body is sent as-is without JSON conversion.
-  - [ ] A response that is not JSON is delivered without forced parsing.
+  - [x] A structured request body is sent as JSON text with the appropriate content label, by default.
+  - [x] A JSON response body is delivered to the success follow-up as already-parsed structured data, by default.
+  - [x] A plain-string body is sent as-is without JSON conversion.
+  - [x] A response that is not JSON is delivered without forced parsing.
 
 ### 2.7 Success and failure outcomes
 
 - A response the server reports as **successful** settles the result as a success; a response the server reports as a **failure**, or a request that never reaches the server (network failure), settles the result as a failure. The failure bundle carries the same shape as the success bundle (body, status, status description, headers, request description) so a developer can inspect what happened.
 - **Acceptance Criteria:**
-  - [ ] A server-reported success settles the result as a success with the full bundle.
-  - [ ] A server-reported failure settles the result as a failure with the full bundle (including the error body and status).
-  - [ ] A request that never reaches the server settles the result as a failure that is distinguishable from a server-reported failure.
+  - [x] A server-reported success settles the result as a success with the full bundle.
+  - [x] A server-reported failure settles the result as a failure with the full bundle (including the error body and status).
+  - [x] A request that never reaches the server settles the result as a failure that is distinguishable from a server-reported failure.
 
 ### 2.8 Cancellation and time limits
 
 - A developer can cancel an in-flight request, either by triggering a cancellation signal they supplied with the request, or by setting a time limit after which the request is abandoned automatically. A cancelled or timed-out request settles the result as a failure and stops the underlying work.
 - **Acceptance Criteria:**
-  - [ ] Given a request was issued with a cancellation signal, when the developer triggers it, then the request is abandoned and the result fails.
-  - [ ] Given a request was issued with a time limit, when the limit elapses before a response, then the request is abandoned and the result fails.
-  - [ ] A response that already arrived is unaffected by a later cancellation attempt.
+  - [x] Given a request was issued with a cancellation signal, when the developer triggers it, then the request is abandoned and the result fails.
+  - [x] Given a request was issued with a time limit, when the limit elapses before a response, then the request is abandoned and the result fails.
+  - [x] A response that already arrived is unaffected by a later cancellation attempt.
 
 ### 2.9 Adjust the request and response payloads (transforms)
 
 - A developer can supply their own steps that adjust the outgoing body (and headers) before sending, and steps that adjust the incoming body after receiving — both application-wide and per request. These run in addition to, or in place of, the automatic JSON handling.
 - **Acceptance Criteria:**
-  - [ ] A developer-supplied outgoing-body adjustment is applied before the request is sent.
-  - [ ] A developer-supplied incoming-body adjustment is applied before the success follow-up receives the data.
-  - [ ] These adjustments can be set application-wide and overridden per request.
+  - [x] A developer-supplied outgoing-body adjustment is applied before the request is sent.
+  - [x] A developer-supplied incoming-body adjustment is applied before the success follow-up receives the data.
+  - [x] These adjustments can be set application-wide and overridden per request.
 
 ### 2.10 Intercept all requests and responses in one place
 
@@ -118,46 +118,46 @@ Behavior is validated against original AngularJS wherever the two overlap — th
 - Multiple interceptors apply in a well-defined, documented order; request-side steps run outward-to-inward and response-side steps inner-to-outer (mirroring AngularJS).
 - Interceptor steps may themselves be asynchronous (return a pending result), and the pipeline waits for them.
 - **Acceptance Criteria:**
-  - [ ] A registered request interceptor sees and can modify every outgoing request before it is sent.
-  - [ ] A registered response interceptor sees and can modify every incoming response before the caller's success follow-up runs.
-  - [ ] A failure interceptor can observe a failure and either let it continue to fail or recover it into a success.
-  - [ ] With multiple interceptors registered, they apply in the documented order, and an asynchronous interceptor step is awaited before the pipeline continues.
+  - [x] A registered request interceptor sees and can modify every outgoing request before it is sent.
+  - [x] A registered response interceptor sees and can modify every incoming response before the caller's success follow-up runs.
+  - [x] A failure interceptor can observe a failure and either let it continue to fail or recover it into a success.
+  - [x] With multiple interceptors registered, they apply in the documented order, and an asynchronous interceptor step is awaited before the pipeline continues.
 
 ### 2.11 Automatic cross-site-request-forgery (CSRF) protection
 
 - For same-origin requests that change data, the service automatically reads a per-session anti-forgery token (left by the server) and echoes it back on the request, so the server can confirm the request is genuine. The token names are configurable, and the token is **not** sent to other origins.
 - **Acceptance Criteria:**
-  - [ ] On a same-origin data-changing request, the anti-forgery token left by the server is automatically echoed back on the request.
-  - [ ] The token is not sent on cross-origin requests.
-  - [ ] The token's source and echo names are configurable application-wide.
+  - [x] On a same-origin data-changing request, the anti-forgery token left by the server is automatically echoed back on the request.
+  - [x] The token is not sent on cross-origin requests.
+  - [x] The token's source and echo names are configurable application-wide.
 
 ### 2.12 Trusted-destination enforcement for the legacy cross-origin-script action
 
 - The legacy cross-origin-script action only proceeds when its destination has been explicitly marked as trusted through the existing security mechanism; an untrusted destination is refused before any network activity.
 - **Acceptance Criteria:**
-  - [ ] The legacy cross-origin-script action succeeds only for a destination explicitly trusted via the existing security mechanism.
-  - [ ] An untrusted destination is refused with a clear error and no network activity occurs.
+  - [x] The legacy cross-origin-script action succeeds only for a destination explicitly trusted via the existing security mechanism.
+  - [x] An untrusted destination is refused with a clear error and no network activity occurs.
 
 ### 2.13 Optional response caching
 
 - A developer can opt a request into caching, so that a repeat of the same retrieval is served from an in-memory store instead of hitting the network. Caching is **off by default** and opt-in per request (or via an application-wide default cache). Concurrent identical retrievals while one is in flight share the single outstanding call.
 - **Acceptance Criteria:**
-  - [ ] Given caching is enabled for a retrieval, when the same retrieval is issued again, then the result is served from the cache without a new network call.
-  - [ ] Caching is off unless explicitly enabled for that request (or via a configured default cache).
-  - [ ] Two identical cacheable retrievals issued before the first completes share a single outstanding network call.
+  - [x] Given caching is enabled for a retrieval, when the same retrieval is issued again, then the result is served from the cache without a new network call.
+  - [x] Caching is off unless explicitly enabled for that request (or via a configured default cache).
+  - [x] Two identical cacheable retrievals issued before the first completes share a single outstanding network call.
 
 ### 2.14 Visibility into in-flight requests
 
 - A developer can observe the set of requests currently in flight (for example, to show a busy indicator or to assert quiescence in a test).
 - **Acceptance Criteria:**
-  - [ ] While a request is in flight, it appears in the observable set of pending requests; once it settles, it is removed.
+  - [x] While a request is in flight, it appears in the observable set of pending requests; once it settles, it is removed.
 
 ### 2.15 Typed results
 
 - The result and its delivered bundle are typed against the expected response body, so a developer reading the body gets a correctly typed value without manual type assertions; the request-description and configuration options are likewise typed.
 - **Acceptance Criteria:**
-  - [ ] Reading the response body from a successful result yields a value of the expected type, with no manual type assertion required.
-  - [ ] The request-configuration options are typed so that misspelled or mistyped options are flagged.
+  - [x] Reading the response body from a successful result yields a value of the expected type, with no manual type assertion required.
+  - [x] The request-configuration options are typed so that misspelled or mistyped options are flagged.
 
 ---
 
@@ -168,7 +168,7 @@ These differences from classic AngularJS are deliberate and should be treated as
 - **No `.success()` / `.error()` shorthands.** Classic AngularJS once offered promise-specific `.success`/`.error` callbacks (removed in its own later versions). This project ships only the standard success/failure follow-ups on the result — the modern, type-safe shape.
 - **The legacy cross-origin-script action is hard-gated by the trusted-destination mechanism** (no opt-out), reflecting this project's security posture.
 - **Acceptance Criteria:**
-  - [ ] Each deviation above is observable and behaves as described, and is covered by a test that marks it as intentional rather than a parity gap.
+  - [x] Each deviation above is observable and behaves as described, and is covered by a test that marks it as intentional rather than a parity gap.
 
 ---
 

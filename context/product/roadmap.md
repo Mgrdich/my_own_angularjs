@@ -128,9 +128,9 @@ _High-level services that enable real application development._
   - [x] **$q Promise Implementation:** Implement `$q` with `defer`, `resolve`, `reject`, `all`, `race`, and `when`. _(spec 037 — also ships the ES6-style `$q(executor)` constructor, `allSettled`, `.catch` / `.finally`, and always-on unhandled-rejection reporting via `$exceptionHandler('$q')`; intentional additions per FS §3.)_
   - [x] **$timeout & $interval:** Implement digest-integrated timer services with cancellation support. _(spec 037 — `$$phase`-guarded `$apply` integration, `.cancel` rejecting with `'canceled'`; `$interval` reports per-tick progress + count-cap resolve and does not auto-cancel on a callback throw.)_
 
-- [ ] **HTTP & Networking**
-  - [ ] **$http Service:** Implement request methods (`GET`, `POST`, `PUT`, `DELETE`), default headers, and parameter serialization.
-  - [ ] **Interceptors:** Support request/response interceptors and transformations.
+- [x] **HTTP & Networking**
+  - [x] **$http Service:** Implement request methods (`GET`, `POST`, `PUT`, `DELETE`), default headers, and parameter serialization.
+  - [x] **Interceptors:** Support request/response interceptors and transformations.
 
 - [ ] **Forms & Validation**
   - [ ] **ngModel:** Implement two-way data binding for form elements with `$viewValue` / `$modelValue` pipeline.

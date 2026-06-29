@@ -24,7 +24,9 @@
       "@template/*": ["./src/template/*"],
       "@controller/*": ["./src/controller/*"],
       "@bootstrap/*": ["./src/bootstrap/*"],
-      "@async/*": ["./src/async/*"]
+      "@async/*": ["./src/async/*"],
+      "@cache/*": ["./src/cache/*"],
+      "@http/*": ["./src/http/*"]
     }
   },
   "include": ["src"],

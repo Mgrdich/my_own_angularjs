@@ -20,6 +20,11 @@ import type { QService } from '@async/q-types';
 import { createTimeout } from '@async/timeout';
 import { createInterval } from '@async/interval';
 import type { IntervalService, TimeoutService } from '@async/async-types';
+import { createCacheFactory } from '@cache/cache-factory';
+import type { CacheFactory } from '@cache/cache-types';
+import { createHttpBackend } from '@http/http-backend';
+import { $HttpProvider } from '@http/http-provider';
+import type { HttpBackend, HttpService } from '@http/http-types';
 import { $CompileProvider } from '@compiler/compile-provider';
 import type { CompileService } from '@compiler/directive-types';
 import {
@@ -133,6 +138,9 @@ declare module '@di/di-types' {
         $compile: CompileService;
         $templateCache: TemplateCacheService;
         $templateRequest: TemplateRequestFn;
+        $cacheFactory: CacheFactory;
+        $httpBackend: HttpBackend;
+        $http: HttpService;
         uppercaseFilter: FilterFn;
         lowercaseFilter: FilterFn;
         jsonFilter: FilterFn;
@@ -152,6 +160,7 @@ declare module '@di/di-types' {
         $compileProvider: $CompileProvider;
         $templateCacheProvider: $TemplateCacheProvider;
         $templateRequestProvider: $TemplateRequestProvider;
+        $httpProvider: $HttpProvider;
       };
     };
   }
@@ -250,6 +259,32 @@ export const ngModule = createModule('ng', [])
         },
       }),
   ])
+  // `$cacheFactory` (spec 038 Slice 1) — the general-purpose named-cache
+  // factory (FS §2.13). Each injector receives its own isolated registry:
+  // the pure `createCacheFactory()` closes over a fresh `Map` of caches per
+  // invocation. Backs `$http`'s optional response cache (later slices) and
+  // is usable standalone. Array-wrapped (`[() => …]`) to satisfy strict
+  // `annotate`, which rejects bare un-annotated functions. Dependency-free
+  // so it pulls nothing else into the construction path.
+  .factory('$cacheFactory', [() => createCacheFactory()])
+  // `$httpBackend` (spec 038 Slice 2) — the fetch transport seam for `$http`
+  // (FS §2.3). Resolves a `$q` deferred with a `RawResponse` for every HTTP
+  // response (does NOT reject on non-2xx — status classification is `$http`'s
+  // job); rejects with an `HttpTransportError` only on a network failure or
+  // abort. The pure `createHttpBackend({ q })` factory keeps `fetch` behind
+  // an injectable seam (defaulting to the global) so the backend is
+  // unit-testable and a future `ngMock` can decorate it. Injects `$q`
+  // because resolving its deferred schedules a digest for free.
+  .factory('$httpBackend', ['$q', ($q: QService): HttpBackend => createHttpBackend({ q: $q })])
+  // `$http` (spec 038 Slice 2) — the networking service (FS §2.1). Registered
+  // as a `.provider(...)` so config blocks mutate the PUBLIC `defaults` /
+  // `interceptors` fields (`config(['$httpProvider', …])`); `$get` freezes
+  // the config and returns the `$http` callable built by the pure
+  // `createHttp` factory. Returns `$q` promises so digest integration is
+  // FREE — `$http` never calls `$apply`. Deps `['$q','$injector',
+  // '$httpBackend','$cacheFactory']` are declared up front (the interceptor /
+  // caching slices use `$injector` / `$cacheFactory`).
+  .provider<'$http', HttpService, $HttpProvider>('$http', $HttpProvider)
   .provider('$sceDelegate', $SceDelegateProvider)
   .provider('$sce', $SceProvider)
   .provider('$interpolate', $InterpolateProvider)

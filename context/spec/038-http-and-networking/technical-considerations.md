@@ -6,7 +6,7 @@ It is NOT a copy-paste implementation guide.
 # Technical Specification: HTTP & Networking (`$http`)
 
 - **Functional Specification:** `context/spec/038-http-and-networking/functional-spec.md`
-- **Status:** Draft
+- **Status:** Completed
 - **Author(s):** AWOS tech workflow
 
 ---

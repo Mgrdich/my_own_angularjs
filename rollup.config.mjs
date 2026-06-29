@@ -15,6 +15,14 @@ import dts from 'rollup-plugin-dts';
 // `compiler` is included even though it currently just re-exports `{}`, so the
 // `./compiler` exports map entry resolves to a real file rather than failing
 // at runtime for any consumer who happens to import it.
+//
+// Heap note: all 16 bundle configs (each running a full @rollup/plugin-typescript
+// program typecheck) plus 16 dts configs run in a single rollup process, so peak
+// memory grows with the entry count. Once the 16th entry (http) was added the
+// process tipped over V8's default ~4GB old-space ceiling and crashed with
+// "Ineffective mark-compacts near heap limit". The `package.json` "build" script
+// therefore launches rollup via `node --max-old-space-size=8192` to raise the
+// heap limit; keep that flag (or bump it) when adding further entries.
 const entries = [
   { name: 'index', input: 'src/index.ts' },
   { name: 'core/index', input: 'src/core/index.ts' },
@@ -30,6 +38,8 @@ const entries = [
   { name: 'controller/index', input: 'src/controller/index.ts' },
   { name: 'bootstrap/index', input: 'src/bootstrap/index.ts' },
   { name: 'async/index', input: 'src/async/index.ts' },
+  { name: 'cache/index', input: 'src/cache/index.ts' },
+  { name: 'http/index', input: 'src/http/index.ts' },
 ];
 
 // Path aliases declared in `tsconfig.json` are used across the codebase
@@ -52,6 +62,8 @@ const tsPathAliases = {
   '@controller/*': ['src/controller/*'],
   '@bootstrap/*': ['src/bootstrap/*'],
   '@async/*': ['src/async/*'],
+  '@cache/*': ['src/cache/*'],
+  '@http/*': ['src/http/*'],
 };
 
 const bundleConfigs = entries.map((entry) => ({
