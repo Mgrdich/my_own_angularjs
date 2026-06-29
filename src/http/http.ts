@@ -74,6 +74,13 @@ import type {
 const NETWORK_FAILURE_STATUS = -1;
 
 /**
+ * A shared, invariant headers getter for the network-failure path — the parsed
+ * result of an empty raw-header string never varies, so it is built once at
+ * module load rather than per failed request.
+ */
+const EMPTY_HEADERS = parseHeaders('');
+
+/**
  * Arguments accepted by {@link createHttp}.
  */
 export interface CreateHttpArgs {
@@ -146,7 +153,7 @@ function isSuccessStatus(status: number): boolean {
 }
 
 export function createHttp(args: CreateHttpArgs): HttpService {
-  const { q, httpBackend, defaults } = args;
+  const { q, httpBackend, defaults, cacheFactory, jsonpTrust, xsrfBaseUrl } = args;
   const interceptors = args.interceptors ?? [];
   const cookieReader = args.cookieReader ?? defaultCookieReader;
   const setTimer = args.setTimer ?? ((fn, delay) => setTimeout(fn, delay));
@@ -168,8 +175,8 @@ export function createHttp(args: CreateHttpArgs): HttpService {
   // `cache: true` GET (FS §2.13). Off until something opts in.
   let defaultCache: Cache<HttpResponse> | undefined;
   function getDefaultCache(): Cache<HttpResponse> | undefined {
-    if (defaultCache === undefined && args.cacheFactory !== undefined) {
-      defaultCache = args.cacheFactory<HttpResponse>('$http');
+    if (defaultCache === undefined && cacheFactory !== undefined) {
+      defaultCache = cacheFactory<HttpResponse>('$http');
     }
     return defaultCache;
   }
@@ -222,9 +229,9 @@ export function createHttp(args: CreateHttpArgs): HttpService {
     //    There is no opt-out; the gate runs whenever `jsonpTrust` is wired
     //    (the provider wires it iff `$sce` is reachable — a stripped injector
     //    lacking `$sce` passes JSONP URLs through, mirroring `ng-include`).
-    if (method === 'JSONP' && args.jsonpTrust !== undefined && requestConfig.url !== undefined) {
+    if (method === 'JSONP' && jsonpTrust !== undefined && requestConfig.url !== undefined) {
       try {
-        const trustedUrl = args.jsonpTrust(requestConfig.url);
+        const trustedUrl = jsonpTrust(requestConfig.url);
         requestConfig = { ...requestConfig, url: trustedUrl };
       } catch (error: unknown) {
         deferred.reject(error);
@@ -269,7 +276,7 @@ export function createHttp(args: CreateHttpArgs): HttpService {
       cookieName: defaults.xsrfCookieName ?? DEFAULT_XSRF_COOKIE_NAME,
       headerName: defaults.xsrfHeaderName ?? DEFAULT_XSRF_HEADER_NAME,
       cookieReader,
-      baseUrl: args.xsrfBaseUrl,
+      baseUrl: xsrfBaseUrl,
     });
 
     const mergedConfig: HttpConfig<T> = {
@@ -410,7 +417,7 @@ export function createHttp(args: CreateHttpArgs): HttpService {
             data: null as T,
             status: NETWORK_FAILURE_STATUS,
             statusText: '',
-            headers: parseHeaders(''),
+            headers: EMPTY_HEADERS,
             config: mergedConfig,
           };
           deferred.reject(failure);
@@ -469,48 +476,53 @@ export function createHttp(args: CreateHttpArgs): HttpService {
     // threaded as `unknown` through the fold and narrowed at the boundaries.
     let chain: QPromise<unknown> = q.resolve<HttpConfig<T>>(requestConfig);
 
-    // REQUEST phase — reverse iteration so the last-registered runs first.
-    // Methods are invoked ON the interceptor object (`interceptor.request(…)`)
-    // so each handler's `this` stays bound to its own interceptor.
-    for (let i = interceptors.length - 1; i >= 0; i--) {
-      const interceptor = interceptors[i];
-      if (interceptor === undefined) {
-        continue;
+    // Both phases fold the interceptors over `chain` IDENTICALLY — reverse
+    // iteration (last-registered first), skip gaps, and append `.then(fulfil,
+    // reject)` only when a handler exists — differing solely in the handler
+    // pair. One helper drives both. Handlers are invoked ON the interceptor
+    // (`interceptor.request(…)`) so each keeps `this` bound to its own object;
+    // sync or `QPromise` returns are awaited by `.then`-chaining; the `*Error`
+    // handlers ARE the rejection branch (recover by returning, keep failing by
+    // re-rejecting).
+    const foldPhase = (
+      pickFulfil: (interceptor: Interceptor) => ((value: unknown) => unknown) | undefined,
+      pickReject: (interceptor: Interceptor) => ((rejection: unknown) => unknown) | undefined,
+    ): void => {
+      for (let i = interceptors.length - 1; i >= 0; i--) {
+        const interceptor = interceptors[i];
+        if (interceptor === undefined) {
+          continue;
+        }
+        const fulfil = pickFulfil(interceptor);
+        const reject = pickReject(interceptor);
+        if (fulfil !== undefined || reject !== undefined) {
+          chain = chain.then(fulfil, reject);
+        }
       }
-      if (interceptor.request !== undefined || interceptor.requestError !== undefined) {
-        chain = chain.then(
-          interceptor.request === undefined
-            ? undefined
-            : (config: unknown) => interceptor.request?.(config as HttpConfig),
-          interceptor.requestError === undefined
-            ? undefined
-            : (rejection: unknown) => interceptor.requestError?.(rejection),
-        );
-      }
-    }
+    };
+
+    // REQUEST phase OUTWARD→INWARD: reverse iteration appends the
+    // last-registered's `request` first, so it runs first (outermost), before
+    // the backend send.
+    foldPhase(
+      (interceptor) =>
+        interceptor.request === undefined ? undefined : (config) => interceptor.request?.(config as HttpConfig),
+      (interceptor) =>
+        interceptor.requestError === undefined ? undefined : (rejection) => interceptor.requestError?.(rejection),
+    );
 
     // Backend send — the extracted inner pipeline.
     chain = chain.then((config: unknown) => serverRequest<T>(config as HttpConfig<T>));
 
-    // RESPONSE phase — reverse iteration (same as the request phase) so the
-    // first-registered interceptor's `response` is appended LAST and runs
-    // outermost (INNER→OUTER), matching AngularJS's single reversed array.
-    for (let i = interceptors.length - 1; i >= 0; i--) {
-      const interceptor = interceptors[i];
-      if (interceptor === undefined) {
-        continue;
-      }
-      if (interceptor.response !== undefined || interceptor.responseError !== undefined) {
-        chain = chain.then(
-          interceptor.response === undefined
-            ? undefined
-            : (response: unknown) => interceptor.response?.(response as HttpResponse),
-          interceptor.responseError === undefined
-            ? undefined
-            : (rejection: unknown) => interceptor.responseError?.(rejection),
-        );
-      }
-    }
+    // RESPONSE phase INNER→OUTER: the SAME reverse iteration appends the
+    // last-registered's `response` first (innermost) and the first-registered's
+    // last (outermost, runs last) — AngularJS's single reversed array.
+    foldPhase(
+      (interceptor) =>
+        interceptor.response === undefined ? undefined : (response) => interceptor.response?.(response as HttpResponse),
+      (interceptor) =>
+        interceptor.responseError === undefined ? undefined : (rejection) => interceptor.responseError?.(rejection),
+    );
 
     return chain as QPromise<HttpResponse<T>>;
   }
