@@ -406,8 +406,8 @@ describe('transclusion error surface — handler degradation (FS §2.9 #8 / spec
 });
 
 describe('transclusion error surface — public-API token list contract (FS §2.9 mandate)', () => {
-  it('EXCEPTION_HANDLER_CAUSES.length is unchanged at 10', () => {
-    expect(EXCEPTION_HANDLER_CAUSES.length).toBe(10);
+  it('EXCEPTION_HANDLER_CAUSES has no transclude token (count is 13 since spec 037)', () => {
+    expect(EXCEPTION_HANDLER_CAUSES.length).toBe(13);
   });
 
   it("EXCEPTION_HANDLER_CAUSES includes '$compile'", () => {

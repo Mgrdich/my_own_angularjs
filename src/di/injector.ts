@@ -131,11 +131,21 @@ export type MergeRegistries<Mods extends readonly AnyModule[]> =
  * @param modules - Tuple of module instances whose registrations should be
  *   drained into the returned injector. Any modules referenced transitively
  *   through `requires` are resolved automatically via the module registry.
+ * @param options - Optional internal wiring. The `seed` map (additive,
+ *   defaulting to none) pre-seeds entries directly into `providerCache` —
+ *   into the SAME slot the injector self-seeds `$injector`. The DOM bootstrap
+ *   layer uses it to make the started element injectable as `$rootElement`
+ *   WITHOUT registering it on a shared module (so re-bootstrap never collides
+ *   in the global registry). Headless callers pass nothing → behavior is
+ *   identical to seeding only `$injector`. The map is typed
+ *   `Record<string, unknown>` deliberately: this is an internal seam, and the
+ *   bootstrap layer applies precise typing on top.
  * @throws {Error} with message `Module not found: <name>` when a `requires`
  *   entry references a module that is not present in the registry.
  */
 export function createInjector<const Mods extends readonly AnyModule[]>(
   modules: Mods,
+  options?: { readonly seed?: Record<string, unknown> },
 ): Injector<MergeRegistries<Mods>> {
   const providerCache = new Map<string, unknown>();
   const factoryInvokables = new Map<string, Invokable>();
@@ -613,6 +623,21 @@ export function createInjector<const Mods extends readonly AnyModule[]>(
   };
   // $injector self-registration — AngularJS parity. Lets providers/run blocks declare '$injector' as a dep.
   providerCache.set('$injector', runInjector);
+
+  // Internal seed seam — additive, defaulting to none. Entries are written
+  // into the SAME `providerCache` slot `$injector` was just seeded into, so a
+  // seeded name resolves through the cache-hit fast path in `get` exactly like
+  // any value, participates in `has`, and is visible to providers / run blocks
+  // as an injectable dependency. The DOM bootstrap layer seeds `$rootElement`
+  // here so the started element is injectable WITHOUT polluting the global
+  // module registry (re-bootstrap never collides). Headless callers pass no
+  // seed → this loop is empty and behavior is identical to seeding only
+  // `$injector`.
+  if (options?.seed !== undefined) {
+    for (const [seedName, seedValue] of Object.entries(options.seed)) {
+      providerCache.set(seedName, seedValue);
+    }
+  }
 
   // Bag of backing maps + sets that `applyRegistrationRecord` (and its
   // private `registerProvider` helper) writes into when draining each

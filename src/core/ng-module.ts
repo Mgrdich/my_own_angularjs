@@ -15,6 +15,16 @@
  * before the run phase begins.
  */
 
+import { createQ } from '@async/q';
+import type { QService } from '@async/q-types';
+import { createTimeout } from '@async/timeout';
+import { createInterval } from '@async/interval';
+import type { IntervalService, TimeoutService } from '@async/async-types';
+import { createCacheFactory } from '@cache/cache-factory';
+import type { CacheFactory } from '@cache/cache-types';
+import { createHttpBackend } from '@http/http-backend';
+import { $HttpProvider } from '@http/http-provider';
+import type { HttpBackend, HttpService } from '@http/http-types';
 import { $CompileProvider } from '@compiler/compile-provider';
 import type { CompileService } from '@compiler/directive-types';
 import {
@@ -87,6 +97,7 @@ import { NG_TRANSCLUDE_NAME, ngTranscludeDirective } from '@compiler/ng-transclu
 import { $ControllerProvider } from '@controller/controller-provider';
 import type { ControllerService } from '@controller/controller-types';
 import { createModule } from '@di/module';
+import { Scope } from './scope';
 import { consoleErrorExceptionHandler, type ExceptionHandler } from '@exception-handler/index';
 import { lowercaseFilterFactory, uppercaseFilterFactory } from '@filter/case';
 import { currencyFilterFactory } from '@filter/currency';
@@ -114,6 +125,10 @@ declare module '@di/di-types' {
     ng: {
       registry: {
         $exceptionHandler: ExceptionHandler;
+        $rootScope: Scope;
+        $q: QService;
+        $timeout: TimeoutService;
+        $interval: IntervalService;
         $interpolate: InterpolateService;
         $sceDelegate: SceDelegateService;
         $sce: SceService;
@@ -123,6 +138,9 @@ declare module '@di/di-types' {
         $compile: CompileService;
         $templateCache: TemplateCacheService;
         $templateRequest: TemplateRequestFn;
+        $cacheFactory: CacheFactory;
+        $httpBackend: HttpBackend;
+        $http: HttpService;
         uppercaseFilter: FilterFn;
         lowercaseFilter: FilterFn;
         jsonFilter: FilterFn;
@@ -142,19 +160,131 @@ declare module '@di/di-types' {
         $compileProvider: $CompileProvider;
         $templateCacheProvider: $TemplateCacheProvider;
         $templateRequestProvider: $TemplateRequestProvider;
+        $httpProvider: $HttpProvider;
       };
     };
   }
 }
 
-// TODO(spec-016 Slice 4): when `$rootScope` lands as a registered factory
-// (Bootstrap roadmap item), construct it via
+// NOTE(spec-036 Slice 2): `$rootScope` is the canonical, injector-resolvable
+// root scope singleton (FS §2.4). It is a LAZY factory — `Scope.create()`
+// runs only on the first `injector.get('$rootScope')`, and the DI cache makes
+// every subsequent `get` return the SAME reference (singleton). The factory is
+// array-wrapped (`[() => …]`) to satisfy strict `annotate`, which rejects bare
+// un-annotated functions.
+//
+// TODO(future): construct the root scope via
 // `Scope.create({ filterLookup: $filter, exceptionHandler: $exceptionHandler })`
 // so filter expressions resolve out of the box on the injector-built scope
-// tree. Until then, scope's `filterLookup` option is exercised by tests
-// directly — see `src/filter/__tests__/scope-watch-integration.test.ts`.
+// tree. Today the dependency-free form keeps `@core`'s `ngModule` from pulling
+// `$filter` into the construction path; scope's `filterLookup` option is
+// exercised by tests directly — see
+// `src/filter/__tests__/scope-watch-integration.test.ts`.
 export const ngModule = createModule('ng', [])
   .factory('$exceptionHandler', [() => consoleErrorExceptionHandler])
+  // `$rootScope` (spec 036 Slice 2 / spec 037 Slice 1) — the injector-resolvable root scope.
+  // Previously unregistered (see the TODO above); `$q` / `$timeout` /
+  // `$interval` need it as their digest seam, so it lands here as a
+  // dependency-free factory. `Scope.create()` carries the default TTL and
+  // the `consoleErrorExceptionHandler` default — `$q` injects
+  // `$exceptionHandler` DIRECTLY (not via `$rootScope.$$exceptionHandler`)
+  // so the two cannot diverge.
+  .factory('$rootScope', [() => Scope.create()])
+  // `$q` (spec 037 Slice 1) — the promise toolkit. `scheduleDigest` is bound
+  // to `$rootScope.$evalAsync` so a settlement from outside a digest
+  // schedules one (FS §2.5); the pure `createQ` factory keeps the seam
+  // injectable so it is unit-testable without an injector.
+  .factory('$q', [
+    '$rootScope',
+    '$exceptionHandler',
+    ($rootScope: Scope, $exceptionHandler: ExceptionHandler): QService =>
+      createQ({
+        exceptionHandler: $exceptionHandler,
+        scheduleDigest: (fn) => {
+          $rootScope.$evalAsync(fn);
+        },
+      }),
+  ])
+  // `$timeout` (spec 037 Slice 3) — a one-off deferred task that settles a
+  // `$q` promise (FS §2.7). `apply` / `rootPhase` are the `$$phase`-guarded
+  // seams onto `$rootScope.$apply` / `$rootScope.$$phase` (the event-directive
+  // pattern); `defer` / `cancelDefer` are the GLOBAL `setTimeout` /
+  // `clearTimeout` called directly (matching the `scope.ts` precedent). The
+  // pure `createTimeout` factory keeps every seam injectable so it is
+  // unit-testable with fake timers and stubs. `$exceptionHandler` is injected
+  // DIRECTLY (not via `$rootScope.$$exceptionHandler`) so a callback throw
+  // routes through the SAME handler `$q` uses, cause `'$timeout'`.
+  .factory('$timeout', [
+    '$rootScope',
+    '$q',
+    '$exceptionHandler',
+    ($rootScope: Scope, $q: QService, $exceptionHandler: ExceptionHandler): TimeoutService =>
+      createTimeout({
+        q: $q,
+        exceptionHandler: $exceptionHandler,
+        apply: (fn) => {
+          $rootScope.$apply(fn);
+        },
+        rootPhase: () => $rootScope.$$phase,
+        defer: (fn, delay) => setTimeout(fn, delay),
+        cancelDefer: (id) => {
+          clearTimeout(id);
+        },
+      }),
+  ])
+  // `$interval` (spec 037 Slice 4) — a repeating deferred task that reports
+  // per-tick progress and (when capped) succeeds with the final count
+  // (FS §2.8). Same `apply` / `rootPhase` `$$phase`-guarded seams as `$timeout`,
+  // with `setIntervalFn` / `clearIntervalFn` bound to the GLOBAL `setInterval` /
+  // `clearInterval` called directly (matching the `scope.ts` precedent). The
+  // pure `createInterval` factory keeps every seam injectable so it is
+  // unit-testable with fake timers and stubs. `$exceptionHandler` is injected
+  // DIRECTLY (not via `$rootScope.$$exceptionHandler`) so a callback throw
+  // routes through the SAME handler `$q` uses, cause `'$interval'`.
+  .factory('$interval', [
+    '$rootScope',
+    '$q',
+    '$exceptionHandler',
+    ($rootScope: Scope, $q: QService, $exceptionHandler: ExceptionHandler): IntervalService =>
+      createInterval({
+        q: $q,
+        exceptionHandler: $exceptionHandler,
+        apply: (fn) => {
+          $rootScope.$apply(fn);
+        },
+        rootPhase: () => $rootScope.$$phase,
+        setIntervalFn: (fn, delay) => setInterval(fn, delay),
+        clearIntervalFn: (id) => {
+          clearInterval(id);
+        },
+      }),
+  ])
+  // `$cacheFactory` (spec 038 Slice 1) — the general-purpose named-cache
+  // factory (FS §2.13). Each injector receives its own isolated registry:
+  // the pure `createCacheFactory()` closes over a fresh `Map` of caches per
+  // invocation. Backs `$http`'s optional response cache (later slices) and
+  // is usable standalone. Array-wrapped (`[() => …]`) to satisfy strict
+  // `annotate`, which rejects bare un-annotated functions. Dependency-free
+  // so it pulls nothing else into the construction path.
+  .factory('$cacheFactory', [() => createCacheFactory()])
+  // `$httpBackend` (spec 038 Slice 2) — the fetch transport seam for `$http`
+  // (FS §2.3). Resolves a `$q` deferred with a `RawResponse` for every HTTP
+  // response (does NOT reject on non-2xx — status classification is `$http`'s
+  // job); rejects with an `HttpTransportError` only on a network failure or
+  // abort. The pure `createHttpBackend({ q })` factory keeps `fetch` behind
+  // an injectable seam (defaulting to the global) so the backend is
+  // unit-testable and a future `ngMock` can decorate it. Injects `$q`
+  // because resolving its deferred schedules a digest for free.
+  .factory('$httpBackend', ['$q', ($q: QService): HttpBackend => createHttpBackend({ q: $q })])
+  // `$http` (spec 038 Slice 2) — the networking service (FS §2.1). Registered
+  // as a `.provider(...)` so config blocks mutate the PUBLIC `defaults` /
+  // `interceptors` fields (`config(['$httpProvider', …])`); `$get` freezes
+  // the config and returns the `$http` callable built by the pure
+  // `createHttp` factory. Returns `$q` promises so digest integration is
+  // FREE — `$http` never calls `$apply`. Deps `['$q','$injector',
+  // '$httpBackend','$cacheFactory']` are declared up front (the interceptor /
+  // caching slices use `$injector` / `$cacheFactory`).
+  .provider<'$http', HttpService, $HttpProvider>('$http', $HttpProvider)
   .provider('$sceDelegate', $SceDelegateProvider)
   .provider('$sce', $SceProvider)
   .provider('$interpolate', $InterpolateProvider)

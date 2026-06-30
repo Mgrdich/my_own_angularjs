@@ -110,13 +110,13 @@ _The layer that connects the runtime to templates and the DOM._
 - [x] **Service Text Diagrams (Phase 2 wrap-up)** _(spec 035 — shipped.)_
   - [x] **Per-service ASCII / text diagrams:** For each service shipped through Phase 2 (Scope & digest, Injector & module system, Parser, `$interpolate`, `$sce` / `$sceDelegate`, Filters, `$compile`, `$controller`, built-in directives — plus `$sanitize` / `ngSanitize`, `$exceptionHandler`, and template loading), produce a text diagram that shows the inner working (collaborators and call order), the supported usage patterns (ES-module primary API vs. DI-layer API), and how to call the service from both paths (with minimal example snippets). Diagrams live under `context/diagrams/` (one file per service, kebab-case) with an index `README.md`, are linked from `CLAUDE.md` "Where to look when…", and a structural Vitest test (`src/__tests__/diagrams-structure.test.ts`) guards file/heading/link presence. _(spec 035 — shipped.)_
 
-- [ ] **Application Bootstrap**
-  - [ ] **`bootstrapInjector(modules, config?)`:** Headless DI-only bootstrap — creates the injector from `[ngModule, ...userModules]`, no DOM, no `$compile`. Ships ahead of the DOM compiler so tests, SSR, CLI tools, and learning exercises can drive the runtime without a browser. Default `strictDi: true` (ESM + TypeScript context makes explicit `$inject` annotations idiomatic).
-  - [ ] **`$rootScope` registration on `ngModule`:** Register `Scope.create()` as `$rootScope` via `.factory('$rootScope', () => Scope.create())` so `bootstrap` can resolve it and downstream services (`$watch` etc.) have a canonical root.
-  - [ ] **`bootstrap(element, modules, config?)`:** DOM bootstrap composing `bootstrapInjector` + `$compile(element)($rootScope)` + `$rootScope.$apply()`. Returns `{ injector, rootScope, rootElement }` — typed result object; no hidden global state, no mandatory DOM data attachment. Ships WITH `$compile` (depends on it). Optional `attachToElement: true` flag for AngularJS-parity consumers who want `element.data('$injector', injector)`.
-  - [ ] **`autoBootstrap(root?)` via `ng-app`:** Opt-in scanner that finds the first `ng-app` attribute in the subtree, resolves the named module, and calls `bootstrap`. Browser-only (no-op when `document` is unavailable). Honors the classic `ng-app`, `data-ng-app`, `ng:app`, `x-ng-app` prefix variants for migration parity.
-  - [ ] **Type-safe injector return:** `bootstrap` / `bootstrapInjector` generics over the `modules` tuple so `result.injector.get('$sce')` has the correct return type — reuses the existing `MergeRegistries` machinery from `@di/di-types`.
-  - [ ] **Module layout:** New `src/bootstrap/` subpath + `@bootstrap/*` alias + `./bootstrap` in `package.json` exports and `rollup.config.mjs` entries — mirrors the `./sce` / `./interpolate` pattern.
+- [x] **Application Bootstrap**
+  - [x] **`bootstrapInjector(modules, config?)`:** Headless DI-only bootstrap — creates the injector from `[ngModule, ...userModules]`, no DOM, no `$compile`. Ships ahead of the DOM compiler so tests, SSR, CLI tools, and learning exercises can drive the runtime without a browser. Default `strictDi: true` (ESM + TypeScript context makes explicit `$inject` annotations idiomatic).
+  - [x] **`$rootScope` registration on `ngModule`:** Register `Scope.create()` as `$rootScope` via `.factory('$rootScope', () => Scope.create())` so `bootstrap` can resolve it and downstream services (`$watch` etc.) have a canonical root.
+  - [x] **`bootstrap(element, modules, config?)`:** DOM bootstrap composing `bootstrapInjector` + `$compile(element)($rootScope)` + `$rootScope.$apply()`. Returns `{ injector, rootScope, rootElement }` — typed result object; no hidden global state, no mandatory DOM data attachment. Ships WITH `$compile` (depends on it). Optional `attachToElement: true` flag for AngularJS-parity consumers who want `element.data('$injector', injector)`.
+  - [x] **`autoBootstrap(root?)` via `ng-app`:** Opt-in scanner that finds the first `ng-app` attribute in the subtree, resolves the named module, and calls `bootstrap`. Browser-only (no-op when `document` is unavailable). Honors the classic `ng-app`, `data-ng-app`, `ng:app`, `x-ng-app` prefix variants for migration parity.
+  - [x] **Type-safe injector return:** `bootstrap` / `bootstrapInjector` generics over the `modules` tuple so `result.injector.get('$sce')` has the correct return type — reuses the existing `MergeRegistries` machinery from `@di/di-types`.
+  - [x] **Module layout:** New `src/bootstrap/` subpath + `@bootstrap/*` alias + `./bootstrap` in `package.json` exports and `rollup.config.mjs` entries — mirrors the `./sce` / `./interpolate` pattern.
 
 ---
 
@@ -124,13 +124,13 @@ _The layer that connects the runtime to templates and the DOM._
 
 _High-level services that enable real application development._
 
-- [ ] **Promises & Async**
-  - [ ] **$q Promise Implementation:** Implement `$q` with `defer`, `resolve`, `reject`, `all`, `race`, and `when`.
-  - [ ] **$timeout & $interval:** Implement digest-integrated timer services with cancellation support.
+- [x] **Promises & Async** _(spec 037 — shipped.)_
+  - [x] **$q Promise Implementation:** Implement `$q` with `defer`, `resolve`, `reject`, `all`, `race`, and `when`. _(spec 037 — also ships the ES6-style `$q(executor)` constructor, `allSettled`, `.catch` / `.finally`, and always-on unhandled-rejection reporting via `$exceptionHandler('$q')`; intentional additions per FS §3.)_
+  - [x] **$timeout & $interval:** Implement digest-integrated timer services with cancellation support. _(spec 037 — `$$phase`-guarded `$apply` integration, `.cancel` rejecting with `'canceled'`; `$interval` reports per-tick progress + count-cap resolve and does not auto-cancel on a callback throw.)_
 
-- [ ] **HTTP & Networking**
-  - [ ] **$http Service:** Implement request methods (`GET`, `POST`, `PUT`, `DELETE`), default headers, and parameter serialization.
-  - [ ] **Interceptors:** Support request/response interceptors and transformations.
+- [x] **HTTP & Networking**
+  - [x] **$http Service:** Implement request methods (`GET`, `POST`, `PUT`, `DELETE`), default headers, and parameter serialization.
+  - [x] **Interceptors:** Support request/response interceptors and transformations.
 
 - [ ] **Forms & Validation**
   - [ ] **ngModel:** Implement two-way data binding for form elements with `$viewValue` / `$modelValue` pipeline.

@@ -547,8 +547,8 @@ describe('parity: component defaults (componentSpec.js)', () => {
 // ---------------------------------------------------------------------
 
 describe('parity: EXCEPTION_HANDLER_CAUSES regression', () => {
-  it('keeps the tuple at exactly 10 entries after spec 022', () => {
-    expect(EXCEPTION_HANDLER_CAUSES.length).toBe(10);
+  it('keeps the tuple free of a spec-022 token (count is 13 since spec 037)', () => {
+    expect(EXCEPTION_HANDLER_CAUSES.length).toBe(13);
     expect(EXCEPTION_HANDLER_CAUSES).toContain('$compile');
   });
 });

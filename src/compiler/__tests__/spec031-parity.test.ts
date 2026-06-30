@@ -246,8 +246,8 @@ describe('spec 031 parity — error resilience: a throwing expression keeps the 
 });
 
 describe('spec 031 parity — EXCEPTION_HANDLER_CAUSES regression guard', () => {
-  it('stays at 10 — spec 031 introduces no new cause token', () => {
-    expect(EXCEPTION_HANDLER_CAUSES.length).toBe(10);
+  it('stays free of a spec-031 token (count is 13 since spec 037)', () => {
+    expect(EXCEPTION_HANDLER_CAUSES.length).toBe(13);
   });
 });
 

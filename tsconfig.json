@@ -22,7 +22,11 @@
       "@filter/*": ["./src/filter/*"],
       "@compiler/*": ["./src/compiler/*"],
       "@template/*": ["./src/template/*"],
-      "@controller/*": ["./src/controller/*"]
+      "@controller/*": ["./src/controller/*"],
+      "@bootstrap/*": ["./src/bootstrap/*"],
+      "@async/*": ["./src/async/*"],
+      "@cache/*": ["./src/cache/*"],
+      "@http/*": ["./src/http/*"]
     }
   },
   "include": ["src"],

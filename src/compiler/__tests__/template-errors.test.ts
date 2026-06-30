@@ -223,8 +223,8 @@ describe('template-loading error surface — handler degradation (FS §2.12 #8)'
 });
 
 describe('template-loading error surface — public-API token list contract (FS §2.12)', () => {
-  it('EXCEPTION_HANDLER_CAUSES.length is unchanged at 10 (spec 019 adds no new cause)', () => {
-    expect(EXCEPTION_HANDLER_CAUSES.length).toBe(10);
+  it('EXCEPTION_HANDLER_CAUSES has no spec-019 token (count is 13 since spec 037)', () => {
+    expect(EXCEPTION_HANDLER_CAUSES.length).toBe(13);
   });
 
   it("EXCEPTION_HANDLER_CAUSES includes '$compile'", () => {

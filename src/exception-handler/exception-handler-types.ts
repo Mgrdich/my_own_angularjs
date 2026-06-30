@@ -4,12 +4,15 @@
  * `EXCEPTION_HANDLER_CAUSES` locks the framework-internal cause-descriptor
  * vocabulary at the nine tokens defined in FS § 2.13 (spec 014) plus the
  * `'$filter'` extension introduced by spec 016 (filter-lookup failures
- * routed through the digest's catch sites) and the `'$compile'` extension
+ * routed through the digest's catch sites), the `'$compile'` extension
  * introduced by spec 017 slice 11 (errors thrown by directive factories,
  * `compile` functions, `pre-link` / `post-link` functions, and `$observe`
  * callbacks all route through the configured handler with this cause
  * token while compilation/linking continues on sibling and ancestor
- * nodes). The list is frozen at both the type level (`as const` tuple)
+ * nodes), and the `'$q'` / `'$timeout'` / `'$interval'` extensions
+ * introduced by spec 037 (an unhandled promise rejection is reported
+ * via `'$q'`; a throw from a `$timeout` / `$interval` callback is reported
+ * via `'$timeout'` / `'$interval'` respectively). The list is frozen at both the type level (`as const` tuple)
  * and runtime (`Object.freeze`) so callers cannot widen it accidentally
  * — and so the derived `ExceptionHandlerCause` union and the runtime
  * constant cannot drift.
@@ -38,7 +41,7 @@
  *   `Error` instances. Narrow with `instanceof Error` before reading
  *   `.stack` / `.message`.
  * @param cause Optional cause-descriptor identifying the call site —
- *   one of the nine tokens in {@link EXCEPTION_HANDLER_CAUSES}. The
+ *   one of the thirteen tokens in {@link EXCEPTION_HANDLER_CAUSES}. The
  *   framework always supplies a cause; third-party callers using
  *   {@link invokeExceptionHandler} may omit it.
  *
@@ -83,6 +86,9 @@ export type ExceptionHandler = (exception: unknown, cause?: string) => void;
  *     case '$interpolate':  return 'interpolation render threw';
  *     case '$filter':       return 'unknown filter referenced in expression';
  *     case '$compile':      return 'directive factory / compile / link / observe error';
+ *     case '$q':            return 'unhandled promise rejection';
+ *     case '$timeout':      return '$timeout callback threw';
+ *     case '$interval':     return '$interval callback threw';
  *   }
  * }
  */
@@ -97,10 +103,13 @@ export const EXCEPTION_HANDLER_CAUSES = Object.freeze([
   '$interpolate',
   '$filter',
   '$compile',
+  '$q',
+  '$timeout',
+  '$interval',
 ] as const);
 
 /**
- * Type-level union of the ten cause-descriptor strings.
+ * Type-level union of the thirteen cause-descriptor strings.
  *
  * Derived from {@link EXCEPTION_HANDLER_CAUSES} so the runtime tuple and
  * compile-time union stay in lockstep. Use this in custom handlers when

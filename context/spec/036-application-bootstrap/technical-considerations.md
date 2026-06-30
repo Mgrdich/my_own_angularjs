@@ -6,7 +6,7 @@ It is NOT a copy-paste implementation guide.
 # Technical Specification: Application Bootstrap
 
 - **Functional Specification:** `context/spec/036-application-bootstrap/functional-spec.md`
-- **Status:** Draft
+- **Status:** Completed
 - **Author(s):** AWOS tech workflow
 
 ---

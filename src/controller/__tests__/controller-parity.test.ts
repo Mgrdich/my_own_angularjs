@@ -254,12 +254,12 @@ describe('$controllerProvider.has — introspection', () => {
 });
 
 describe('EXCEPTION_HANDLER_CAUSES regression (no new cause token in Slice 5)', () => {
-  it('EXCEPTION_HANDLER_CAUSES.length === 10', () => {
+  it('EXCEPTION_HANDLER_CAUSES.length === 13 (no controller-spec token; grew to 13 in spec 037)', () => {
     // Spec 020 reuses the existing `'$compile'` cause token (added in
     // spec 017) for every controller-related error site at link time.
     // The tuple stays at 10 entries; lock that in here so a future
     // drive-by addition surfaces an obvious failure.
-    expect(EXCEPTION_HANDLER_CAUSES.length).toBe(10);
+    expect(EXCEPTION_HANDLER_CAUSES.length).toBe(13);
   });
 });
 
