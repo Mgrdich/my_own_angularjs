@@ -224,6 +224,32 @@ describe('$http caching + in-flight dedup (FS §2.13)', () => {
     expect(secondBundle).not.toBe(firstBundle);
   });
 
+  it('serves a DEEP clone so a caller mutating nested response.data cannot corrupt the cache', async () => {
+    const { q, scope } = makeQ();
+    const { backend, deferreds } = makeControllableBackend(q);
+    const cache: Cache<HttpResponse> = createCacheFactory()<HttpResponse>('clone-data');
+    const $http = createHttp({ q, httpBackend: backend, defaults: makeDefaults() });
+
+    const firstSeen = vi.fn();
+    $http.get(`${ORIGIN}a`, { cache }).then(firstSeen);
+    await flush(scope);
+    // A JSON-looking body is parsed by the default response transform into an object.
+    settle(deferreds[0], '{"list":[1,2]}');
+    await flush(scope);
+
+    // Mutate the delivered bundle's NESTED data; the cached entry must be unaffected.
+    const firstBundle = firstSeen.mock.calls[0]?.[0] as HttpResponse<{ list: number[] }>;
+    firstBundle.data.list.push(99);
+
+    const secondSeen = vi.fn();
+    $http.get(`${ORIGIN}a`, { cache }).then(secondSeen);
+    await flush(scope);
+
+    const secondBundle = secondSeen.mock.calls[0]?.[0] as HttpResponse<{ list: number[] }>;
+    expect(secondBundle.data.list).toEqual([1, 2]);
+    expect(secondBundle.data).not.toBe(firstBundle.data);
+  });
+
   it('shares ONE backend call between two concurrent identical cacheable GETs', async () => {
     const { q, scope } = makeQ();
     const { backend, spy, deferreds } = makeControllableBackend(q);

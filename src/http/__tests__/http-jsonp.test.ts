@@ -107,6 +107,25 @@ describe('createHttpBackend() — JSONP transport (tech §2.3 / §2.7)', () => {
     expect(appended[0]?.src).not.toContain(JSONP_CALLBACK_PLACEHOLDER);
   });
 
+  it('substitutes EVERY JSON_CALLBACK occurrence when the placeholder appears more than once', () => {
+    const { q } = makeQ();
+    const { documentRef, appended } = makeFakeDocument();
+    const globalRef: JsonpGlobal = {};
+    const backend = createHttpBackend({ q, documentRef, globalRef });
+
+    backend(
+      { method: 'JSONP', url: `https://api.example.com/x?cb=${JSONP_CALLBACK_PLACEHOLDER}&jsonp=${JSONP_CALLBACK_PLACEHOLDER}` },
+      {},
+    );
+
+    const callbackName = Object.keys(globalRef)[0];
+    expect(callbackName).toBeDefined();
+    // Both params must carry the generated name — no literal placeholder left behind.
+    expect(appended[0]?.src).toContain(`cb=${callbackName ?? ''}`);
+    expect(appended[0]?.src).toContain(`jsonp=${callbackName ?? ''}`);
+    expect(appended[0]?.src).not.toContain(JSONP_CALLBACK_PLACEHOLDER);
+  });
+
   it('appends a callback= param when no placeholder is present', () => {
     const { q } = makeQ();
     const { documentRef, appended } = makeFakeDocument();

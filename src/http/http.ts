@@ -35,6 +35,8 @@
  * ```
  */
 
+import { copy } from '@core/index';
+
 import type { QPromise, QService } from '@async/q-types';
 import type { Cache, CacheFactory } from '@cache/cache-types';
 import { isHttpTransportError } from './http-backend';
@@ -197,11 +199,13 @@ export function createHttp(args: CreateHttpArgs): HttpService {
    * Clone a cached {@link HttpResponse} so a caller mutating the delivered
    * bundle cannot corrupt the stored entry (or a sibling sharing the cache).
    * `headers` is a closure getter, so it is reused as-is (it reads a private
-   * parsed snapshot); `data` / `config` are shallow-copied.
+   * parsed snapshot); `data` is DEEP-copied (a caller mutating nested
+   * `response.data` must not reach the stored entry); `config` is
+   * shallow-copied.
    */
   function cloneResponse<T>(stored: HttpResponse): HttpResponse<T> {
     return {
-      data: stored.data as T,
+      data: copy(stored.data) as T,
       status: stored.status,
       statusText: stored.statusText,
       headers: stored.headers,

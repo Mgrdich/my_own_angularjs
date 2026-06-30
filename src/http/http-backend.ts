@@ -212,7 +212,7 @@ export function createHttpBackend(args: CreateHttpBackendArgs): HttpBackend {
     // placeholder; if the caller did not place one, append a `callback=`
     // param (the AngularJS default rule).
     const resolvedUrl = url.includes(JSONP_CALLBACK_PLACEHOLDER)
-      ? url.replace(JSONP_CALLBACK_PLACEHOLDER, callbackName)
+      ? url.split(JSONP_CALLBACK_PLACEHOLDER).join(callbackName)
       : `${url}${url.includes('?') ? '&' : '?'}callback=${callbackName}`;
 
     const cleanup = (): void => {
