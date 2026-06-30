@@ -114,7 +114,10 @@ describe('createHttpBackend() — JSONP transport (tech §2.3 / §2.7)', () => {
     const backend = createHttpBackend({ q, documentRef, globalRef });
 
     backend(
-      { method: 'JSONP', url: `https://api.example.com/x?cb=${JSONP_CALLBACK_PLACEHOLDER}&jsonp=${JSONP_CALLBACK_PLACEHOLDER}` },
+      {
+        method: 'JSONP',
+        url: `https://api.example.com/x?cb=${JSONP_CALLBACK_PLACEHOLDER}&jsonp=${JSONP_CALLBACK_PLACEHOLDER}`,
+      },
       {},
     );
 
