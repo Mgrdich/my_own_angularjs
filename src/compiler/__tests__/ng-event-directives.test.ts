@@ -360,8 +360,8 @@ describe('expression-throw routing through $exceptionHandler', () => {
   });
 });
 
-describe('ng-submit does NOT auto-preventDefault', () => {
-  it('a submit handler that does not call $event.preventDefault leaves event.defaultPrevented === false', () => {
+describe('ng-submit does NOT auto-preventDefault (the `form` directive owns native-submit suppression)', () => {
+  it('a `<form ng-submit>` with NO action suppresses native submit by default (forms spec 039 §2.3)', () => {
     const b = bootstrap();
     const scope = Scope.create({ exceptionHandler: b.exceptionSpy });
     scope.submitted = false;
@@ -374,10 +374,32 @@ describe('ng-submit does NOT auto-preventDefault', () => {
     const ev = new Event('submit', { bubbles: false, cancelable: true });
     form.dispatchEvent(ev);
 
-    // The handler ran (the directive evaluated the expression) but the
-    // directive itself does NOT call preventDefault. The native event's
-    // `defaultPrevented` flag stays false unless the consumer's
-    // expression calls $event.preventDefault() explicitly.
+    // The `ng-submit` directive itself does NOT call preventDefault, but the
+    // `form` directive (spec 039) suppresses the native submit by default when
+    // the form carries no `action` attribute (AngularJS parity — a form without
+    // an action must not navigate). The ng-submit handler still runs exactly
+    // once (the two directives divide responsibilities — see `src/forms/form.ts`).
+    expect(scope.submitted).toBe(true);
+    expect(ev.defaultPrevented).toBe(true);
+  });
+
+  it('a `<form ng-submit>` WITH an action does NOT suppress native submit by default', () => {
+    const b = bootstrap();
+    const scope = Scope.create({ exceptionHandler: b.exceptionSpy });
+    scope.submitted = false;
+
+    const form = document.createElement('form');
+    form.setAttribute('action', '/submit');
+    form.setAttribute('ng-submit', 'submitted = true');
+
+    b.$compile(form)(scope);
+
+    const ev = new Event('submit', { bubbles: false, cancelable: true });
+    form.dispatchEvent(ev);
+
+    // A form WITH an action is left to navigate — neither `ng-submit` nor the
+    // `form` directive prevents default; only an explicit
+    // `$event.preventDefault()` in the handler would.
     expect(scope.submitted).toBe(true);
     expect(ev.defaultPrevented).toBe(false);
   });

@@ -20,6 +20,9 @@ import type { $CompileProvider } from '@compiler/compile-provider';
 import { formDirective, ngFormDirective, FORM_NAME, NG_FORM_NAME } from './form';
 import { inputDirective, textareaDirective } from './input';
 import { ngChangeDirective, ngModelDirective, NG_CHANGE_NAME, NG_MODEL_NAME } from './ng-model';
+import { ngListDirective, NG_LIST_NAME } from './ng-list';
+import { ngOptionsDirective, NG_OPTIONS_NAME } from './ng-options';
+import { optionDirective, selectDirective, OPTION_NAME, SELECT_NAME } from './select';
 
 /**
  * Register the Slice-1 forms directives on a `$compileProvider`.
@@ -39,4 +42,12 @@ export function registerForms($compileProvider: $CompileProvider): void {
   // via `require: '?^^form'`.
   $compileProvider.directive(FORM_NAME, formDirective);
   $compileProvider.directive(NG_FORM_NAME, ngFormDirective);
+  // Slice 4 — select / ngOptions / ngList. `select` publishes a
+  // `SelectController` (under `'select'`); `option` self-registers plain
+  // markup options; `ngOptions` generates options from a collection;
+  // `ngList` adds a delimited-string ↔ array transform to `ngModel`.
+  $compileProvider.directive(SELECT_NAME, selectDirective);
+  $compileProvider.directive(OPTION_NAME, optionDirective);
+  $compileProvider.directive(NG_OPTIONS_NAME, ngOptionsDirective);
+  $compileProvider.directive(NG_LIST_NAME, ngListDirective);
 }

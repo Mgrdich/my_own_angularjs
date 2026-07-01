@@ -16,4 +16,8 @@ export { NgModelControllerImpl } from './ng-model-controller';
 export { NgModelNonAssignableError } from './ng-model';
 export type { FormController, FormControlLike } from './form-controller';
 export { FormControllerImpl, nullFormCtrl } from './form-controller';
+export type { SelectController } from './select';
+export { SelectControllerImpl } from './select';
+export { NgOptionsBadExpressionError } from './ng-options-parse';
+export type { NgOptionsDescriptor } from './ng-options-parse';
 export { registerForms } from './forms-register';

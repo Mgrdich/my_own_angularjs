@@ -266,6 +266,21 @@ function applySortAndTerminalCutoff(matched: readonly Directive[], suppressConfl
     if (a.priority !== b.priority) {
       return b.priority - a.priority;
     }
+    // AngularJS `byPriority` tie-breaks same-priority directives by NAME
+    // (ascending) BEFORE the global registration `index`. This matters when
+    // two DIFFERENTLY-named directives share an element AND one requires the
+    // other's controller: e.g. `<select ng-model>` (`select` requires
+    // `?ngModel`). Directive `index` is assigned lazily at first-normalize
+    // time — driven by the E/A/C collection passes, not registration order —
+    // so the element-name `select` always indexes before the attribute-name
+    // `ngModel`, which would sort `select`'s controller seam (and thus its
+    // `require` resolution) BEFORE `ngModel`'s controller exists. The name
+    // tie-break (`ngModel` < `select`) restores the parity ordering so the
+    // required controller is already stashed when the requiring directive
+    // resolves it.
+    if (a.name !== b.name) {
+      return a.name < b.name ? -1 : 1;
+    }
     return a.index - b.index;
   });
 

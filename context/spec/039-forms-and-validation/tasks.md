@@ -24,11 +24,11 @@
   - [x] Create `src/forms/__tests__/input-types.test.ts`: `number`→Number (+ bad input invalid), `range`→Number clamp, `checkbox`→boolean (+ true/false overrides), `radio`→selected value across a group, each date/time type round-trips a `Date`, empty mapping per type. Port relevant `inputSpec.js` vectors. **[Agent: vitest-testing]**
   - [x] Run all five gates. **[Agent: rollup-build]**
 
-- [ ] **Slice 4: `select` + `ngOptions` + `ngList`**
-  - [ ] Implement `select.ts` (`select` directive + `SelectController`): option registration/tracking, single-select binds the chosen value, `multiple` binds an **array**, unknown-value "unknown option" handling; integrate with `NgModelController`. **[Agent: typescript-framework]**
-  - [ ] Implement `ng-options.ts`: parse the AngularJS `ngOptions` grammar (`select [as label] [group by g] [disable when d] for (k,v) in coll [track by t]`) into a descriptor, regenerate `<option>`s on a `$watchCollection`, integrate with `SelectController`. Implement `ng-list.ts` (`$parser` split→trimmed array / `$formatter` join, configurable delimiter). Register all on `ngModule`. **[Agent: typescript-framework]**
-  - [ ] Create `src/forms/__tests__/select.test.ts` + `ng-options.test.ts` + `ng-list.test.ts`: single + `multiple` select binding; `ngOptions` label/value/group-by/disable-when/track-by from array and object collections; `ngList` string↔array with default and custom delimiter. Port `selectSpec.js`/`ngOptionsSpec.js` vectors. **[Agent: vitest-testing]**
-  - [ ] Run all five gates. **[Agent: rollup-build]**
+- [x] **Slice 4: `select` + `ngOptions` + `ngList`**
+  - [x] Implement `select.ts` (`select` directive + `SelectController`): option registration/tracking, single-select binds the chosen value, `multiple` binds an **array**, unknown-value "unknown option" handling; integrate with `NgModelController`. **[Agent: typescript-framework]**
+  - [x] Implement `ng-options.ts`: parse the AngularJS `ngOptions` grammar (`select [as label] [group by g] [disable when d] for (k,v) in coll [track by t]`) into a descriptor, regenerate `<option>`s on a `$watchCollection`, integrate with `SelectController`. Implement `ng-list.ts` (`$parser` split→trimmed array / `$formatter` join, configurable delimiter). Register all on `ngModule`. **[Agent: typescript-framework]**
+  - [x] Create `src/forms/__tests__/select.test.ts` + `ng-options.test.ts` + `ng-list.test.ts`: single + `multiple` select binding; `ngOptions` label/value/group-by/disable-when/track-by from array and object collections; `ngList` string↔array with default and custom delimiter. Port `selectSpec.js`/`ngOptionsSpec.js` vectors. **[Agent: vitest-testing]**
+  - [x] Run all five gates. **[Agent: rollup-build]**
 
 - [ ] **Slice 5: Validators — built-in + custom sync/async + `$pending`**
   - [ ] Implement the validation engine in `NgModelController`: `$validators`/`$asyncValidators` maps, `$validate()`, and `$$runValidators(modelValue, viewValue, done)` — sync first, async only if all sync pass, `$pending`+`ng-pending` while outstanding, `$q.all(...)` settle, and a generation counter cancelling stale async passes; default keeps invalid values out of the model (model→`undefined`). **[Agent: typescript-framework]**
