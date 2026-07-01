@@ -22,7 +22,7 @@ import type { Scope } from '@core/index';
 import type { Attributes } from '@compiler/directive-types';
 import { parse } from '@parser/index';
 
-import { LOCAL_TIMEZONE, parseDateInput, type DateInputKind } from './input-date';
+import { parseDateInput, type DateInputKind, type Timezone } from './input-date';
 import type { NgModelControllerImpl } from './ng-model-controller';
 
 /**
@@ -144,11 +144,11 @@ function wireBoundSource(
  * Parse an observed `min` / `max` date-attribute value to a `Date` (or
  * `undefined` when absent / unparseable) for the given date-input `kind`.
  */
-function parseDateAttrVal(kind: DateInputKind, val: unknown): Date | undefined {
+function parseDateAttrVal(kind: DateInputKind, val: unknown, timezone: Timezone): Date | undefined {
   if (typeof val !== 'string' || val === '') {
     return undefined;
   }
-  const parsed = parseDateInput(kind, val, LOCAL_TIMEZONE);
+  const parsed = parseDateInput(kind, val, timezone);
   return parsed instanceof Date ? parsed : undefined;
 }
 
@@ -164,21 +164,21 @@ export function wireDateMinMax(
   ctrl: NgModelControllerImpl,
 ): void {
   if (typeof attrs['min'] === 'string' || typeof attrs['ngMin'] === 'string') {
-    let parsedMin = parseDateAttrVal(kind, attrs['min'] ?? evalAttrExpr(attrs, 'ngMin', scope));
+    let parsedMin = parseDateAttrVal(kind, attrs['min'] ?? evalAttrExpr(attrs, 'ngMin', scope), ctrl.$$timezone);
     ctrl.$validators['min'] = (modelValue: unknown): boolean =>
       !(modelValue instanceof Date) || parsedMin === undefined || modelValue.getTime() >= parsedMin.getTime();
     wireBoundSource(scope, attrs, 'min', 'ngMin', (val) => {
-      parsedMin = parseDateAttrVal(kind, val);
+      parsedMin = parseDateAttrVal(kind, val, ctrl.$$timezone);
       ctrl.$validate();
     });
   }
 
   if (typeof attrs['max'] === 'string' || typeof attrs['ngMax'] === 'string') {
-    let parsedMax = parseDateAttrVal(kind, attrs['max'] ?? evalAttrExpr(attrs, 'ngMax', scope));
+    let parsedMax = parseDateAttrVal(kind, attrs['max'] ?? evalAttrExpr(attrs, 'ngMax', scope), ctrl.$$timezone);
     ctrl.$validators['max'] = (modelValue: unknown): boolean =>
       !(modelValue instanceof Date) || parsedMax === undefined || modelValue.getTime() <= parsedMax.getTime();
     wireBoundSource(scope, attrs, 'max', 'ngMax', (val) => {
-      parsedMax = parseDateAttrVal(kind, val);
+      parsedMax = parseDateAttrVal(kind, val, ctrl.$$timezone);
       ctrl.$validate();
     });
   }

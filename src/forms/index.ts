@@ -21,4 +21,6 @@ export type { SelectController } from './select';
 export { SelectControllerImpl } from './select';
 export { NgOptionsBadExpressionError } from './ng-options-parse';
 export type { NgOptionsDescriptor } from './ng-options-parse';
+export type { NgModelOptions, ModelOptions } from './ng-model-options';
+export { createModelOptions, defaultModelOptions, resolveDebounceDelay } from './ng-model-options';
 export { registerForms } from './forms-register';

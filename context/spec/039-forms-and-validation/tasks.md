@@ -36,10 +36,10 @@
   - [x] Create `src/forms/__tests__/validators.test.ts`: each built-in rule flips control+form validity and the `ng-invalid-<rule>` class; conditional `ng-required`; re-validation when a rule's bound expression changes; a custom sync `$validators` entry; a custom `$asyncValidators` entry → `$pending`+`ng-pending` until settle, model written only on pass; async runs only after sync pass; stale async cancelled; programmatic `$validate`. **[Agent: vitest-testing]**
   - [x] Run all five gates. **[Agent: rollup-build]**
 
-- [ ] **Slice 6: `ngModelOptions` — `updateOn` / `debounce` / `allowInvalid` / `getterSetter` / `timezone`**
-  - [ ] Implement `ng-model-options.ts` (directive + resolved-options helper) and thread it through `NgModelController`: `updateOn` (which events commit), `debounce` (per-event delay via timers cleared on `$destroy`), `allowInvalid` (write invalid values), `getterSetter` (model expression used as read/write fn), and `timezone` (date handlers honor it). `$$phase`-guarded commit dispatch. Register on `ngModule`. **[Agent: typescript-framework]**
-  - [ ] Create `src/forms/__tests__/ng-model-options.test.ts` (vitest fake timers): `updateOn: 'blur'` defers commit; `debounce` (number + per-event map) delays the model write and cancels on destroy; `allowInvalid` writes invalid values; `getterSetter` round-trips through the function; `timezone` shifts a date round-trip. **[Agent: vitest-testing]**
-  - [ ] Run all five gates. **[Agent: rollup-build]**
+- [x] **Slice 6: `ngModelOptions` — `updateOn` / `debounce` / `allowInvalid` / `getterSetter` / `timezone`**
+  - [x] Implement `ng-model-options.ts` (directive + resolved-options helper) and thread it through `NgModelController`: `updateOn` (which events commit), `debounce` (per-event delay via timers cleared on `$destroy`), `allowInvalid` (write invalid values), `getterSetter` (model expression used as read/write fn), and `timezone` (date handlers honor it). `$$phase`-guarded commit dispatch. Register on `ngModule`. **[Agent: typescript-framework]**
+  - [x] Create `src/forms/__tests__/ng-model-options.test.ts` (vitest fake timers): `updateOn: 'blur'` defers commit; `debounce` (number + per-event map) delays the model write and cancels on destroy; `allowInvalid` writes invalid values; `getterSetter` round-trips through the function; `timezone` shifts a date round-trip. **[Agent: vitest-testing]**
+  - [x] Run all five gates. **[Agent: rollup-build]**
 
 - [ ] **Slice 7: Type-level safety, parity hardening, docs, coverage & final regression**
   - [ ] Create `src/forms/__tests__/forms-types.test.ts` (`expectTypeOf`): exported `NgModelController` / `FormController` / `NgModelOptions` contracts compile against representative consumer usage. Create `src/forms/__tests__/parity.test.ts`: port remaining upstream `ngModelSpec.js`/`formSpec.js` edge-case vectors per the reference-implementation rule. **[Agent: vitest-testing]**

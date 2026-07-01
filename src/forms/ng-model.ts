@@ -36,17 +36,21 @@
  */
 
 import type { QService } from '@async/q-types';
+import type { TimeoutService } from '@async/async-types';
 import type { Scope } from '@core/index';
 
 import { buildParentWriter } from '@compiler/expression-assign';
 import type { Attributes, DirectiveFactory, DirectiveFactoryReturn, LinkFn } from '@compiler/directive-types';
 import type { ControllerInvokable } from '@controller/controller-types';
 import { invokeExceptionHandler, type ExceptionHandler } from '@exception-handler/index';
+import type { ExpressionFn } from '@parser/parse-types';
 import { parse } from '@parser/index';
 
 import { FormControllerImpl, nullFormCtrl, type FormController } from './form-controller';
 import { publishNamedControlOnForm, unpublishNamedControlOnForm } from './form';
+import { resolveTimezone } from './input-date';
 import { NgModelControllerImpl } from './ng-model-controller';
+import { defaultModelOptions, NG_MODEL_OPTIONS_KEY, type ModelOptions } from './ng-model-options';
 
 export const NG_MODEL_NAME = 'ngModel';
 export const NG_CHANGE_NAME = 'ngChange';
@@ -99,7 +103,39 @@ function readEnclosingForm(controllers: unknown): FormController {
   return nullFormCtrl;
 }
 
-function ngModelFactory($exceptionHandler: ExceptionHandler): DirectiveFactoryReturn {
+/**
+ * Read the enclosing `ngModelOptions` by walking the element's own
+ * `$$ngControllers` stash, then its `parentElement` chain, for a controller
+ * published under the `ngModelOptions` key (spec 039 Slice 6).
+ *
+ * We do NOT resolve this through the `require` tuple: `require` resolution for
+ * `ngModel` (a controller-bearing directive) runs during `runControllerSeam`,
+ * which — for a SAME-element `ng-model-options` — can execute before the
+ * `ngModelOptions` controller is stashed AND before its pre-link re-resolves
+ * inheritance. `ngModel`'s LINK runs after every pre-link and after every
+ * controller is stashed, so a direct stash walk at link time reliably sees
+ * the fully-inherited options for both the same-element and ancestor cases.
+ * A miss falls back to {@link defaultModelOptions}.
+ */
+function readEnclosingOptions(element: Element): ModelOptions {
+  let cursor: Element | null = element;
+  while (cursor !== null) {
+    const map = (cursor as { $$ngControllers?: Map<string, unknown> }).$$ngControllers;
+    const candidate = map?.get(NG_MODEL_OPTIONS_KEY);
+    if (
+      candidate !== undefined &&
+      candidate !== null &&
+      typeof candidate === 'object' &&
+      '$$updateEvents' in candidate
+    ) {
+      return candidate as ModelOptions;
+    }
+    cursor = cursor.parentElement;
+  }
+  return defaultModelOptions;
+}
+
+function ngModelFactory($exceptionHandler: ExceptionHandler, $timeout: TimeoutService): DirectiveFactoryReturn {
   // The controller is array-annotated so `injector.invoke` / `$controller`
   // can resolve the element-locals by name (`$scope` / `$element` /
   // `$attrs`); a bare class would be rejected by the strict `annotate`
@@ -113,7 +149,7 @@ function ngModelFactory($exceptionHandler: ExceptionHandler): DirectiveFactoryRe
       new NgModelControllerImpl(args[0] as Scope, args[1] as Element, args[2] as Attributes, args[3] as QService),
   ];
 
-  const link: LinkFn = (scope, _element, attrs, controllers) => {
+  const link: LinkFn = (scope, element, attrs, controllers) => {
     const ctrl = asNgModelController(controllers);
     if (ctrl === null) {
       return;
@@ -139,23 +175,65 @@ function ngModelFactory($exceptionHandler: ExceptionHandler): DirectiveFactoryRe
       }
     });
 
+    // Resolve `ngModelOptions` (spec 039 Slice 6) and thread the seams into
+    // the controller BEFORE the model watch / write-back are wired: the
+    // `allowInvalid` / `getterSetter` / `timezone` decisions all depend on
+    // it, and the debounce timer needs `$timeout`.
+    const options = readEnclosingOptions(element);
+    ctrl.$options = options;
+    ctrl.$$allowInvalid = options.getOption('allowInvalid') === true;
+    ctrl.$$timezone = resolveTimezone(options.getOption('timezone'));
+    const isGetterSetter = options.getOption('getterSetter') === true;
+
+    // Debounce timer seam (spec 039 Slice 6): route through `$timeout` so a
+    // deferred commit runs `$$phase`-guarded inside a digest and refreshes
+    // bound content. `invokeApply` defaults to `true`; `$timeout.cancel`
+    // clears a pending timer on supersession / `$destroy`.
+    ctrl.$$scheduleCommit = (fn, delay) => $timeout(fn, delay);
+    ctrl.$$cancelScheduledCommit = (handle) => {
+      $timeout.cancel(handle as ReturnType<TimeoutService>);
+    };
+    scope.$on('$destroy', () => {
+      if (ctrl.$$pendingCommitTimer !== undefined) {
+        $timeout.cancel(ctrl.$$pendingCommitTimer as ReturnType<TimeoutService>);
+        ctrl.$$pendingCommitTimer = undefined;
+      }
+    });
+
     const expr = attrs[NG_MODEL_NAME];
     if (typeof expr !== 'string') {
       return;
     }
 
     const parsed = parse(expr);
-    const writer = buildParentWriter(parsed);
-    if (writer === undefined) {
-      invokeExceptionHandler($exceptionHandler, new NgModelNonAssignableError(expr), '$compile');
-      return;
+
+    // Model read/write dispatch (spec 039 Slice 6). In `getterSetter` mode the
+    // `ng-model` expression is a FUNCTION used both ways — read via `fn()`,
+    // write via `fn(value)` — so the expression need NOT be assignable. In
+    // the normal mode a `buildParentWriter` assignable writer is required; a
+    // non-assignable model routes `NgModelNonAssignableError`.
+    let readModel: (s: Scope) => unknown;
+    let writeModel: (s: Scope, value: unknown) => void;
+    if (isGetterSetter) {
+      readModel = (s: Scope) => invokeGetterSetter(parsed, s);
+      writeModel = (s: Scope, value: unknown) => {
+        invokeGetterSetter(parsed, s, value);
+      };
+    } else {
+      const writer = buildParentWriter(parsed);
+      if (writer === undefined) {
+        invokeExceptionHandler($exceptionHandler, new NgModelNonAssignableError(expr), '$compile');
+        return;
+      }
+      readModel = (s: Scope) => parsed(s as unknown as Record<string, unknown>);
+      writeModel = writer;
     }
 
     // Install the model write-back hook the controller calls from
     // `$setViewValue`. `scope` is the linked scope the model expression
     // resolves against.
     ctrl.$$writeModelToScope = (value: unknown) => {
-      writer(scope, value);
+      writeModel(scope, value);
     };
 
     // Model → view watch. On a model change, run the formatters in
@@ -171,7 +249,7 @@ function ngModelFactory($exceptionHandler: ExceptionHandler): DirectiveFactoryRe
     // guard's NaN clause (`a === a || b === b`) lets the fresh-control NaN
     // sentinel transition to a real value on the first digest.
     scope.$watch(
-      () => parsed(scope as unknown as Record<string, unknown>),
+      () => readModel(scope),
       (modelValue: unknown) => {
         const cached = ctrl.$modelValue;
         // AngularJS's `ngModelWatch` guard: run the pipeline only when the
@@ -215,9 +293,12 @@ function ngModelFactory($exceptionHandler: ExceptionHandler): DirectiveFactoryRe
   return {
     restrict: 'A',
     // `['ngModel', '?^^form']` — own controller + optional enclosing form
-    // (spec 039 Slice 2). `?^^form` walks ancestors only for the shared
-    // `'form'` controller key both `form` / `ngForm` publish under; a
-    // form-less control resolves `null` and falls back to `nullFormCtrl`.
+    // (spec 039 Slice 2). `?^^form` walks ancestors only; a form-less control
+    // resolves `null` and falls back to `nullFormCtrl`. `ngModelOptions`
+    // (spec 039 Slice 6) is NOT resolved via `require` — the link walks the
+    // element's `$$ngControllers` stash directly (see `readEnclosingOptions`),
+    // because same-element `require` resolution runs too early to see the
+    // fully-inherited options.
     require: [NG_MODEL_NAME, '?^^form'],
     controller,
     link,
@@ -225,10 +306,28 @@ function ngModelFactory($exceptionHandler: ExceptionHandler): DirectiveFactoryRe
 }
 
 /**
- * DI-annotated `ngModel` factory. Injects `$exceptionHandler` so the
- * non-assignable-model error can route through it.
+ * Invoke a `getterSetter`-mode `ng-model` function. AngularJS calls the
+ * parsed expression as `fn()` to read and `fn(value)` to write — the same
+ * function serves both directions. We evaluate the expression to obtain the
+ * function reference, then call it with zero args (read) or one arg (write).
+ * A non-function result (a misconfigured `getterSetter`) degrades to reading
+ * the raw evaluated value / no-op write rather than throwing.
  */
-export const ngModelDirective: DirectiveFactory = ['$exceptionHandler', ngModelFactory];
+function invokeGetterSetter(parsed: ExpressionFn, scope: Scope, ...writeArgs: unknown[]): unknown {
+  const fn = parsed(scope as unknown as Record<string, unknown>);
+  if (typeof fn === 'function') {
+    return (fn as (...a: unknown[]) => unknown)(...writeArgs);
+  }
+  // Not a function — read returns the value; a write is a no-op.
+  return writeArgs.length === 0 ? fn : undefined;
+}
+
+/**
+ * DI-annotated `ngModel` factory. Injects `$exceptionHandler` (routing the
+ * non-assignable-model error) and `$timeout` (backing the
+ * `ngModelOptions.debounce` timer seam — spec 039 Slice 6).
+ */
+export const ngModelDirective: DirectiveFactory = ['$exceptionHandler', '$timeout', ngModelFactory];
 
 function ngChangeFactory(): DirectiveFactoryReturn {
   const link: LinkFn = (scope, _element, attrs, controllers) => {

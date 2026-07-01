@@ -44,6 +44,7 @@ import type { Scope } from '@core/index';
 import type { Attributes } from '@compiler/directive-types';
 
 import { type FormController, nullFormCtrl } from './form-controller';
+import { defaultModelOptions, resolveDebounceDelay, type ModelOptions } from './ng-model-options';
 import {
   clearValidationClass,
   setEmptyClass,
@@ -114,6 +115,14 @@ export interface NgModelController {
   $invalid: boolean;
   /** The control's name (from the `name` attribute), if any. */
   $name: string | undefined;
+  /**
+   * The resolved {@link ModelOptions} for this control (spec 039 Slice 6) —
+   * the effective `ngModelOptions` after inheritance. Defaults to
+   * {@link defaultModelOptions} (every option unset) until `ngModel`'s link
+   * re-points it from the enclosing `ngModelOptions` (resolved by walking the
+   * element's `$$ngControllers` stash).
+   */
+  $options: ModelOptions;
   /** Directive-supplied DOM writer — pushes `$viewValue` to the control. */
   $render: () => void;
   /** Overridable emptiness test — drives `ng-empty` / `required`. */
@@ -124,9 +133,14 @@ export interface NgModelController {
    * marks the control dirty, and fires `$viewChangeListeners`.
    */
   $setViewValue: (value: unknown, trigger?: string) => void;
-  /** Flush a buffered (debounce/updateOn) view value — Slice 1: no-op buffer, commits the current view value. */
+  /**
+   * Flush the buffered (debounce / `updateOn`) view value — commits the
+   * current `$viewValue` through the pipeline immediately, cancelling any
+   * pending debounce timer (spec 039 Slice 6). A no-op when the buffered
+   * value already matches the last commit.
+   */
   $commitViewValue: () => void;
-  /** Revert a buffered view value back to the last committed one. */
+  /** Revert a buffered (uncommitted) view value back to the last committed one. */
   $rollbackViewValue: () => void;
   /**
    * Re-run every validator against the current model / view value (Slice 5)
@@ -201,6 +215,7 @@ export class NgModelControllerImpl implements NgModelController {
   $valid = true;
   $invalid = false;
   $name: string | undefined;
+  $options: ModelOptions = defaultModelOptions;
   $render: () => void = () => {
     /* directive-supplied; no-op until an input-type handler overrides it */
   };
@@ -285,6 +300,39 @@ export class NgModelControllerImpl implements NgModelController {
    */
   readonly $$q: QService;
 
+  /**
+   * Resolved timezone offset for the date/time input handlers (spec 039
+   * Slice 6). `undefined` = the host's local timezone (Slice 3 behavior);
+   * `ngModel`'s link sets it from `$options.getOption('timezone')`. The date
+   * handlers read it lazily at parse/format time so a config-time swap takes
+   * effect. Minutes east of UTC, or `undefined` for local.
+   *
+   * @internal
+   */
+  $$timezone: number | undefined = undefined;
+
+  /**
+   * Deferred-timer seam backing `ngModelOptions.debounce` (spec 039 Slice 6).
+   * `ngModel`'s link binds it to `$timeout` so a debounced commit runs
+   * `$$phase`-guarded inside a digest and cancels cleanly on `$destroy` /
+   * supersession. Until then it fires the callback synchronously (no
+   * debounce), so a controller constructed in isolation still commits.
+   *
+   * @internal
+   */
+  $$scheduleCommit: (fn: () => void, delay: number) => unknown = (fn) => {
+    fn();
+    return undefined;
+  };
+
+  /** Cancel a pending debounce timer. Paired with {@link $$scheduleCommit}. @internal */
+  $$cancelScheduledCommit: (handle: unknown) => void = () => {
+    /* no-op until ngModel binds $timeout.cancel */
+  };
+
+  /** The handle of the currently-pending debounce timer, if any. @internal */
+  $$pendingCommitTimer: unknown = undefined;
+
   private readonly scope: Scope;
   private readonly element: Element;
 
@@ -312,17 +360,36 @@ export class NgModelControllerImpl implements NgModelController {
     setEmptyClass(this.element, this.$isEmpty(value));
   }
 
-  $setViewValue(value: unknown): void {
+  $setViewValue(value: unknown, trigger = 'default'): void {
     this.$viewValue = value;
-    this.$$lastCommittedViewValue = value;
+    this.$$debounceViewValueCommit(trigger);
+  }
 
-    if (this.$pristine) {
-      this.$setDirty();
+  /**
+   * @internal Decide whether the current `$viewValue` commits immediately or
+   * after a debounce delay (spec 039 Slice 6). A superseding change cancels
+   * the previous pending timer (the timer seam is `$timeout`, so cancelling
+   * is a clean no-op on an already-fired handle). A zero / absent delay
+   * commits synchronously via {@link $commitViewValue}.
+   */
+  $$debounceViewValueCommit(trigger: string): void {
+    const delay = resolveDebounceDelay(this.$options, trigger);
+
+    // Cancel any pending commit — a new keystroke resets the debounce window.
+    if (this.$$pendingCommitTimer !== undefined) {
+      this.$$cancelScheduledCommit(this.$$pendingCommitTimer);
+      this.$$pendingCommitTimer = undefined;
     }
 
-    this.$isEmptyClassUpdate(this.$viewValue);
+    if (delay > 0) {
+      this.$$pendingCommitTimer = this.$$scheduleCommit(() => {
+        this.$$pendingCommitTimer = undefined;
+        this.$commitViewValue();
+      }, delay);
+      return;
+    }
 
-    this.$$parseAndValidate();
+    this.$commitViewValue();
   }
 
   /**
@@ -423,14 +490,43 @@ export class NgModelControllerImpl implements NgModelController {
   }
 
   $commitViewValue(): void {
-    // Slice 1 has no debounce/updateOn buffer — committing re-applies the
-    // current view value through the pipeline. The full buffered commit
-    // lands in Slice 6 (`ngModelOptions`).
-    this.$setViewValue(this.$viewValue);
+    // Flush any pending debounce timer — an explicit commit (e.g. `blur` with
+    // `{ blur: 0 }`, or a programmatic `$commitViewValue()`) supersedes it.
+    if (this.$$pendingCommitTimer !== undefined) {
+      this.$$cancelScheduledCommit(this.$$pendingCommitTimer);
+      this.$$pendingCommitTimer = undefined;
+    }
+
+    const viewValue = this.$viewValue;
+    // No-op when the buffered view value already matches the last commit
+    // (AngularJS parity — a re-commit of the same value does nothing). The
+    // `viewValue === ''` exception mirrors AngularJS's `$$hasNativeValidators`
+    // clause: an empty commit still runs so a typed control (`number` /
+    // `date`) re-reads its native `validity.badInput` — the browser reports
+    // `value === ''` when it could not sanitize the raw input, so a re-commit
+    // of `''` is the only signal that the garbage input is still present.
+    if (this.$$lastCommittedViewValue === viewValue && viewValue !== '') {
+      return;
+    }
+
+    this.$$lastCommittedViewValue = viewValue;
+
+    if (this.$pristine) {
+      this.$setDirty();
+    }
+
+    this.$isEmptyClassUpdate(viewValue);
+
+    this.$$parseAndValidate();
   }
 
   $rollbackViewValue(): void {
-    // Slice 1: no buffer to roll back; re-render the last committed value.
+    // Discard the buffered (uncommitted) view value and re-render the last
+    // committed one. Cancels any pending debounce timer.
+    if (this.$$pendingCommitTimer !== undefined) {
+      this.$$cancelScheduledCommit(this.$$pendingCommitTimer);
+      this.$$pendingCommitTimer = undefined;
+    }
     this.$viewValue = this.$$lastCommittedViewValue;
     this.$render();
   }

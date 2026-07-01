@@ -38,6 +38,36 @@ export type Timezone = number | undefined;
 export const LOCAL_TIMEZONE: Timezone = undefined;
 
 /**
+ * Resolve an `ngModelOptions.timezone` string into a {@link Timezone} offset
+ * (spec 039 Slice 6). Mirrors AngularJS's `timezoneToOffset`:
+ *
+ *  - `undefined` / `''` → {@link LOCAL_TIMEZONE} (the host's local zone).
+ *  - `'UTC'` / `'Z'` → `0`.
+ *  - `'+HHMM'` / `'-HHMM'` / `'+HH:MM'` → the signed minutes-east-of-UTC.
+ *
+ * An unrecognized string falls back to the local sentinel (never throws —
+ * a bad timezone silently degrades to local, matching the framework's other
+ * lenient option parses).
+ */
+export function resolveTimezone(timezone: string | undefined): Timezone {
+  if (timezone === undefined || timezone === '') {
+    return LOCAL_TIMEZONE;
+  }
+  const upper = timezone.toUpperCase();
+  if (upper === 'UTC' || upper === 'Z' || upper === 'GMT') {
+    return 0;
+  }
+  const m = /^([+-])(\d{2}):?(\d{2})$/.exec(timezone);
+  if (m) {
+    const sign = m[1] === '-' ? -1 : 1;
+    const hours = Number.parseInt(m[2] ?? '0', 10);
+    const minutes = Number.parseInt(m[3] ?? '0', 10);
+    return sign * (hours * 60 + minutes);
+  }
+  return LOCAL_TIMEZONE;
+}
+
+/**
  * Discriminator for the five date/time input types. Drives per-type regex,
  * parse, and format selection.
  */

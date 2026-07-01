@@ -20,6 +20,7 @@ import type { $CompileProvider } from '@compiler/compile-provider';
 import { formDirective, ngFormDirective, FORM_NAME, NG_FORM_NAME } from './form';
 import { inputDirective, textareaDirective } from './input';
 import { ngChangeDirective, ngModelDirective, NG_CHANGE_NAME, NG_MODEL_NAME } from './ng-model';
+import { ngModelOptionsDirective, NG_MODEL_OPTIONS_NAME } from './ng-model-options';
 import { ngListDirective, NG_LIST_NAME } from './ng-list';
 import { ngOptionsDirective, NG_OPTIONS_NAME } from './ng-options';
 import { optionDirective, selectDirective, OPTION_NAME, SELECT_NAME } from './select';
@@ -76,4 +77,9 @@ export function registerForms($compileProvider: $CompileProvider): void {
   $compileProvider.directive(NG_MAXLENGTH_NAME, maxlengthDirective);
   $compileProvider.directive(PATTERN_NAME, patternDirective);
   $compileProvider.directive(NG_PATTERN_NAME, ngPatternDirective);
+  // Slice 6 — `ngModelOptions`. Publishes a resolved `ModelOptions`
+  // (inheriting from an ancestor `ngModelOptions`) that a descendant
+  // `ngModel` reads via `require: '?^^ngModelOptions'` to drive `updateOn` /
+  // `debounce` / `allowInvalid` / `getterSetter` / `timezone`.
+  $compileProvider.directive(NG_MODEL_OPTIONS_NAME, ngModelOptionsDirective);
 }

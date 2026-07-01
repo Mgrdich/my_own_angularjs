@@ -35,7 +35,7 @@ import type { Attributes } from '@compiler/directive-types';
 import { invokeExceptionHandler, type ExceptionHandler } from '@exception-handler/index';
 import { parse } from '@parser/index';
 
-import { formatDateInput, LOCAL_TIMEZONE, parseDateInput, type DateInputKind } from './input-date';
+import { formatDateInput, parseDateInput, type DateInputKind } from './input-date';
 import { wireDateMinMax, wireEmailValidator, wireNumericMinMax, wireUrlValidator } from './input-validators';
 import type { NgModelControllerImpl } from './ng-model-controller';
 
@@ -140,6 +140,81 @@ function hasBadInput(control: HTMLInputElement): boolean {
 }
 
 /**
+ * Install the view → model event listeners for a control, honoring
+ * `ngModelOptions.updateOn` (spec 039 Slice 6).
+ *
+ * `defaultEvents` are the input type's OWN default commit events (e.g.
+ * `['input', 'change']` for text). `readValue` extracts the current view
+ * value from the DOM.
+ *
+ * Behavior:
+ *
+ *  - When `updateOn` includes `default` (the common case — `updateOn` absent,
+ *    or `"default blur"`), the default events COMMIT: they call
+ *    `ctrl.$setViewValue(readValue(), 'default')`.
+ *  - When `updateOn` does NOT include `default` (e.g. `updateOn: 'blur'`),
+ *    the default events only BUFFER the pending view value — they set
+ *    `ctrl.$viewValue` WITHOUT committing, so typing does not update the
+ *    model. AngularJS parity (`$$updateEvents`): the value is still tracked
+ *    so a later `updateOn` event commits the latest text.
+ *  - Every event in `$$updateEvents` (the non-`default` events from
+ *    `updateOn`) COMMITS with the event's own name as the debounce trigger.
+ *
+ * All dispatch goes through the `$$phase`-guarded {@link applyDuringEvent}.
+ * Listeners are removed on `$destroy`.
+ */
+export function registerInputListeners(
+  ctx: InputTypeContext,
+  defaultEvents: readonly string[],
+  readValue: () => unknown,
+): void {
+  const { scope, element, ctrl, exceptionHandler } = ctx;
+  const options = ctrl.$options;
+  const registered: { event: string; listener: EventListener }[] = [];
+
+  const add = (event: string, listener: EventListener): void => {
+    element.addEventListener(event, listener);
+    registered.push({ event, listener });
+  };
+
+  // Default events: commit when `default` is in `updateOn`, else buffer only.
+  const defaultCommits = options.$$hasDefaultUpdateEvent;
+  for (const event of defaultEvents) {
+    add(event, () => {
+      applyDuringEvent(scope, exceptionHandler, () => {
+        if (defaultCommits) {
+          ctrl.$setViewValue(readValue(), 'default');
+        } else {
+          // Buffer the pending view value without committing (updateOn parity).
+          ctrl.$viewValue = readValue();
+        }
+      });
+    });
+  }
+
+  // Explicit `updateOn` events (e.g. `blur`) — each commits under its own name.
+  for (const event of options.$$updateEvents) {
+    // Avoid double-registering an event that is also a default event — a
+    // default event listed in `updateOn` already commits above (when
+    // `default` is present) or should commit here (when it is not).
+    if (defaultEvents.includes(event) && defaultCommits) {
+      continue;
+    }
+    add(event, () => {
+      applyDuringEvent(scope, exceptionHandler, () => {
+        ctrl.$setViewValue(readValue(), event);
+      });
+    });
+  }
+
+  scope.$on('$destroy', () => {
+    for (const { event, listener } of registered) {
+      element.removeEventListener(event, listener);
+    }
+  });
+}
+
+/**
  * Baseline string handler used by `text` / `search` / `tel` / `password`
  * / `email` / `url` inputs and by `textarea`. Renders the model's
  * formatted string into `element.value` and commits user input on the
@@ -150,24 +225,13 @@ function hasBadInput(control: HTMLInputElement): boolean {
  * verbatim (parsers — e.g. trim, type validators — run inside
  * `$setViewValue`).
  */
-export const textInputType: InputTypeHandler = ({ scope, element, ctrl, exceptionHandler }) => {
+export const textInputType: InputTypeHandler = (ctx) => {
+  const { element, ctrl } = ctx;
   ctrl.$render = () => {
     element.value = stringifyView(ctrl.$viewValue);
   };
 
-  const listener = () => {
-    applyDuringEvent(scope, exceptionHandler, () => {
-      ctrl.$setViewValue(element.value);
-    });
-  };
-
-  element.addEventListener('input', listener);
-  element.addEventListener('change', listener);
-
-  scope.$on('$destroy', () => {
-    element.removeEventListener('input', listener);
-    element.removeEventListener('change', listener);
-  });
+  registerInputListeners(ctx, ['input', 'change'], () => element.value);
 };
 
 /**
@@ -218,7 +282,7 @@ const NUMBER_RE = /^\s*(-|\+)?(\d+|(\d*(\.\d*)))([eE][+-]?\d+)?\s*$/;
  */
 function makeNumericHandler(isRange: boolean): InputTypeHandler {
   return (ctx) => {
-    const { scope, element, attrs, ctrl, exceptionHandler } = ctx;
+    const { scope, element, attrs, ctrl } = ctx;
     const control = asInput(element);
 
     // View → model parser: string → Number, guarding the `number` key.
@@ -273,17 +337,7 @@ function makeNumericHandler(isRange: boolean): InputTypeHandler {
       wireNumericMinMax(scope, attrs, ctrl);
     }
 
-    const listener = () => {
-      applyDuringEvent(scope, exceptionHandler, () => {
-        ctrl.$setViewValue(control.value);
-      });
-    };
-    control.addEventListener('input', listener);
-    control.addEventListener('change', listener);
-    scope.$on('$destroy', () => {
-      control.removeEventListener('input', listener);
-      control.removeEventListener('change', listener);
-    });
+    registerInputListeners(ctx, ['input', 'change'], () => control.value);
   };
 }
 
@@ -347,7 +401,8 @@ function evalConstantAttr(attrs: Attributes, name: string, scope: Scope, fallbac
  * overridden so an unchecked checkbox counts as empty (drives `ng-empty`
  * and `required`).
  */
-export const checkboxInputType: InputTypeHandler = ({ scope, element, attrs, ctrl, exceptionHandler }) => {
+export const checkboxInputType: InputTypeHandler = (ctx) => {
+  const { scope, element, attrs, ctrl } = ctx;
   const control = asInput(element);
   const trueValue = evalConstantAttr(attrs, 'ngTrueValue', scope, true);
   const falseValue = evalConstantAttr(attrs, 'ngFalseValue', scope, false);
@@ -361,15 +416,7 @@ export const checkboxInputType: InputTypeHandler = ({ scope, element, attrs, ctr
     control.checked = ctrl.$viewValue === trueValue;
   };
 
-  const listener = () => {
-    applyDuringEvent(scope, exceptionHandler, () => {
-      ctrl.$setViewValue(control.checked ? trueValue : falseValue);
-    });
-  };
-  control.addEventListener('change', listener);
-  scope.$on('$destroy', () => {
-    control.removeEventListener('change', listener);
-  });
+  registerInputListeners(ctx, ['change'], () => (control.checked ? trueValue : falseValue));
 };
 
 /**
@@ -435,7 +482,7 @@ export const radioInputType: InputTypeHandler = ({ scope, element, attrs, ctrl, 
  */
 function makeDateHandler(kind: DateInputKind): InputTypeHandler {
   return (ctx) => {
-    const { scope, element, attrs, ctrl, exceptionHandler } = ctx;
+    const { scope, element, attrs, ctrl } = ctx;
     const control = asInput(element);
 
     ctrl.$parsers.push((viewValue: unknown): unknown => {
@@ -447,7 +494,10 @@ function makeDateHandler(kind: DateInputKind): InputTypeHandler {
         ctrl.$setValidity(kind, true);
         return null;
       }
-      const parsed = parseDateInput(kind, toStringView(viewValue), LOCAL_TIMEZONE);
+      // Read `ctrl.$$timezone` LAZILY (spec 039 Slice 6): `ngModel`'s link
+      // resolves `ngModelOptions.timezone` onto the controller before the
+      // first digest, so a parse during a listener sees the configured zone.
+      const parsed = parseDateInput(kind, toStringView(viewValue), ctrl.$$timezone);
       if (parsed === null) {
         ctrl.$setValidity(kind, false);
         return undefined;
@@ -456,7 +506,7 @@ function makeDateHandler(kind: DateInputKind): InputTypeHandler {
       return parsed;
     });
 
-    ctrl.$formatters.push((modelValue: unknown): unknown => formatDateInput(kind, modelValue, LOCAL_TIMEZONE));
+    ctrl.$formatters.push((modelValue: unknown): unknown => formatDateInput(kind, modelValue, ctrl.$$timezone));
 
     wireDateMinMax(kind, scope, attrs, ctrl);
 
@@ -464,17 +514,7 @@ function makeDateHandler(kind: DateInputKind): InputTypeHandler {
       control.value = typeof ctrl.$viewValue === 'string' ? ctrl.$viewValue : '';
     };
 
-    const listener = () => {
-      applyDuringEvent(scope, exceptionHandler, () => {
-        ctrl.$setViewValue(control.value);
-      });
-    };
-    control.addEventListener('input', listener);
-    control.addEventListener('change', listener);
-    scope.$on('$destroy', () => {
-      control.removeEventListener('input', listener);
-      control.removeEventListener('change', listener);
-    });
+    registerInputListeners(ctx, ['input', 'change'], () => control.value);
   };
 }
 
