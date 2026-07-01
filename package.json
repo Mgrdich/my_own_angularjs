@@ -84,6 +84,11 @@
       "import": "./dist/esm/http/index.mjs",
       "require": "./dist/cjs/http/index.cjs",
       "types": "./dist/types/http/index.d.ts"
+    },
+    "./forms": {
+      "import": "./dist/esm/forms/index.mjs",
+      "require": "./dist/cjs/forms/index.cjs",
+      "types": "./dist/types/forms/index.d.ts"
     }
   },
   "repository": "https://github.com/Mgrdich/my_own_angularjs.git",

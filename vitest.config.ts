@@ -19,6 +19,7 @@ export default defineConfig({
       '@async': path.resolve(__dirname, 'src/async'),
       '@cache': path.resolve(__dirname, 'src/cache'),
       '@http': path.resolve(__dirname, 'src/http'),
+      '@forms': path.resolve(__dirname, 'src/forms'),
     },
   },
   test: {

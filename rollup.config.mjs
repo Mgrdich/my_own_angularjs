@@ -40,6 +40,7 @@ const entries = [
   { name: 'async/index', input: 'src/async/index.ts' },
   { name: 'cache/index', input: 'src/cache/index.ts' },
   { name: 'http/index', input: 'src/http/index.ts' },
+  { name: 'forms/index', input: 'src/forms/index.ts' },
 ];
 
 // Path aliases declared in `tsconfig.json` are used across the codebase
@@ -64,6 +65,7 @@ const tsPathAliases = {
   '@async/*': ['src/async/*'],
   '@cache/*': ['src/cache/*'],
   '@http/*': ['src/http/*'],
+  '@forms/*': ['src/forms/*'],
 };
 
 const bundleConfigs = entries.map((entry) => ({

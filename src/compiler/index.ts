@@ -59,6 +59,7 @@ export {
   setElementScope,
   setIsolateHostScope,
 } from './cleanup';
+export { stashController } from './element-slots';
 export type {
   Attributes,
   CompileFn,

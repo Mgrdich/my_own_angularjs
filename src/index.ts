@@ -231,3 +231,29 @@ export type {
   RequestTransform,
   ResponseTransform,
 } from './http/index';
+
+export {
+  createModelOptions,
+  defaultModelOptions,
+  FormControllerImpl,
+  NgModelControllerImpl,
+  NgModelNonAssignableError,
+  NgOptionsBadExpressionError,
+  nullFormCtrl,
+  registerForms,
+  resolveDebounceDelay,
+  SelectControllerImpl,
+} from './forms/index';
+export type {
+  AsyncValidator,
+  FormController,
+  FormControlLike,
+  ModelFormatter,
+  ModelOptions,
+  ModelParser,
+  NgModelController,
+  NgModelOptions,
+  NgOptionsDescriptor,
+  SelectController,
+  SyncValidator,
+} from './forms/index';
