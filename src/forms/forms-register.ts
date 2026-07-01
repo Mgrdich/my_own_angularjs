@@ -23,6 +23,20 @@ import { ngChangeDirective, ngModelDirective, NG_CHANGE_NAME, NG_MODEL_NAME } fr
 import { ngListDirective, NG_LIST_NAME } from './ng-list';
 import { ngOptionsDirective, NG_OPTIONS_NAME } from './ng-options';
 import { optionDirective, selectDirective, OPTION_NAME, SELECT_NAME } from './select';
+import {
+  maxlengthDirective,
+  minlengthDirective,
+  ngPatternDirective,
+  ngRequiredDirective,
+  patternDirective,
+  requiredDirective,
+  NG_MAXLENGTH_NAME,
+  NG_MINLENGTH_NAME,
+  NG_PATTERN_NAME,
+  NG_REQUIRED_NAME,
+  PATTERN_NAME,
+  REQUIRED_NAME,
+} from './validators';
 
 /**
  * Register the Slice-1 forms directives on a `$compileProvider`.
@@ -50,4 +64,16 @@ export function registerForms($compileProvider: $CompileProvider): void {
   $compileProvider.directive(OPTION_NAME, optionDirective);
   $compileProvider.directive(NG_OPTIONS_NAME, ngOptionsDirective);
   $compileProvider.directive(NG_LIST_NAME, ngListDirective);
+  // Slice 5 — built-in validator directives. Each `require: '?ngModel'`
+  // and pushes a rule onto the control's `$validators` map under a fixed
+  // key (`required` / `minlength` / `maxlength` / `pattern`), so a failure
+  // surfaces `ng-invalid-<key>` and bubbles to the enclosing form. The
+  // `email` / `number` / `url` and `min` / `max` type validators are wired
+  // by the corresponding `inputType` handler, NOT here (AngularJS parity).
+  $compileProvider.directive(REQUIRED_NAME, requiredDirective);
+  $compileProvider.directive(NG_REQUIRED_NAME, ngRequiredDirective);
+  $compileProvider.directive(NG_MINLENGTH_NAME, minlengthDirective);
+  $compileProvider.directive(NG_MAXLENGTH_NAME, maxlengthDirective);
+  $compileProvider.directive(PATTERN_NAME, patternDirective);
+  $compileProvider.directive(NG_PATTERN_NAME, ngPatternDirective);
 }

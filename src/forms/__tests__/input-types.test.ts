@@ -487,12 +487,22 @@ describe('input[type=hidden|button|submit|reset] — no model parsing', () => {
 // ────────────────────────────────────────────────────────────────────────────
 
 describe('input[type=email|url|search|tel|password] — baseline string handlers', () => {
-  it.each(['email', 'url', 'search', 'tel', 'password'])('type=%s binds a string', (type) => {
+  // Use a type-appropriate VALID value so the value binds — `email` / `url`
+  // now carry their Slice-5 shape validators, so an invalid value would be
+  // kept out of the model (AngularJS parity). `search` / `tel` / `password`
+  // have no shape validator, so any string binds.
+  it.each([
+    ['email', 'ada@example.com'],
+    ['url', 'http://example.com'],
+    ['search', 'hello'],
+    ['tel', 'hello'],
+    ['password', 'hello'],
+  ])('type=%s binds a string', (type, value) => {
     const { $compile, $rootScope } = boot();
     const el = asInput(compile(`<input type="${type}" ng-model="v">`, $compile, $rootScope));
 
-    fireInput(el, 'hello');
-    expect(model($rootScope, 'v')).toBe('hello');
+    fireInput(el, value);
+    expect(model($rootScope, 'v')).toBe(value);
     expect(typeof model($rootScope, 'v')).toBe('string');
   });
 });

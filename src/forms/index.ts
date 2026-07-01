@@ -13,6 +13,7 @@
 
 export type { NgModelController, ModelParser, ModelFormatter } from './ng-model-controller';
 export { NgModelControllerImpl } from './ng-model-controller';
+export type { SyncValidator, AsyncValidator } from './validation';
 export { NgModelNonAssignableError } from './ng-model';
 export type { FormController, FormControlLike } from './form-controller';
 export { FormControllerImpl, nullFormCtrl } from './form-controller';

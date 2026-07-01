@@ -39,6 +39,7 @@ const TOUCHED_CLASS = 'ng-touched';
 const EMPTY_CLASS = 'ng-empty';
 const NOT_EMPTY_CLASS = 'ng-not-empty';
 const SUBMITTED_CLASS = 'ng-submitted';
+const PENDING_CLASS = 'ng-pending';
 
 /**
  * Add `addClass` and remove `removeClass` on the element. Both arguments
@@ -98,6 +99,17 @@ export function setSubmittedClass(element: Element, isSubmitted: boolean): void 
 }
 
 /**
+ * Reflect the pending (async-validation-in-flight) state on a control:
+ * add `ng-pending` while at least one async validator is outstanding,
+ * remove it once every async rule has settled (spec 039 Slice 5 /
+ * FS §2.2, §2.7). There is no mutually-exclusive partner class — a control
+ * is simply either pending or not — so this toggles the single class.
+ */
+export function setPendingClass(element: Element, isPending: boolean): void {
+  applyClasses(element, isPending ? PENDING_CLASS : null, isPending ? null : PENDING_CLASS);
+}
+
+/**
  * Dasherize a validation key for the per-rule class — the AngularJS
  * `snake_case(name, '-')` behavior. Every uppercase letter is lowercased
  * and prefixed with `-` (so `maxLength` → `max-length`). Already-kebab
@@ -125,4 +137,16 @@ export function setValidationClass(element: Element, key: string, isValid: boole
   const validKey = `${VALID_CLASS}-${dashed}`;
   const invalidKey = `${INVALID_CLASS}-${dashed}`;
   applyClasses(element, isValid ? validKey : invalidKey, isValid ? invalidKey : validKey);
+}
+
+/**
+ * Remove BOTH per-rule classes for `key` — the neutral state used while an
+ * async validator is pending (spec 039 Slice 5). A pending rule is neither
+ * valid nor invalid, so the element carries neither `ng-valid-<key>` nor
+ * `ng-invalid-<key>` (only the aggregate `ng-pending` reflects it).
+ */
+export function clearValidationClass(element: Element, key: string): void {
+  const dashed = snakeCase(key);
+  applyClasses(element, null, `${VALID_CLASS}-${dashed}`);
+  applyClasses(element, null, `${INVALID_CLASS}-${dashed}`);
 }

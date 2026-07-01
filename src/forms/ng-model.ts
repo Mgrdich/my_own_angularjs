@@ -35,6 +35,7 @@
  * distinction.
  */
 
+import type { QService } from '@async/q-types';
 import type { Scope } from '@core/index';
 
 import { buildParentWriter } from '@compiler/expression-assign';
@@ -70,6 +71,11 @@ export class NgModelNonAssignableError extends Error {
  * `ngChange` still declares the string form (`require: 'ngModel'`), so it
  * receives the single controller — both shapes are handled here.
  */
+/** Whether a value is the numeric `NaN` (the fresh-control model sentinel). */
+function isNanValue(value: unknown): boolean {
+  return typeof value === 'number' && Number.isNaN(value);
+}
+
 function asNgModelController(controllers: unknown): NgModelControllerImpl | null {
   if (controllers instanceof NgModelControllerImpl) {
     return controllers;
@@ -102,8 +108,9 @@ function ngModelFactory($exceptionHandler: ExceptionHandler): DirectiveFactoryRe
     '$scope',
     '$element',
     '$attrs',
+    '$q',
     (...args: unknown[]): NgModelControllerImpl =>
-      new NgModelControllerImpl(args[0] as Scope, args[1] as Element, args[2] as Attributes),
+      new NgModelControllerImpl(args[0] as Scope, args[1] as Element, args[2] as Attributes, args[3] as QService),
   ];
 
   const link: LinkFn = (scope, _element, attrs, controllers) => {
@@ -155,9 +162,28 @@ function ngModelFactory($exceptionHandler: ExceptionHandler): DirectiveFactoryRe
     // REVERSE, then — only when the formatted value diverges from what the
     // view already shows ($$lastCommittedViewValue) — set $viewValue and
     // re-render. The divergence guard is the AngularJS feedback-loop fix.
+    // The model watch runs the model → view pipeline (formatters → render)
+    // + validation ONLY when the scope model diverges from the controller's
+    // cached `$modelValue` (AngularJS's `ngModelWatch` guard). When a change
+    // originated from `$setViewValue`, `$modelValue` was already updated to
+    // match, so the guard fails and validation is NOT re-run — that is what
+    // keeps async validators from firing twice per user keystroke. The
+    // guard's NaN clause (`a === a || b === b`) lets the fresh-control NaN
+    // sentinel transition to a real value on the first digest.
     scope.$watch(
       () => parsed(scope as unknown as Record<string, unknown>),
       (modelValue: unknown) => {
+        const cached = ctrl.$modelValue;
+        // AngularJS's `ngModelWatch` guard: run the pipeline only when the
+        // scope model diverges from the cached `$modelValue`. The NaN clause
+        // (`!(both are NaN)`) lets the fresh-control NaN sentinel transition
+        // to a real value on the first digest, while treating NaN === NaN as
+        // "no change" so two NaN sentinels don't re-run.
+        const bothNaN = isNanValue(modelValue) && isNanValue(cached);
+        if (modelValue === cached || bothNaN) {
+          return;
+        }
+
         let formatted: unknown = modelValue;
         for (let i = ctrl.$formatters.length - 1; i >= 0; i--) {
           const formatter = ctrl.$formatters[i];
@@ -166,12 +192,22 @@ function ngModelFactory($exceptionHandler: ExceptionHandler): DirectiveFactoryRe
           }
         }
         ctrl.$modelValue = modelValue;
+        ctrl.$$rawModelValue = modelValue;
+        ctrl.$$parserValid = undefined;
         if (ctrl.$$lastCommittedViewValue !== formatted) {
           ctrl.$viewValue = formatted;
           ctrl.$$lastCommittedViewValue = formatted;
           ctrl.$render();
           ctrl.$isEmptyClassUpdate(formatted);
         }
+        // Re-run validation against the externally-changed model value so a
+        // programmatic model change (not just user input) re-evaluates the
+        // validators (spec 039 Slice 5). `$$runValidators` bumps the
+        // generation id, cancelling any in-flight async pass.
+        ctrl.$$runValidators(modelValue, ctrl.$$lastCommittedViewValue, undefined, () => {
+          /* model-side revalidation: validity classes are the only output;
+             the scope model is authoritative here, so no write-back. */
+        });
       },
     );
   };

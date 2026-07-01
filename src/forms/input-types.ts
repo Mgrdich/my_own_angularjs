@@ -36,6 +36,7 @@ import { invokeExceptionHandler, type ExceptionHandler } from '@exception-handle
 import { parse } from '@parser/index';
 
 import { formatDateInput, LOCAL_TIMEZONE, parseDateInput, type DateInputKind } from './input-date';
+import { wireDateMinMax, wireEmailValidator, wireNumericMinMax, wireUrlValidator } from './input-validators';
 import type { NgModelControllerImpl } from './ng-model-controller';
 
 /**
@@ -170,6 +171,30 @@ export const textInputType: InputTypeHandler = ({ scope, element, ctrl, exceptio
 };
 
 /**
+ * `email` handler — a baseline string control (like `text`) that ALSO
+ * registers the `email` validator (spec 039 Slice 5 / FS §2.6). The value
+ * is valid when empty (emptiness is `required`'s concern) or it matches
+ * {@link EMAIL_REGEXP}. Registered as a `$validators` entry so a malformed
+ * address flips the control invalid under the `email` key and surfaces
+ * `ng-invalid-email` — without keeping the string out of the model
+ * (AngularJS parity — the string still binds; the control is just invalid).
+ */
+export const emailInputType: InputTypeHandler = (ctx) => {
+  textInputType(ctx);
+  wireEmailValidator(ctx.ctrl);
+};
+
+/**
+ * `url` handler — a baseline string control that ALSO registers the `url`
+ * validator (spec 039 Slice 5 / FS §2.6). Valid when empty or matching
+ * {@link URL_REGEXP}; a malformed URL flips `ng-invalid-url`.
+ */
+export const urlInputType: InputTypeHandler = (ctx) => {
+  textInputType(ctx);
+  wireUrlValidator(ctx.ctrl);
+};
+
+/**
  * Matches a numeric string AngularJS accepts for `type=number` (integers,
  * decimals, scientific notation, leading sign). Empty / non-numeric input
  * fails the `number` validator instead of writing a bad model.
@@ -192,7 +217,8 @@ const NUMBER_RE = /^\s*(-|\+)?(\d+|(\d*(\.\d*)))([eE][+-]?\d+)?\s*$/;
  * build on.
  */
 function makeNumericHandler(isRange: boolean): InputTypeHandler {
-  return ({ scope, element, attrs, ctrl, exceptionHandler }) => {
+  return (ctx) => {
+    const { scope, element, attrs, ctrl, exceptionHandler } = ctx;
     const control = asInput(element);
 
     // View → model parser: string → Number, guarding the `number` key.
@@ -239,6 +265,13 @@ function makeNumericHandler(isRange: boolean): InputTypeHandler {
     ctrl.$render = () => {
       control.value = stringifyView(ctrl.$viewValue);
     };
+
+    // `min` / `max` validators (spec 039 Slice 5). `range` clamps in the
+    // parser above (the model always lands in bounds), so it does not also
+    // register the validators — matching AngularJS.
+    if (!isRange) {
+      wireNumericMinMax(scope, attrs, ctrl);
+    }
 
     const listener = () => {
       applyDuringEvent(scope, exceptionHandler, () => {
@@ -401,7 +434,8 @@ export const radioInputType: InputTypeHandler = ({ scope, element, attrs, ctrl, 
  * Slice 5's `min` / `max` validators compare against the parsed `Date`.
  */
 function makeDateHandler(kind: DateInputKind): InputTypeHandler {
-  return ({ scope, element, ctrl, exceptionHandler }) => {
+  return (ctx) => {
+    const { scope, element, attrs, ctrl, exceptionHandler } = ctx;
     const control = asInput(element);
 
     ctrl.$parsers.push((viewValue: unknown): unknown => {
@@ -423,6 +457,8 @@ function makeDateHandler(kind: DateInputKind): InputTypeHandler {
     });
 
     ctrl.$formatters.push((modelValue: unknown): unknown => formatDateInput(kind, modelValue, LOCAL_TIMEZONE));
+
+    wireDateMinMax(kind, scope, attrs, ctrl);
 
     ctrl.$render = () => {
       control.value = typeof ctrl.$viewValue === 'string' ? ctrl.$viewValue : '';
@@ -460,18 +496,19 @@ export const noopInputType: InputTypeHandler = () => {
 };
 
 /**
- * The type registry. Every recognized `type` maps to its handler; string
- * types (`text` / `search` / `tel` / `password` / `email` / `url`) share
- * the baseline handler today (Slice 5 layers the `email` / `url`
- * validators on top). Unknown / absent types fall back to `text`
- * (AngularJS parity) at the dispatch site in `input.ts`.
+ * The type registry. Every recognized `type` maps to its handler; the
+ * plain string types (`text` / `search` / `tel` / `password`) use the
+ * baseline handler, while `email` / `url` use handlers that ALSO layer
+ * their Slice-5 shape validator on top of the baseline. Unknown / absent
+ * types fall back to `text` (AngularJS parity) at the dispatch site in
+ * `input.ts`.
  */
 export const inputTypeHandlers: Record<string, InputTypeHandler> = {
   text: textInputType,
   search: textInputType,
   tel: textInputType,
-  url: textInputType,
-  email: textInputType,
+  url: urlInputType,
+  email: emailInputType,
   password: textInputType,
   number: numberInputType,
   range: rangeInputType,

@@ -26,20 +26,34 @@
  * compare in the model `$watch`, owned by the `ngModel` directive) keeps
  * `$render` from firing when the view already shows the value.
  *
- * **Slice-1 scope.** This slice ships the synchronous pipeline + state +
- * the per-rule `$setValidity` surface. The async-validator engine
- * (`$validators` / `$asyncValidators` / `$pending` / `$$runValidators`)
- * lands in Slice 5; the field declarations are present now (empty maps,
- * `$pending` undefined) so the published `.d.ts` contract stays stable,
- * but `$setViewValue` does not yet run them.
+ * **Validation (Slice 5).** `$setViewValue` and the model→view watch both
+ * route through `$$parseAndValidate` → `$$runValidators` (the engine lives
+ * in `validation.ts`): sync `$validators` first, then — only if all pass —
+ * async `$asyncValidators`, marking `$pending` + `ng-pending` until
+ * `$q.all(...)` settles. `$setValidity` is tri-state
+ * (`true` / `false` / `undefined` = pending); a monotonic
+ * `$$currentValidationRunId` cancels stale async passes. By default an
+ * invalid parse / failing validators keep the value OUT of the scope model
+ * (`$modelValue` → `undefined`); the `$$allowInvalid` seam (Slice 6's
+ * `ngModelOptions.allowInvalid`) flips that.
  */
 
+import type { QService } from '@async/q-types';
 import type { Scope } from '@core/index';
 
 import type { Attributes } from '@compiler/directive-types';
 
 import { type FormController, nullFormCtrl } from './form-controller';
-import { setEmptyClass, setPristineClass, setTouchedClass, setValidationClass, setValidClass } from './state-classes';
+import {
+  clearValidationClass,
+  setEmptyClass,
+  setPendingClass,
+  setPristineClass,
+  setTouchedClass,
+  setValidationClass,
+  setValidClass,
+} from './state-classes';
+import { runValidators, type AsyncValidator, type SyncValidator } from './validation';
 
 /**
  * A view → model transform. Receives the prior stage's output and returns
@@ -67,11 +81,24 @@ export interface NgModelController {
   $parsers: ModelParser[];
   /** Model → view transforms, run in reverse on a model change. */
   $formatters: ModelFormatter[];
+  /**
+   * Synchronous validation rules keyed by rule name — each returns truthy
+   * for valid. Run on every committed view change and every model change
+   * (Slice 5). A failing rule surfaces `ng-invalid-<name>` + `$error[name]`.
+   */
+  $validators: Record<string, SyncValidator>;
+  /**
+   * Asynchronous validation rules keyed by rule name — each returns a
+   * promise that resolves for valid / rejects for invalid (Slice 5). Run
+   * ONLY after every sync validator passes; while outstanding the control
+   * reports `$pending[name]` + `ng-pending` and the model is not written.
+   */
+  $asyncValidators: Record<string, AsyncValidator>;
   /** Callbacks fired after a committed view change (backs `ng-change`). */
   $viewChangeListeners: (() => void)[];
   /** Failing-rule map — `$error[key] === true` while rule `key` fails. */
   $error: Record<string, boolean>;
-  /** Outstanding-async-rule map (Slice 5). */
+  /** Outstanding-async-rule map — `$pending[key] === true` while async rule `key` is in flight (Slice 5). */
   $pending: Record<string, boolean> | undefined;
   /** The element has been changed by the user. */
   $dirty: boolean;
@@ -101,8 +128,18 @@ export interface NgModelController {
   $commitViewValue: () => void;
   /** Revert a buffered view value back to the last committed one. */
   $rollbackViewValue: () => void;
-  /** Set a single rule's pass/fail; updates `$error` + per-rule class + aggregate validity. */
-  $setValidity: (key: string, isValid: boolean) => void;
+  /**
+   * Re-run every validator against the current model / view value (Slice 5)
+   * — the programmatic re-validation entry point. Built-in validator
+   * directives call it from their `$observe` when a bound parameter changes.
+   */
+  $validate: () => void;
+  /**
+   * Set a single rule's validity — `true` (valid), `false` (invalid), or
+   * `undefined` (async pending). Updates `$error` / `$pending` + the
+   * per-rule class + aggregate validity, and bubbles to the enclosing form.
+   */
+  $setValidity: (key: string, isValid: boolean | undefined) => void;
   /** Mark the control pristine (and untouched? no — pristine only). */
   $setPristine: () => void;
   /** Mark the control dirty. */
@@ -123,6 +160,18 @@ function defaultIsEmpty(value: unknown): boolean {
 }
 
 /**
+ * Remove `key` from a string-keyed boolean map if present. Used by
+ * `$setValidity` to keep the `$error` / `$$success` / `$pending` maps
+ * mutually exclusive per key.
+ */
+function unsetMapKey(map: Record<string, boolean>, key: string): void {
+  if (key in map) {
+    // eslint-disable-next-line @typescript-eslint/no-dynamic-delete -- these validity maps expose only live entries (AngularJS parity); clearing a key removes it entirely so `Object.keys(...)` reflects the current failing / pending / passing set.
+    delete map[key];
+  }
+}
+
+/**
  * Concrete implementation. Constructed by the compiler's controller seam
  * with element-locals `{ $scope, $element, $attrs }`; the `ngModel`
  * directive's link fn (via `require: 'ngModel'`) installs the model
@@ -139,8 +188,11 @@ export class NgModelControllerImpl implements NgModelController {
   $modelValue: unknown = Number.NaN;
   $parsers: ModelParser[] = [];
   $formatters: ModelFormatter[] = [];
+  $validators: Record<string, SyncValidator> = {};
+  $asyncValidators: Record<string, AsyncValidator> = {};
   $viewChangeListeners: (() => void)[] = [];
   $error: Record<string, boolean> = {};
+  $$success: Record<string, boolean> = {};
   $pending: Record<string, boolean> | undefined = undefined;
   $dirty = false;
   $pristine = true;
@@ -186,12 +238,65 @@ export class NgModelControllerImpl implements NgModelController {
    */
   $$parentForm: FormController = nullFormCtrl;
 
+  /**
+   * The last raw parsed model value BEFORE the invalid → `undefined`
+   * substitution — `$validate()` re-runs validators against this so a
+   * programmatic re-validation sees the real value, not the `undefined`
+   * that a prior invalid pass wrote to the scope model.
+   *
+   * @internal
+   */
+  $$rawModelValue: unknown = Number.NaN;
+
+  /**
+   * The `$parsers` chain outcome for the last commit: `true` (produced a
+   * value), `false` (a parser returned `undefined` — bad parse), or
+   * `undefined` (nothing to parse). Drives the `parse` validity key.
+   *
+   * @internal
+   */
+  $$parserValid: boolean | undefined = undefined;
+
+  /**
+   * Monotonic validation-pass id — bumped by `$$runValidators` so a stale
+   * async settle can be detected and dropped (spec 039 Slice 5).
+   *
+   * @internal
+   */
+  $$currentValidationRunId = 0;
+
+  /**
+   * When `true`, an invalid parse / failing validators STILL write the
+   * value to the scope model (the `ngModelOptions.allowInvalid` behavior).
+   * Defaults to `false` — invalid values are kept out of the model
+   * (`undefined`). Slice 6's `ngModelOptions` directive flips this seam; it
+   * lives here now so the validation engine has a single branch to gate on.
+   *
+   * @internal
+   */
+  $$allowInvalid = false;
+
+  /**
+   * The `$q` service, used by the async-validator engine. Element-locals
+   * on the controller seam do not include `$q`, so `ngModel`'s controller
+   * annotation injects it and hands it in.
+   *
+   * @internal
+   */
+  readonly $$q: QService;
+
   private readonly scope: Scope;
   private readonly element: Element;
 
-  constructor(scope: Scope, element: Element, attrs: Attributes) {
+  /** The DOM element — exposed to the validation engine for `ng-pending`. */
+  get $$element(): Element {
+    return this.element;
+  }
+
+  constructor(scope: Scope, element: Element, attrs: Attributes, $q: QService) {
     this.scope = scope;
     this.element = element;
+    this.$$q = $q;
     const name = attrs['name'];
     this.$name = typeof name === 'string' ? name : undefined;
 
@@ -215,28 +320,99 @@ export class NgModelControllerImpl implements NgModelController {
       this.$setDirty();
     }
 
+    this.$isEmptyClassUpdate(this.$viewValue);
+
+    this.$$parseAndValidate();
+  }
+
+  /**
+   * @internal Run the `$parsers` chain then validate, honoring `allowInvalid`.
+   *
+   * The parse chain sets `$$parserValid` (`false` when a parser returned
+   * `undefined`); the raw parsed value is stashed on `$$rawModelValue` so
+   * `$validate()` can re-run against it. On a valid pass (or with
+   * `allowInvalid`) the value is written to the scope model and the
+   * view-change listeners fire — but only when the model actually changed
+   * (the feedback guard on the model watch then keeps `$render` from
+   * clobbering a live keystroke).
+   */
+  $$parseAndValidate(): void {
+    const viewValue = this.$$lastCommittedViewValue;
+    let modelValue: unknown = viewValue;
+
     // Run the parsers view → model in registration order. A parser
-    // returning `undefined` halts the chain (failed parse → undefined
-    // model), matching AngularJS.
-    let modelValue: unknown = value;
-    for (const parser of this.$parsers) {
-      modelValue = parser(modelValue);
-      if (modelValue === undefined) {
-        break;
+    // returning `undefined` halts the chain (failed parse), matching
+    // AngularJS — the `parse` validity key then fails and every other
+    // validator is skipped.
+    this.$$parserValid = modelValue === undefined ? undefined : true;
+    if (this.$$parserValid === true) {
+      for (const parser of this.$parsers) {
+        modelValue = parser(modelValue);
+        if (modelValue === undefined) {
+          this.$$parserValid = false;
+          break;
+        }
       }
     }
 
-    this.$isEmptyClassUpdate(this.$viewValue);
+    const prevModelValue = this.$modelValue;
+    this.$$rawModelValue = modelValue;
 
-    // Write the parsed value to the model only when it actually changed,
-    // then fire the view-change listeners. The feedback guard
-    // ($$lastCommittedViewValue) on the model watch prevents the
-    // subsequent model→view re-render from clobbering the live DOM.
-    if (this.$modelValue !== modelValue) {
+    const writeIfChanged = (): void => {
+      if (this.$modelValue !== prevModelValue) {
+        this.$$writeModelToScope(this.$modelValue);
+        this.$$fireViewChangeListeners();
+      }
+    };
+
+    if (this.$$allowInvalid) {
+      // Write the (possibly invalid) value up front; validators still run
+      // and toggle validity, but the model is not withheld.
       this.$modelValue = modelValue;
-      this.$$writeModelToScope(modelValue);
-      this.$$fireViewChangeListeners();
+      writeIfChanged();
     }
+
+    this.$$runValidators(modelValue, viewValue, this.$$parserValid, (allValid) => {
+      if (!this.$$allowInvalid) {
+        this.$modelValue = allValid ? modelValue : undefined;
+        writeIfChanged();
+      }
+    });
+  }
+
+  /**
+   * @internal Delegate to the validation engine (`validation.ts`). Split
+   * out so the engine's sync-before-async ordering + stale-pass
+   * cancellation can be reasoned about independently of the pipeline.
+   */
+  $$runValidators(
+    modelValue: unknown,
+    viewValue: unknown,
+    parserValid: boolean | undefined,
+    doneCallback: (allValid: boolean) => void,
+  ): void {
+    runValidators(this, modelValue, viewValue, parserValid, doneCallback);
+  }
+
+  $validate(): void {
+    // NaN model means "never set" (the fresh-control sentinel) — nothing to
+    // validate yet (AngularJS parity).
+    if (typeof this.$modelValue === 'number' && Number.isNaN(this.$modelValue)) {
+      return;
+    }
+    const viewValue = this.$$lastCommittedViewValue;
+    const modelValue = this.$$rawModelValue;
+    const prevValid = this.$valid;
+    const prevModelValue = this.$modelValue;
+
+    this.$$runValidators(modelValue, viewValue, this.$$parserValid, (allValid) => {
+      if (!this.$$allowInvalid && prevValid !== allValid) {
+        this.$modelValue = allValid ? modelValue : undefined;
+        if (this.$modelValue !== prevModelValue) {
+          this.$$writeModelToScope(this.$modelValue);
+        }
+      }
+    });
   }
 
   /** @internal Fire every registered view-change listener (backs `ng-change`). */
@@ -259,29 +435,58 @@ export class NgModelControllerImpl implements NgModelController {
     this.$render();
   }
 
-  $setValidity(key: string, isValid: boolean): void {
-    if (isValid) {
-      // Clear a previously-recorded failure for this key.
-      if (key in this.$error) {
-        // eslint-disable-next-line @typescript-eslint/no-dynamic-delete -- $error is a string-keyed map of failing rules; clearing a passing rule removes its key entirely (AngularJS parity, so `Object.keys($error)` reflects only live failures).
-        delete this.$error[key];
-      }
+  $setValidity(key: string, isValid: boolean | undefined): void {
+    // Tri-state (AngularJS `addSetValidityMethod` parity):
+    //   true      → success  (clear $error + $pending for the key)
+    //   false     → failure  (record in $error; clear $$success + $pending)
+    //   undefined → pending  (record in $pending; clear $error + $$success)
+    // The three maps are always mutually exclusive per key.
+    unsetMapKey(this.$error, key);
+    unsetMapKey(this.$$success, key);
+    if (this.$pending !== undefined) {
+      unsetMapKey(this.$pending, key);
+    }
+
+    if (isValid === undefined) {
+      // Pending — lazily create the $pending map on first async rule.
+      this.$pending ??= {};
+      this.$pending[key] = true;
+    } else if (isValid) {
+      this.$$success[key] = true;
     } else {
       this.$error[key] = true;
     }
 
-    setValidationClass(this.element, key, isValid);
+    // Drop an emptied $pending map back to `undefined` (AngularJS parity —
+    // `$pending` is `undefined`, not `{}`, when no async rule is in flight).
+    if (this.$pending !== undefined && Object.keys(this.$pending).length === 0) {
+      this.$pending = undefined;
+    }
 
-    // Aggregate: valid iff no failing rules remain.
+    // Per-rule class: `ng-valid-<key>` when success, `ng-invalid-<key>` when
+    // failure. A pending key is neutral — remove BOTH per-rule classes so it
+    // reads as neither valid nor invalid while the async rule settles.
+    if (isValid === undefined) {
+      clearValidationClass(this.element, key);
+    } else {
+      setValidationClass(this.element, key, isValid);
+    }
+
+    // Aggregate: invalid iff any $error key; valid iff no $error AND no
+    // $pending key (a pending control is neither valid nor invalid).
     const anyInvalid = Object.keys(this.$error).length > 0;
-    this.$valid = !anyInvalid;
+    const anyPending = this.$pending !== undefined;
+    this.$valid = !anyInvalid && !anyPending;
     this.$invalid = anyInvalid;
-    setValidClass(this.element, this.$valid);
+    setValidClass(this.element, !anyInvalid);
+    setPendingClass(this.element, anyPending);
 
     // Bubble this control's per-key validity into the enclosing form so
     // the form's aggregate `$error` / `$valid` reflects it. A form-less
-    // control's `$$parentForm` is `nullFormCtrl` (no-op).
-    this.$$parentForm.$setValidity(key, isValid, this);
+    // control's `$$parentForm` is `nullFormCtrl` (no-op). A pending key is
+    // treated as valid-for-now toward the form (parity — the form's
+    // `$error` tracks failures, not pending).
+    this.$$parentForm.$setValidity(key, isValid !== false, this);
   }
 
   $setPristine(): void {
