@@ -1,7 +1,7 @@
 # Technical Specification: Forms & Validation
 
 - **Functional Specification:** `context/spec/039-forms-and-validation/functional-spec.md`
-- **Status:** Draft
+- **Status:** Completed
 - **Author(s):** Mgrdich
 
 ---
