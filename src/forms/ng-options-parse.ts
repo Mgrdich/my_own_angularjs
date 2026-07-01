@@ -75,10 +75,11 @@ export interface NgOptionsDescriptor {
  *  2. label expression (after `as`, or the whole `for` LHS)
  *  3. group-by expression
  *  4. disable-when expression
- *  5. `(key, value)` LHS parenthesized form — raw `k, v`
- *  6. value name (bare `value` form)
- *  7. collection expression
- *  8. track-by expression
+ *  5. value name (bare `for value in` form)
+ *  6. key name (parenthesized `for (key, value) in` form)
+ *  7. value name (parenthesized `for (key, value) in` form)
+ *  8. collection expression
+ *  9. track-by expression
  */
 const NG_OPTIONS_REGEXP =
   /^\s*([\s\S]+?)(?:\s+as\s+([\s\S]+?))?(?:\s+group\s+by\s+([\s\S]+?))?(?:\s+disable\s+when\s+([\s\S]+?))?\s+for\s+(?:([$\w][$\w]*)|(?:\(\s*([$\w][$\w]*)\s*,\s*([$\w][$\w]*)\s*\)))\s+in\s+([\s\S]+?)(?:\s+track\s+by\s+([\s\S]+?))?\s*$/;

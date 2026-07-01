@@ -32,7 +32,14 @@
  * call site — the AngularJS `nullFormCtrl` precedent.
  */
 
-import { setPristineClass, setSubmittedClass, setValidationClass, setValidClass } from './state-classes';
+import {
+  clearValidationClass,
+  setPendingClass,
+  setPristineClass,
+  setSubmittedClass,
+  setValidationClass,
+  setValidClass,
+} from './state-classes';
 
 /**
  * The minimal shape a `FormController` needs from each control it tracks
@@ -73,8 +80,14 @@ export interface FormController {
   $addControl: (control: FormControlLike) => void;
   /** Deregister a child control / sub-form, dropping its state contribution. */
   $removeControl: (control: FormControlLike) => void;
-  /** Bubble a control's per-key validity into this form's aggregate. */
-  $setValidity: (key: string, isValid: boolean, control: FormControlLike) => void;
+  /**
+   * Bubble a control's per-key validity into this form's aggregate.
+   * Tri-state (AngularJS parity): `true` clears the control from the
+   * key's failure + pending sets, `false` records it as failing, and
+   * `undefined` records it as PENDING (an async rule in flight) —
+   * aggregated into `$pending` with `ng-pending` on the form element.
+   */
+  $setValidity: (key: string, isValid: boolean | undefined, control: FormControlLike) => void;
   /** Mark the form dirty (propagates to the parent form). */
   $setDirty: () => void;
   /** Reset the form (and its controls) to pristine. */
@@ -192,44 +205,79 @@ export class FormControllerImpl implements FormController {
     }
   }
 
-  $setValidity(key: string, isValid: boolean, control: FormControlLike): void {
-    const controls = this.$error[key] ?? [];
-    if (isValid) {
-      // Clear this control from the key's failure set.
-      const index = controls.indexOf(control);
-      if (index !== -1) {
-        controls.splice(index, 1);
+  /** Remove `control` from a key's set in `map`, deleting emptied keys. */
+  private static unsetFromSet(map: Record<string, FormControlLike[]>, key: string, control: FormControlLike): void {
+    const set = map[key];
+    if (set === undefined) {
+      return;
+    }
+    const index = set.indexOf(control);
+    if (index !== -1) {
+      set.splice(index, 1);
+    }
+    if (set.length === 0) {
+      // eslint-disable-next-line @typescript-eslint/no-dynamic-delete -- string-keyed map of rule → control arrays; an empty set means the key no longer applies, so its entry is removed entirely (AngularJS parity — `Object.keys(...)` reflects only live entries).
+      delete map[key];
+    }
+  }
+
+  $setValidity(key: string, isValid: boolean | undefined, control: FormControlLike): void {
+    if (isValid === undefined) {
+      // Pending — record in $pending; the key is neither failing nor
+      // succeeding while the async rule settles.
+      FormControllerImpl.unsetFromSet(this.$error, key, control);
+      this.$pending ??= {};
+      const pendingSet = this.$pending[key] ?? [];
+      if (!pendingSet.includes(control)) {
+        pendingSet.push(control);
       }
-      if (controls.length === 0) {
-        // eslint-disable-next-line @typescript-eslint/no-dynamic-delete -- $error is a string-keyed map of failing-rule → control arrays; an empty set means the key no longer fails, so its entry is removed entirely (AngularJS parity — `Object.keys($error)` reflects only live failures, and per-key classes toggle to `ng-valid-<key>`).
-        delete this.$error[key];
-      } else {
-        this.$error[key] = controls;
-      }
+      this.$pending[key] = pendingSet;
     } else {
-      // Record this control as failing the key.
-      if (!controls.includes(control)) {
-        controls.push(control);
+      // Settled — the control leaves the key's pending set either way.
+      if (this.$pending !== undefined) {
+        FormControllerImpl.unsetFromSet(this.$pending, key, control);
+        if (Object.keys(this.$pending).length === 0) {
+          // `$pending` is `undefined`, not `{}`, when nothing is in flight.
+          this.$pending = undefined;
+        }
       }
-      this.$error[key] = controls;
+      if (isValid) {
+        FormControllerImpl.unsetFromSet(this.$error, key, control);
+      } else {
+        const failureSet = this.$error[key] ?? [];
+        if (!failureSet.includes(control)) {
+          failureSet.push(control);
+        }
+        this.$error[key] = failureSet;
+      }
     }
 
     const keyStillFails = (this.$error[key]?.length ?? 0) > 0;
+    const keyPending = (this.$pending?.[key]?.length ?? 0) > 0;
     if (this.element !== null) {
-      setValidationClass(this.element, key, !keyStillFails);
+      if (keyPending) {
+        // Neutral while pending — neither ng-valid-<key> nor ng-invalid-<key>.
+        clearValidationClass(this.element, key);
+      } else {
+        setValidationClass(this.element, key, !keyStillFails);
+      }
     }
 
-    // Aggregate: valid iff no failing key remains.
+    // Aggregate: invalid iff any failing key; valid iff no failing AND no
+    // pending key (mirrors the control-level aggregate).
     const anyInvalid = Object.keys(this.$error).length > 0;
-    this.$valid = !anyInvalid;
+    const anyPending = this.$pending !== undefined;
+    this.$valid = !anyInvalid && !anyPending;
     this.$invalid = anyInvalid;
     if (this.element !== null) {
-      setValidClass(this.element, this.$valid);
+      setValidClass(this.element, !anyInvalid);
+      setPendingClass(this.element, anyPending);
     }
 
-    // Bubble this form's aggregate for `key` up to the parent form so a
-    // nested `ng-form`'s validity reaches the enclosing `<form>`.
-    this.$$parentForm.$setValidity(key, !keyStillFails, this);
+    // Bubble this form's combined per-key state up to the parent form so a
+    // nested `ng-form`'s validity / pending state reaches the enclosing
+    // `<form>` (`undefined` while pending, else the failure state).
+    this.$$parentForm.$setValidity(key, keyPending ? undefined : !keyStillFails, this);
   }
 
   $setDirty(): void {
@@ -271,6 +319,17 @@ export class FormControllerImpl implements FormController {
   }
 
   $$renameControl(control: FormControlLike, newName: string): void {
+    // Move the control's named slot on the form instance: drop the old
+    // name (only when the slot still holds THIS control — a newer control
+    // published under the same name must not be clobbered) and publish
+    // under the new name (AngularJS parity — `myForm.<newName>` resolves).
+    const record = this as unknown as Record<string, unknown>;
+    const oldName = control.$name;
+    if (oldName !== undefined && record[oldName] === control) {
+      // eslint-disable-next-line @typescript-eslint/no-dynamic-delete -- the form instance carries named-control slots keyed by each control's `$name`; a rename removes the stale slot entirely so `myForm.<oldName>` becomes undefined again (AngularJS parity).
+      delete record[oldName];
+    }
     control.$name = newName;
+    record[newName] = control;
   }
 }

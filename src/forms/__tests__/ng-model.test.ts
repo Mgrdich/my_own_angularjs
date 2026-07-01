@@ -261,3 +261,32 @@ function readController(el: HTMLElement): NgModelControllerImpl {
   }
   return ctrl;
 }
+
+// ────────────────────────────────────────────────────────────────────────────
+// PR-audit regression — the model watch preserves a live parse error
+// ────────────────────────────────────────────────────────────────────────────
+
+describe('model watch — parse-error preservation (PR-audit regression)', () => {
+  it('does not clear $error.parse when the model is set to the same rejected text', () => {
+    const { $compile, $rootScope } = boot();
+    const el = input(compile('<input ng-model="x">', $compile, $rootScope));
+    const ctrl = readController(el);
+
+    // A parser that rejects any value containing digits.
+    ctrl.$parsers.push((v: unknown) => (typeof v === 'string' && /\d/.test(v) ? undefined : v));
+
+    fireInput(el, 'abc123');
+    expect(ctrl.$error['parse']).toBe(true);
+    expect(($rootScope as unknown as Record<string, unknown>)['x']).toBeUndefined();
+
+    // Programmatically writing the SAME rejected text onto the scope: the
+    // formatted value equals what the view already shows, so `$render` is
+    // skipped — and the live parse error must STAND (AngularJS
+    // `ngModelWatch` parity: validators re-run only inside the render
+    // branch).
+    ($rootScope as unknown as Record<string, unknown>)['x'] = 'abc123';
+    $rootScope.$digest();
+    expect(ctrl.$error['parse']).toBe(true);
+    expect(el.value).toBe('abc123');
+  });
+});

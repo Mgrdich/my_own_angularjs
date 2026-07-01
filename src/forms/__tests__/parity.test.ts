@@ -291,6 +291,28 @@ describe('$$renameControl (parity)', () => {
     expect(ctrl.$name).toBe('a');
     formCtrl.$$renameControl(ctrl, 'renamed');
     expect(ctrl.$name).toBe('renamed');
+
+    // The form-instance slots move too: `f.renamed` resolves the control,
+    // `f.a` is gone (AngularJS parity — expressions read `f.renamed.$invalid`).
+    const record = formCtrl as unknown as Record<string, unknown>;
+    expect(record['renamed']).toBe(ctrl);
+    expect(record['a']).toBeUndefined();
+  });
+
+  it('renaming does not clobber a newer control already published under the old name', () => {
+    const { $compile, $rootScope } = boot();
+    const form = compile('<form name="f"><input name="a" ng-model="v"></form>', $compile, $rootScope);
+    const formCtrl = formOf(form);
+    const ctrl = ctrlOf(input(form.querySelector('input') as HTMLElement));
+
+    // Simulate a newer control having taken over the `a` slot.
+    const newer = { $name: 'a' };
+    const record = formCtrl as unknown as Record<string, unknown>;
+    record['a'] = newer;
+
+    formCtrl.$$renameControl(ctrl, 'renamed');
+    expect(record['a']).toBe(newer); // untouched — identity guard
+    expect(record['renamed']).toBe(ctrl);
   });
 });
 

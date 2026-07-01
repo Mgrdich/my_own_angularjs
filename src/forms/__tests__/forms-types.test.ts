@@ -139,10 +139,11 @@ describe('FormController — the aggregation contract', () => {
   it('$addControl / $removeControl / $setValidity accept a FormControlLike', () => {
     expectTypeOf<FormController['$addControl']>().toEqualTypeOf<(control: FormControlLike) => void>();
     expectTypeOf<FormController['$removeControl']>().toEqualTypeOf<(control: FormControlLike) => void>();
-    // The form's $setValidity is the THREE-arg control-aggregating shape (NOT
-    // the control's two-arg tri-state), and its isValid is plain boolean.
+    // The form's $setValidity is the THREE-arg control-aggregating shape
+    // (vs the control's two-arg form) and shares the tri-state isValid:
+    // `undefined` marks the key PENDING on the form (async rule in flight).
     expectTypeOf<FormController['$setValidity']>().toEqualTypeOf<
-      (key: string, isValid: boolean, control: FormControlLike) => void
+      (key: string, isValid: boolean | undefined, control: FormControlLike) => void
     >();
   });
 

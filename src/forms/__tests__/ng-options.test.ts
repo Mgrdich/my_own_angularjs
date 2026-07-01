@@ -77,7 +77,9 @@ describe('ngOptions over an array — label + value (FS §2.5)', () => {
       $rootScope,
     );
 
-    expect(optionLabels(select)).toEqual(['Ada', 'Alan']);
+    // The blank leading label is the synthetic unknown option (`value="?"`)
+    // — the model is unset and matches no option (AngularJS parity).
+    expect(optionLabels(select)).toEqual(['', 'Ada', 'Alan']);
   });
 
   it('binds the whole item as the model value (bare form)', () => {
@@ -91,7 +93,8 @@ describe('ngOptions over an array — label + value (FS §2.5)', () => {
       $rootScope,
     );
 
-    (select.options[1] as HTMLOptionElement).selected = true;
+    // Index 0 is the unknown option (model unset) — Alan is at index 2.
+    (select.options[2] as HTMLOptionElement).selected = true;
     fireChange(select);
     expect(model($rootScope, 'chosen')).toBe(alan);
   });
@@ -108,8 +111,9 @@ describe('ngOptions over an array — label + value (FS §2.5)', () => {
       $rootScope,
     );
 
-    expect(optionLabels(select)).toEqual(['Ada', 'Alan']);
-    (select.options[0] as HTMLOptionElement).selected = true;
+    expect(optionLabels(select)).toEqual(['', 'Ada', 'Alan']);
+    // Index 0 is the unknown option (model unset) — Ada is at index 1.
+    (select.options[1] as HTMLOptionElement).selected = true;
     fireChange(select);
     expect(model($rootScope, 'chosen')).toBe(1);
   });
@@ -174,7 +178,8 @@ describe('ngOptions disable when — per-option disabled (FS §2.5)', () => {
     );
 
     const options = Array.from(select.querySelectorAll('option'));
-    expect(options.map((o) => o.disabled)).toEqual([false, true, false]);
+    // The leading entry is the (enabled) unknown option — model unset.
+    expect(options.map((o) => o.disabled)).toEqual([false, false, true, false]);
   });
 });
 
@@ -195,7 +200,8 @@ describe('ngOptions track by — stable identity (FS §2.5)', () => {
       $rootScope,
     );
 
-    (select.options[0] as HTMLOptionElement).selected = true;
+    // Index 0 is the unknown option (model unset) — Ada is at index 1.
+    (select.options[1] as HTMLOptionElement).selected = true;
     fireChange(select);
     const chosen = model($rootScope, 'chosen') as { id: number };
     expect(chosen.id).toBe(1);
@@ -216,7 +222,8 @@ describe('ngOptions over an object — (key, value) iteration (FS §2.5)', () =>
       $rootScope,
     );
 
-    expect(optionLabels(select)).toEqual(['Red', 'Green', 'Blue']);
+    // The blank leading label is the unknown option — model unset.
+    expect(optionLabels(select)).toEqual(['', 'Red', 'Green', 'Blue']);
   });
 
   it('binds the property value as the model value', () => {
@@ -228,7 +235,8 @@ describe('ngOptions over an object — (key, value) iteration (FS §2.5)', () =>
       $rootScope,
     );
 
-    (select.options[1] as HTMLOptionElement).selected = true;
+    // Index 0 is the unknown option (model unset) — Green is at index 2.
+    (select.options[2] as HTMLOptionElement).selected = true;
     fireChange(select);
     expect(model($rootScope, 'chosen')).toBe('Green');
   });
@@ -247,11 +255,12 @@ describe('ngOptions — collection change regenerates options (FS §2.5)', () =>
       $compile,
       $rootScope,
     );
-    expect(optionLabels(select)).toEqual(['A']);
+    // The blank leading label is the unknown option — model unset.
+    expect(optionLabels(select)).toEqual(['', 'A']);
 
     setModel($rootScope, 'items', [{ name: 'X' }, { name: 'Y' }, { name: 'Z' }]);
     $rootScope.$digest();
-    expect(optionLabels(select)).toEqual(['X', 'Y', 'Z']);
+    expect(optionLabels(select)).toEqual(['', 'X', 'Y', 'Z']);
   });
 
   it('appending to the collection adds options in place', () => {
@@ -263,10 +272,113 @@ describe('ngOptions — collection change regenerates options (FS §2.5)', () =>
       $compile,
       $rootScope,
     );
-    expect(optionLabels(select)).toEqual(['one']);
+    // The blank leading label is the unknown option — model unset.
+    expect(optionLabels(select)).toEqual(['', 'one']);
 
     items.push({ name: 'two' });
     $rootScope.$digest();
-    expect(optionLabels(select)).toEqual(['one', 'two']);
+    expect(optionLabels(select)).toEqual(['', 'one', 'two']);
+  });
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// track by — model → view matching (PR-audit regressions)
+// ────────────────────────────────────────────────────────────────────────────
+
+describe('ngOptions track by — model→view matching', () => {
+  it('selects the option for a FRESH (non-identical) model object with a matching track-by key', () => {
+    const { $compile, $rootScope } = boot();
+    setModel($rootScope, 'items', [
+      { id: 1, name: 'Ada' },
+      { id: 2, name: 'Alan' },
+    ]);
+    const select = compile(
+      '<select ng-model="chosen" ng-options="item.name for item in items track by item.id"></select>',
+      $compile,
+      $rootScope,
+    );
+
+    // A server-fresh copy: same track-by key, different object reference.
+    setModel($rootScope, 'chosen', { id: 2, name: 'Alan (updated)' });
+    $rootScope.$digest();
+
+    expect(select.options[select.selectedIndex]?.textContent).toBe('Alan');
+  });
+
+  it('a multiple select checks options for fresh model objects by track-by key', () => {
+    const { $compile, $rootScope } = boot();
+    setModel($rootScope, 'items', [
+      { id: 1, name: 'Ada' },
+      { id: 2, name: 'Alan' },
+      { id: 3, name: 'Grace' },
+    ]);
+    const select = compile(
+      '<select multiple ng-model="chosen" ng-options="item.name for item in items track by item.id"></select>',
+      $compile,
+      $rootScope,
+    );
+
+    setModel($rootScope, 'chosen', [{ id: 1 }, { id: 3 }]);
+    $rootScope.$digest();
+
+    const selected = Array.from(select.querySelectorAll('option'))
+      .filter((o) => o.selected)
+      .map((o) => o.textContent);
+    expect(selected).toEqual(['Ada', 'Grace']);
+  });
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// unknown option + empty option (PR-audit regressions)
+// ────────────────────────────────────────────────────────────────────────────
+
+describe('ngOptions — unknown option and empty option', () => {
+  it('removes the unknown option once the model matches a generated option', () => {
+    const { $compile, $rootScope } = boot();
+    const items = [{ name: 'A' }, { name: 'B' }];
+    setModel($rootScope, 'items', items);
+    const select = compile(
+      '<select ng-model="chosen" ng-options="i.name for i in items"></select>',
+      $compile,
+      $rootScope,
+    );
+    expect(optionLabels(select)).toEqual(['', 'A', 'B']);
+
+    setModel($rootScope, 'chosen', items[1]);
+    $rootScope.$digest();
+
+    expect(optionLabels(select)).toEqual(['A', 'B']);
+    expect(select.options[select.selectedIndex]?.textContent).toBe('B');
+  });
+
+  it('preserves an author-supplied empty option and selects it for a null model', () => {
+    const { $compile, $rootScope } = boot();
+    setModel($rootScope, 'items', [{ name: 'A' }, { name: 'B' }]);
+    const select = compile(
+      '<select ng-model="chosen" ng-options="i.name for i in items"><option value="">-- choose --</option></select>',
+      $compile,
+      $rootScope,
+    );
+
+    // The placeholder survives option regeneration; a null/undefined model
+    // selects it (no unknown option is inserted).
+    expect(optionLabels(select)).toEqual(['-- choose --', 'A', 'B']);
+    expect(select.value).toBe('');
+  });
+
+  it('selecting the empty option reads back as null (view → model)', () => {
+    const { $compile, $rootScope } = boot();
+    const items = [{ name: 'A' }, { name: 'B' }];
+    setModel($rootScope, 'items', items);
+    setModel($rootScope, 'chosen', items[0]);
+    const select = compile(
+      '<select ng-model="chosen" ng-options="i.name for i in items"><option value="">-- choose --</option></select>',
+      $compile,
+      $rootScope,
+    );
+
+    select.value = '';
+    fireChange(select);
+    expect(model($rootScope, 'chosen')).toBeNull();
   });
 });

@@ -506,3 +506,42 @@ describe('input[type=email|url|search|tel|password] — baseline string handlers
     expect(typeof model($rootScope, 'v')).toBe('string');
   });
 });
+
+// ────────────────────────────────────────────────────────────────────────────
+// PR-audit regressions — radio ng-value liveness + change trigger
+// ────────────────────────────────────────────────────────────────────────────
+
+describe('radio — data-driven ng-value (PR-audit regressions)', () => {
+  it('re-checks the radio when its ng-value expression changes to match the model', () => {
+    const { $compile, $rootScope } = boot();
+    setModel($rootScope, 'color', 'alpha');
+    setModel($rootScope, 'opt', 'gamma');
+    const el = asInput(compile('<input type="radio" ng-model="color" ng-value="opt">', $compile, $rootScope));
+
+    expect(el.checked).toBe(false);
+
+    // The contributed value now matches the model — the radio must check
+    // itself on the next digest (the ng-value EXPRESSION is watched; the
+    // `value` attribute is absent, so `$observe` alone would never fire).
+    setModel($rootScope, 'opt', 'alpha');
+    $rootScope.$digest();
+    expect(el.checked).toBe(true);
+  });
+
+  it("commits under the 'change' debounce trigger", () => {
+    const { $compile, $rootScope } = boot();
+    const el = asInput(
+      compile(
+        '<input type="radio" ng-model="pick" value="a" ng-model-options="{ debounce: { change: 1000000 } }">',
+        $compile,
+        $rootScope,
+      ),
+    );
+
+    el.checked = true;
+    fireChange(el);
+    // The change-triggered commit is debounced — the model must NOT hold
+    // the value synchronously.
+    expect(model($rootScope, 'pick')).toBeUndefined();
+  });
+});

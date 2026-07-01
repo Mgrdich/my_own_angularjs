@@ -129,6 +129,12 @@ function parseUpdateEvents(raw: string | undefined): { events: string[]; hasDefa
       events.push(token);
     }
   }
+  // A lone `'*'` (no real events, no `default`) resets inheritance and
+  // falls back to the handler's default events — otherwise NOTHING would
+  // ever commit the view value and the control would be read-only.
+  if (!hasDefault && events.length === 0) {
+    hasDefault = true;
+  }
   return { events, hasDefault };
 }
 

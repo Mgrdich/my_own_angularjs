@@ -163,7 +163,7 @@ value** — emptiness is `required`'s concern alone, so `required` +
 | Directive | Key | Rule |
 | --- | --- | --- |
 | `required` / `ng-required="expr"` | `required` | non-empty (conditional form gates on `expr`) |
-| `ng-minlength` / `ng-maxlength` | `minlength` / `maxlength` | text length bound |
+| `minlength` / `maxlength` / `ng-minlength` / `ng-maxlength` | `minlength` / `maxlength` | text length bound (native + `ng-` spellings both register) |
 | `pattern` / `ng-pattern` | `pattern` | regex match (literal `/…/`, expression `RegExp`, or string) |
 | `min` / `max` (on `number` / `range` / date) | `min` / `max` | numeric / `Date` range |
 | `email` / `number` / `url` (type) | `email` / `number` / `url` | wired by the input-type handler, not a standalone attribute |
@@ -239,8 +239,10 @@ special `'*'` token appears in `updateOn` (which resets inheritance).
   objects / numbers, not just strings.
 - **`ngList`** adds a `$parser` (split → trimmed array) + `$formatter`
   (join) so `<input ng-model="tags" ng-list>` turns a delimited string
-  into an **array**. The delimiter is the attribute value (default `,`);
-  a `/…/` value is a regex split.
+  into an **array**. The delimiter is the attribute value (default
+  `', '`); splitting trims it, joining uses the RAW value (upstream
+  `value.join(ngList)`); a `/…/` value is a regex split (a project
+  extension).
 - **`ngChange`** registers its expression into `$viewChangeListeners`, so
   it fires ONLY on a committed **user** change — never on a programmatic
   model change.

@@ -9,17 +9,18 @@
  *    delimiter, trims each part, and drops empty trailing parts — so
  *    `"a, b, c"` becomes `['a', 'b', 'c']`;
  *  - a `$formatter` (model → view) that joins an array back into a
- *    delimited string using a canonical `<delimiter> ` separator (the
- *    delimiter followed by a space, AngularJS parity).
+ *    delimited string using the RAW attribute value as the separator
+ *    (AngularJS parity — `value.join(ngList)`; the default is `', '`).
  *
- * **Delimiter forms (AngularJS parity).** The `ng-list` attribute value is
- * the delimiter; an absent / empty value defaults to `,`. A value wrapped
- * in slashes (`/regex/`) is treated as a REGEXP delimiter for SPLITTING
- * (e.g. a `\s`-tolerant comma) — the join then uses the raw source between
- * the slashes as a literal separator plus a trailing space, matching upstream
- * (`ngList` joins with the trimmed original delimiter). A plain string
- * delimiter is trimmed for splitting so `ng-list=", "` and `ng-list=","`
- * behave alike.
+ * **Delimiter forms.** The `ng-list` attribute value is the delimiter; an
+ * absent / empty value defaults to `', '` (AngularJS parity). A plain
+ * string delimiter is trimmed for SPLITTING (so `ng-list=", "` and
+ * `ng-list=","` split alike, upstream parity) but joins with the raw
+ * value (`ng-list="|"` joins `'a|b'`, `ng-list=", "` joins `'a, b'`). A
+ * value wrapped in slashes (`/regex/`) is treated as a REGEXP delimiter
+ * for splitting (e.g. a `\s`-tolerant comma) — a project EXTENSION
+ * (upstream has no regexp form); the join then derives a literal
+ * separator from the source plus a trailing space.
  *
  * `require: 'ngModel'` — `ngList` only makes sense on an `ng-model`
  * control. Registered on `ngModule` only (DI-only) — reachable via
@@ -46,7 +47,8 @@ interface ListDelimiter {
  * Resolve the `ng-list` attribute value into split + join delimiters.
  * A `/…/` value is a regexp split (the source between the slashes); the
  * join uses the trimmed literal source plus a trailing space. A plain
- * value is trimmed for both; an absent / empty value defaults to `,`.
+ * value is trimmed for splitting but joins RAW (AngularJS parity —
+ * `value.join(ngList)`); an absent / empty value defaults to `', '`.
  */
 function resolveDelimiter(raw: unknown): ListDelimiter {
   const value = typeof raw === 'string' ? raw : '';
@@ -55,8 +57,8 @@ function resolveDelimiter(raw: unknown): ListDelimiter {
     const source = regexMatch[1];
     return { split: new RegExp(source), join: `${trimSeparatorForJoin(source)} ` };
   }
-  const trimmed = value.trim() === '' ? ',' : value.trim();
-  return { split: trimmed, join: `${trimmed} ` };
+  const rawOrDefault = value.trim() === '' ? ', ' : value;
+  return { split: rawOrDefault.trim(), join: rawOrDefault };
 }
 
 /**

@@ -175,6 +175,24 @@ export function buildTranscludeFn(args: BuildTranscludeFnArgs): TranscludeFn {
       }
     }
 
+    // Invoke `cloneAttachFn` BEFORE linking (AngularJS `publicLinkFn`
+    // parity — `cloneConnectFn` runs before `compositeLinkFn`). The
+    // structural directives (`ng-if` / `ng-switch` / `ng-repeat` /
+    // `ng-include`) insert the clone into the live DOM inside this
+    // callback, so by the time the clone LINKS its `parentElement`
+    // chain is real — `require: '^' / '^^'` resolution, the
+    // `$$ngControllers` stash walks (forms / `ngModelOptions`), and the
+    // `$$ngBoundTransclude` marker walk all see their DOM ancestors.
+    // Linking first (the pre-fix order) resolved every ancestor lookup
+    // against a detached fragment and silently missed.
+    if (cloneAttachFn !== undefined) {
+      try {
+        cloneAttachFn(clones, transclusionScope);
+      } catch (err) {
+        invokeExceptionHandler(exceptionHandler, err, '$compile');
+      }
+    }
+
     // Forward through the internal cloneMap-aware Linker call form.
     // The PUBLIC `Linker` type at `directive-types.ts` is
     // `(scope) => Element | NodeList | Comment`; the runtime callable
@@ -185,14 +203,6 @@ export function buildTranscludeFn(args: BuildTranscludeFnArgs): TranscludeFn {
       (linker as unknown as LinkerWithCloneMap)(transclusionScope, cloneMap);
     } catch (err) {
       invokeExceptionHandler(exceptionHandler, err, '$compile');
-    }
-
-    if (cloneAttachFn !== undefined) {
-      try {
-        cloneAttachFn(clones, transclusionScope);
-      } catch (err) {
-        invokeExceptionHandler(exceptionHandler, err, '$compile');
-      }
     }
 
     return clones;

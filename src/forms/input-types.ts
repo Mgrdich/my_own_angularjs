@@ -452,12 +452,24 @@ export const radioInputType: InputTypeHandler = ({ scope, element, attrs, ctrl, 
       return;
     }
     applyDuringEvent(scope, exceptionHandler, () => {
-      ctrl.$setViewValue(currentValue());
+      // `'change'` is the debounce trigger (AngularJS parity — a
+      // `debounce: { change: … }` map applies to radio commits).
+      ctrl.$setViewValue(currentValue(), 'change');
     });
   };
   control.addEventListener('change', listener);
 
-  // Re-render when `ng-value` changes so a data-driven value stays in sync.
+  // Re-render when this radio's contributed value changes so a
+  // data-driven value stays in sync: watch the `ng-value` EXPRESSION when
+  // present (the `value` attribute is absent then, so `$observe` alone
+  // would never re-fire), else observe the (possibly interpolated)
+  // `value` attribute.
+  const ngValueExpr = attrs['ngValue'];
+  if (typeof ngValueExpr === 'string') {
+    scope.$watch(ngValueExpr, () => {
+      ctrl.$render();
+    });
+  }
   const stopObserve = attrs.$observe('value', () => {
     ctrl.$render();
   });

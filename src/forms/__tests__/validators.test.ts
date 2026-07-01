@@ -398,3 +398,155 @@ describe('$validate (FS §2.7)', () => {
     expect(model($rootScope, 'v')).toBeUndefined();
   });
 });
+
+// ────────────────────────────────────────────────────────────────────────────
+// PR-audit regressions — min/max check the PARSED model value
+// ────────────────────────────────────────────────────────────────────────────
+
+describe('min/max validate the parsed model value (parity)', () => {
+  it('a NaN-parsing view value ("." → NaN) is treated as empty — min/max pass', () => {
+    const { $compile, $rootScope } = boot();
+    const el = input(compile('<input type="number" ng-model="n" min="5" max="10">', $compile, $rootScope));
+    const ctrl = ctrlOf(el);
+
+    // NUMBER_RE accepts "." (parses to NaN); NaN is EMPTY for min/max —
+    // emptiness is `required`'s concern (upstream checks modelValue).
+    ctrl.$setViewValue('.');
+    expect(ctrl.$error['min']).toBeUndefined();
+    expect(ctrl.$error['max']).toBeUndefined();
+  });
+
+  it('still fails/passes min against real numbers', () => {
+    const { $compile, $rootScope } = boot();
+    const el = input(compile('<input type="number" ng-model="n" min="5">', $compile, $rootScope));
+    const ctrl = ctrlOf(el);
+
+    fireInput(el, '3');
+    expect(ctrl.$error['min']).toBe(true);
+
+    fireInput(el, '7');
+    expect(ctrl.$error['min']).toBeUndefined();
+    expect(model($rootScope, 'n')).toBe(7);
+  });
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// PR-audit regressions — native minlength / maxlength attributes
+// ────────────────────────────────────────────────────────────────────────────
+
+describe('native minlength/maxlength attributes (parity)', () => {
+  it('<input minlength="3"> (no ng- prefix) validates', () => {
+    const { $compile, $rootScope } = boot();
+    const el = input(compile('<input ng-model="v" minlength="3">', $compile, $rootScope));
+    const ctrl = ctrlOf(el);
+
+    fireInput(el, 'ab');
+    expect(ctrl.$error['minlength']).toBe(true);
+
+    fireInput(el, 'abc');
+    expect(ctrl.$error['minlength']).toBeUndefined();
+  });
+
+  it('<input maxlength="2"> (no ng- prefix) validates', () => {
+    const { $compile, $rootScope } = boot();
+    const el = input(compile('<input ng-model="v" maxlength="2">', $compile, $rootScope));
+    const ctrl = ctrlOf(el);
+
+    ctrl.$setViewValue('abc');
+    expect(ctrl.$error['maxlength']).toBe(true);
+
+    ctrl.$setViewValue('ab');
+    expect(ctrl.$error['maxlength']).toBeUndefined();
+  });
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// PR-audit regressions — async pending aggregates onto the FORM
+// ────────────────────────────────────────────────────────────────────────────
+
+describe('form-level $pending + ng-pending (parity)', () => {
+  interface FormLike {
+    $pending: Record<string, unknown[]> | undefined;
+    $valid: boolean;
+    $invalid: boolean;
+    $removeControl: (c: unknown) => void;
+  }
+
+  it('a control with an outstanding async rule marks the enclosing form pending', () => {
+    const { $compile, $rootScope, $q } = boot();
+    const form = compile('<form name="f"><input name="i" ng-model="v"></form>', $compile, $rootScope);
+    const el = input(form.querySelector('input') as HTMLElement);
+    const ctrl = ctrlOf(el);
+    const formCtrl = model($rootScope, 'f') as FormLike;
+
+    let deferred: QDeferred<unknown> | undefined;
+    ctrl.$asyncValidators['server'] = () => {
+      deferred = $q.defer();
+      return deferred.promise;
+    };
+
+    fireInput(el, 'abc');
+
+    // Outstanding async → the FORM aggregates the pending key too.
+    expect(formCtrl.$pending?.['server']).toContain(ctrl);
+    expect(form.classList.contains('ng-pending')).toBe(true);
+    expect(formCtrl.$valid).toBe(false); // pending is neither valid nor invalid
+    expect(formCtrl.$invalid).toBe(false);
+
+    // Resolve → the form's pending map empties back to undefined.
+    deferred?.resolve('ok');
+    $rootScope.$digest();
+    expect(formCtrl.$pending).toBeUndefined();
+    expect(form.classList.contains('ng-pending')).toBe(false);
+    expect(formCtrl.$valid).toBe(true);
+  });
+
+  it('a rejected async rule moves the form from pending to invalid', () => {
+    const { $compile, $rootScope, $q } = boot();
+    const form = compile('<form name="f"><input name="i" ng-model="v"></form>', $compile, $rootScope);
+    const el = input(form.querySelector('input') as HTMLElement);
+    const ctrl = ctrlOf(el);
+    const formCtrl = model($rootScope, 'f') as FormLike & { $error: Record<string, unknown[]> };
+
+    let deferred: QDeferred<unknown> | undefined;
+    ctrl.$asyncValidators['server'] = () => {
+      deferred = $q.defer();
+      return deferred.promise;
+    };
+
+    fireInput(el, 'abc');
+    expect(formCtrl.$pending?.['server']).toContain(ctrl);
+
+    deferred?.reject('taken');
+    $rootScope.$digest();
+    expect(formCtrl.$pending).toBeUndefined();
+    expect(formCtrl.$error['server']).toContain(ctrl);
+    expect(formCtrl.$invalid).toBe(true);
+    expect(form.classList.contains('ng-pending')).toBe(false);
+  });
+
+  it('removing a control while its async rule is in flight clears the form pending entry', () => {
+    const { $compile, $rootScope, $q } = boot();
+    const form = compile(
+      '<form name="f"><div ng-if="show"><input name="i" ng-model="v"></div></form>',
+      $compile,
+      $rootScope,
+    );
+    ($rootScope as unknown as Record<string, unknown>)['show'] = true;
+    $rootScope.$digest();
+    const el = input(form.querySelector('input') as HTMLElement);
+    const ctrl = ctrlOf(el);
+    const formCtrl = model($rootScope, 'f') as FormLike;
+
+    ctrl.$asyncValidators['server'] = () => $q.defer().promise;
+    fireInput(el, 'abc');
+    expect(formCtrl.$pending?.['server']).toContain(ctrl);
+
+    // Remove the control (ng-if teardown) — the pending entry must go too.
+    ($rootScope as unknown as Record<string, unknown>)['show'] = false;
+    $rootScope.$digest();
+    expect(formCtrl.$pending).toBeUndefined();
+    expect(form.classList.contains('ng-pending')).toBe(false);
+    expect(formCtrl.$valid).toBe(true);
+  });
+});

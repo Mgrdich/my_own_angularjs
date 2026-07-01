@@ -127,7 +127,7 @@ describe('ngList — custom delimiter (FS §2.5)', () => {
     expect(model($rootScope, 'tags')).toEqual(['a', 'b', 'c']);
   });
 
-  it('joins with the custom delimiter (trimmed + a trailing space)', () => {
+  it('joins with the raw custom delimiter (AngularJS parity)', () => {
     const { $compile, $rootScope } = boot();
     const el = compile('<input ng-model="tags" ng-list="; ">', $compile, $rootScope);
 
@@ -145,7 +145,9 @@ describe('ngList — custom delimiter (FS §2.5)', () => {
 
     setModel($rootScope, 'tags', ['p', 'q']);
     $rootScope.$digest();
-    expect(el.value).toBe('p| q');
+    // Joins with the RAW attribute value (upstream `value.join(ngList)`) —
+    // no injected space.
+    expect(el.value).toBe('p|q');
   });
 });
 

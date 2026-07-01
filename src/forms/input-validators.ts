@@ -92,8 +92,8 @@ function parseNumberAttrVal(val: unknown): number | undefined {
 export function wireNumericMinMax(scope: Scope, attrs: Attributes, ctrl: NgModelControllerImpl): void {
   if (typeof attrs['min'] === 'string' || typeof attrs['ngMin'] === 'string') {
     let parsedMin = parseNumberAttrVal(attrs['min'] ?? evalAttrExpr(attrs, 'ngMin', scope));
-    ctrl.$validators['min'] = (_modelValue: unknown, viewValue: unknown): boolean =>
-      ctrl.$isEmpty(viewValue) || parsedMin === undefined || Number(viewValue) >= parsedMin;
+    ctrl.$validators['min'] = (modelValue: unknown): boolean =>
+      ctrl.$isEmpty(modelValue) || parsedMin === undefined || Number(modelValue) >= parsedMin;
     wireBoundSource(scope, attrs, 'min', 'ngMin', (val) => {
       parsedMin = parseNumberAttrVal(val);
       ctrl.$validate();
@@ -102,8 +102,8 @@ export function wireNumericMinMax(scope: Scope, attrs: Attributes, ctrl: NgModel
 
   if (typeof attrs['max'] === 'string' || typeof attrs['ngMax'] === 'string') {
     let parsedMax = parseNumberAttrVal(attrs['max'] ?? evalAttrExpr(attrs, 'ngMax', scope));
-    ctrl.$validators['max'] = (_modelValue: unknown, viewValue: unknown): boolean =>
-      ctrl.$isEmpty(viewValue) || parsedMax === undefined || Number(viewValue) <= parsedMax;
+    ctrl.$validators['max'] = (modelValue: unknown): boolean =>
+      ctrl.$isEmpty(modelValue) || parsedMax === undefined || Number(modelValue) <= parsedMax;
     wireBoundSource(scope, attrs, 'max', 'ngMax', (val) => {
       parsedMax = parseNumberAttrVal(val);
       ctrl.$validate();

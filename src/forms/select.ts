@@ -181,6 +181,12 @@ export class SelectControllerImpl implements SelectController {
   }
 
   writeMultiValue(values: readonly unknown[]): void {
+    if (this.ngOptionsHooks !== undefined) {
+      // `ngOptions` owns the option list — its writeValue handles the
+      // multiple case (array of model values) too.
+      this.ngOptionsHooks.writeValue(values);
+      return;
+    }
     this.removeUnknownOption();
     const wanted = new Set(values);
     for (const option of Array.from(this.element.options)) {
@@ -372,7 +378,7 @@ function optionFactory(): DirectiveFactoryReturn {
     // option's text content (AngularJS parity — `<option>Blue</option>`
     // contributes `'Blue'`).
     const valueAttr = attrs['value'];
-    const key = typeof valueAttr === 'string' ? valueAttr : optionEl.text;
+    let key = typeof valueAttr === 'string' ? valueAttr : optionEl.text;
 
     selectCtrl.registerOption(key, key, optionEl);
     // A newly-arrived option may complete the model's pending selection
@@ -380,6 +386,24 @@ function optionFactory(): DirectiveFactoryReturn {
     // option). Re-render on the next digest turn.
     if (selectCtrl.ngModelCtrl !== null) {
       selectCtrl.ngModelCtrl.$render();
+    }
+
+    // An interpolated `value="{{…}}"` re-keys the option when it changes
+    // (AngularJS parity — the old key would otherwise contribute a stale
+    // string to the model).
+    if (typeof valueAttr === 'string') {
+      const stopObserve = attrs.$observe('value', (newValue) => {
+        if (typeof newValue !== 'string' || newValue === key) {
+          return;
+        }
+        selectCtrl.removeOption(key);
+        key = newValue;
+        selectCtrl.registerOption(key, key, optionEl);
+        if (selectCtrl.ngModelCtrl !== null) {
+          selectCtrl.ngModelCtrl.$render();
+        }
+      });
+      scope.$on('$destroy', stopObserve);
     }
 
     scope.$on('$destroy', () => {

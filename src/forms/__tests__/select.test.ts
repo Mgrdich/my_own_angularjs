@@ -192,3 +192,32 @@ describe('select[multiple] — binds an array of chosen values (FS §2.4)', () =
     expect(select.classList.contains('ng-empty')).toBe(true);
   });
 });
+
+// ────────────────────────────────────────────────────────────────────────────
+// PR-audit regression — interpolated option value re-keys on change
+// ────────────────────────────────────────────────────────────────────────────
+
+describe('option — interpolated value="{{…}}" (PR-audit regression)', () => {
+  it('re-keys the option when the interpolated value changes, so model→view still matches', () => {
+    const { $compile, $rootScope } = boot();
+    setModel($rootScope, 'v', 'a');
+    const select = compile(
+      '<select ng-model="chosen"><option value="{{v}}">Pick</option></select>',
+      $compile,
+      $rootScope,
+    );
+
+    // Initial key is the interpolated value.
+    setModel($rootScope, 'chosen', 'a');
+    $rootScope.$digest();
+    expect(select.value).toBe('a');
+
+    // The interpolated value changes — the option must be re-registered
+    // under the new key so a matching model selects it (not the unknown
+    // option).
+    setModel($rootScope, 'v', 'b');
+    setModel($rootScope, 'chosen', 'b');
+    $rootScope.$digest();
+    expect(select.value).toBe('b');
+  });
+});

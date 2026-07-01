@@ -349,3 +349,26 @@ describe('ngModelOptions — timezone (FS §2.5)', () => {
     expect(elB.value).toBe('2021-01-02');
   });
 });
+
+// ────────────────────────────────────────────────────────────────────────────
+// PR-audit regression — a lone `updateOn: '*'` resets to default events
+// ────────────────────────────────────────────────────────────────────────────
+
+describe("ngModelOptions — updateOn: '*' alone (inheritance reset)", () => {
+  it('resets an inherited blur-only updateOn back to the default input events', () => {
+    const { $compile, $rootScope } = boot();
+    const root = compile(
+      '<div ng-model-options="{ updateOn: \'blur\' }">' +
+        '<input ng-model="v" ng-model-options="{ updateOn: \'*\' }">' +
+        '</div>',
+      $compile,
+      $rootScope,
+    );
+    const el = findInput(root);
+
+    // The child reset inheritance — typing must commit immediately (the
+    // handler's default events), NOT wait for blur.
+    type(el, 'typed');
+    expect(model($rootScope, 'v')).toBe('typed');
+  });
+});

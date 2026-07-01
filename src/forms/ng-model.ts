@@ -170,7 +170,10 @@ function ngModelFactory($exceptionHandler: ExceptionHandler, $timeout: TimeoutSe
     }
     scope.$on('$destroy', () => {
       form.$removeControl(ctrl);
-      if (ctrl.$name !== undefined) {
+      // Clear the named slot only while it still holds THIS control — a
+      // newer same-named control (e.g. an `ng-if` remount whose link ran
+      // before this teardown) must not be clobbered.
+      if (ctrl.$name !== undefined && (form as unknown as Record<string, unknown>)[ctrl.$name] === ctrl) {
         unpublishNamedControlOnForm(form, ctrl.$name);
       }
     });
@@ -277,15 +280,20 @@ function ngModelFactory($exceptionHandler: ExceptionHandler, $timeout: TimeoutSe
           ctrl.$$lastCommittedViewValue = formatted;
           ctrl.$render();
           ctrl.$isEmptyClassUpdate(formatted);
+          // Re-run validation against the externally-changed model value so
+          // a programmatic model change (not just user input) re-evaluates
+          // the validators (spec 039 Slice 5). `$$runValidators` bumps the
+          // generation id, cancelling any in-flight async pass. INSIDE the
+          // render guard (AngularJS `ngModelWatch` parity) — when the
+          // formatted value matches what the view already shows, the view's
+          // prior parse/validation state stands (re-validating here with
+          // `parserValid: undefined` would wrongly clear a live `parse`
+          // error while the rejected text is still on screen).
+          ctrl.$$runValidators(modelValue, formatted, undefined, () => {
+            /* model-side revalidation: validity classes are the only output;
+               the scope model is authoritative here, so no write-back. */
+          });
         }
-        // Re-run validation against the externally-changed model value so a
-        // programmatic model change (not just user input) re-evaluates the
-        // validators (spec 039 Slice 5). `$$runValidators` bumps the
-        // generation id, cancelling any in-flight async pass.
-        ctrl.$$runValidators(modelValue, ctrl.$$lastCommittedViewValue, undefined, () => {
-          /* model-side revalidation: validity classes are the only output;
-             the scope model is authoritative here, so no write-back. */
-        });
       },
     );
   };

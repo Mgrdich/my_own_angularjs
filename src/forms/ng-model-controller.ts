@@ -577,12 +577,12 @@ export class NgModelControllerImpl implements NgModelController {
     setValidClass(this.element, !anyInvalid);
     setPendingClass(this.element, anyPending);
 
-    // Bubble this control's per-key validity into the enclosing form so
-    // the form's aggregate `$error` / `$valid` reflects it. A form-less
-    // control's `$$parentForm` is `nullFormCtrl` (no-op). A pending key is
-    // treated as valid-for-now toward the form (parity — the form's
-    // `$error` tracks failures, not pending).
-    this.$$parentForm.$setValidity(key, isValid !== false, this);
+    // Bubble this control's per-key tri-state into the enclosing form so
+    // the form's aggregate `$error` / `$pending` / `$valid` reflects it
+    // (`undefined` marks the key pending on the form too — AngularJS
+    // parity). A form-less control's `$$parentForm` is `nullFormCtrl`
+    // (no-op).
+    this.$$parentForm.$setValidity(key, isValid, this);
   }
 
   $setPristine(): void {

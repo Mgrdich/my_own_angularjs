@@ -31,6 +31,8 @@ import {
   ngRequiredDirective,
   patternDirective,
   requiredDirective,
+  MAXLENGTH_NAME,
+  MINLENGTH_NAME,
   NG_MAXLENGTH_NAME,
   NG_MINLENGTH_NAME,
   NG_PATTERN_NAME,
@@ -73,7 +75,12 @@ export function registerForms($compileProvider: $CompileProvider): void {
   // by the corresponding `inputType` handler, NOT here (AngularJS parity).
   $compileProvider.directive(REQUIRED_NAME, requiredDirective);
   $compileProvider.directive(NG_REQUIRED_NAME, ngRequiredDirective);
+  // Both the native attribute name AND the `ng-` alias register the same
+  // factory (AngularJS parity — `<input minlength="3">` validates too;
+  // the factory reads whichever attribute is present).
+  $compileProvider.directive(MINLENGTH_NAME, minlengthDirective);
   $compileProvider.directive(NG_MINLENGTH_NAME, minlengthDirective);
+  $compileProvider.directive(MAXLENGTH_NAME, maxlengthDirective);
   $compileProvider.directive(NG_MAXLENGTH_NAME, maxlengthDirective);
   $compileProvider.directive(PATTERN_NAME, patternDirective);
   $compileProvider.directive(NG_PATTERN_NAME, ngPatternDirective);

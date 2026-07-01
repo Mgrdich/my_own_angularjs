@@ -308,3 +308,38 @@ describe('form — form-less ngModel still works via nullFormCtrl', () => {
     consoleSpy.mockRestore();
   });
 });
+
+// ────────────────────────────────────────────────────────────────────────────
+// PR-audit regression — a control inside a REAL ng-if registers with the form
+// ────────────────────────────────────────────────────────────────────────────
+
+describe('form — controls inside structural directives (PR-audit regression)', () => {
+  it('an ng-model inside ng-if resolves the enclosing form (clone attaches BEFORE linking)', () => {
+    const { $compile, $rootScope } = boot();
+    const form = compile(
+      '<form name="f"><div ng-if="show"><input name="i" ng-model="v" required></div></form>',
+      $compile,
+      $rootScope,
+    );
+
+    ($rootScope as unknown as Record<string, unknown>)['show'] = true;
+    $rootScope.$digest();
+
+    const fc = formCtrl(form);
+    const el = form.querySelector('input') as HTMLInputElement;
+    const ctrl = modelCtrl(el);
+
+    // The clone was attached to the live DOM before linking, so the
+    // `?^^form` require resolved the real form — the empty required
+    // control makes the FORM invalid, and the named slot is published.
+    expect(fc.$error['required']).toContain(ctrl);
+    expect(fc.$invalid).toBe(true);
+    expect((fc as unknown as Record<string, unknown>)['i']).toBe(ctrl);
+
+    // Toggling the branch away removes the contribution again.
+    ($rootScope as unknown as Record<string, unknown>)['show'] = false;
+    $rootScope.$digest();
+    expect(fc.$valid).toBe(true);
+    expect((fc as unknown as Record<string, unknown>)['i']).toBeUndefined();
+  });
+});

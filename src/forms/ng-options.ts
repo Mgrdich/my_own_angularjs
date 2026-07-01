@@ -140,6 +140,31 @@ function ngOptionsFactory($exceptionHandler: ExceptionHandler): DirectiveFactory
     let options: GeneratedOption[] = [];
     let byKey = new Map<string, GeneratedOption>();
 
+    // An author-supplied placeholder `<option value="">` in the template
+    // survives option regeneration (AngularJS's "empty option") — it is
+    // selected for a `null` / `undefined` model and reads back as `null`.
+    const emptyOption = ((): HTMLOptionElement | null => {
+      for (const option of Array.from(selectElement.options)) {
+        if (option.value === '') {
+          return option;
+        }
+      }
+      return null;
+    })();
+
+    // The synthetic "unknown option" shown when the model matches no
+    // generated option and no empty option exists (AngularJS parity — a
+    // mismatched model must not silently leave a stale selection).
+    const unknownOption = document.createElement('option');
+    unknownOption.value = '?';
+    unknownOption.textContent = '';
+
+    function removeUnknownOption(): void {
+      if (unknownOption.parentNode !== null) {
+        unknownOption.parentNode.removeChild(unknownOption);
+      }
+    }
+
     /**
      * Render the current model value onto the DOM selection. A single
      * select matches ONE option key; a `multiple` select matches many.
@@ -150,14 +175,34 @@ function ngOptionsFactory($exceptionHandler: ExceptionHandler): DirectiveFactory
       }
       if (selectCtrl.multiple) {
         const wanted = Array.isArray(value) ? value : [];
+        const wantedKeys = new Set<string>();
+        for (const item of wanted) {
+          const key = keyForValue(item);
+          if (key !== null) {
+            wantedKeys.add(key);
+          }
+        }
         for (const option of Array.from(selectElement.options)) {
-          const generated = byKey.get(option.value);
-          option.selected = generated !== undefined && wanted.some((v) => v === generated.value);
+          option.selected = wantedKeys.has(option.value);
         }
         return;
       }
       const matchKey = keyForValue(value);
-      selectElement.value = matchKey ?? '';
+      if (matchKey !== null) {
+        removeUnknownOption();
+        selectElement.value = matchKey;
+        return;
+      }
+      if ((value === null || value === undefined) && emptyOption !== null) {
+        removeUnknownOption();
+        selectElement.value = '';
+        return;
+      }
+      // No generated option matches — show the synthetic unknown option.
+      if (unknownOption.parentNode === null) {
+        selectElement.insertBefore(unknownOption, selectElement.firstChild);
+      }
+      selectElement.value = '?';
     }
 
     /** Read the DOM selection back to the real model value(s). */
@@ -178,11 +223,28 @@ function ngOptionsFactory($exceptionHandler: ExceptionHandler): DirectiveFactory
         return selected;
       }
       const generated = byKey.get(selectElement.value);
-      return generated === undefined ? undefined : generated.value;
+      if (generated !== undefined) {
+        return generated.value;
+      }
+      if (selectElement.value === '' && emptyOption !== null) {
+        // The author-supplied placeholder is selected — model is `null`.
+        return null;
+      }
+      return undefined;
     }
 
-    /** The generated option key whose value strictly equals `value`, else null. */
+    /**
+     * The generated option key matching `value`. With `track by`, matching
+     * is by the track-by key evaluated on the candidate value (a fresh
+     * object with the same identity still matches — AngularJS parity);
+     * otherwise by strict value equality.
+     */
     function keyForValue(value: unknown): string | null {
+      if (descriptor.trackBy !== undefined) {
+        const scopeRecord = scope as unknown as Record<string, unknown>;
+        const trackKey = safeString(descriptor.trackBy(scopeRecord, { [descriptor.valueName]: value }));
+        return byKey.has(trackKey) ? trackKey : null;
+      }
       for (const option of options) {
         if (option.value === value) {
           return option.key;
@@ -235,6 +297,11 @@ function ngOptionsFactory($exceptionHandler: ExceptionHandler): DirectiveFactory
       // Clear existing children (options + optgroups).
       while (selectElement.firstChild !== null) {
         selectElement.removeChild(selectElement.firstChild);
+      }
+
+      // The author-supplied placeholder survives regeneration, first.
+      if (emptyOption !== null) {
+        selectElement.appendChild(emptyOption);
       }
 
       const groupContainers = new Map<string, HTMLOptGroupElement>();

@@ -180,7 +180,11 @@ export function runValidators(
       validationDone(allValid);
     },
     () => {
-      /* $q.all here never rejects — each promise's rejection is caught above. */
+      // Each validator promise's rejection is caught above, so this fires
+      // only when a settlement callback itself threw. Still finalize as
+      // failed so the control never gets stuck permanently `ng-pending`.
+      updatePendingClass(host);
+      validationDone(false);
     },
   );
 }
