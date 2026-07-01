@@ -38,6 +38,7 @@ import type { Scope } from '@core/index';
 
 import type { Attributes } from '@compiler/directive-types';
 
+import { type FormController, nullFormCtrl } from './form-controller';
 import { setEmptyClass, setPristineClass, setTouchedClass, setValidationClass, setValidClass } from './state-classes';
 
 /**
@@ -173,6 +174,18 @@ export class NgModelControllerImpl implements NgModelController {
    */
   $$lastCommittedViewValue: unknown = Number.NaN;
 
+  /**
+   * The enclosing form (spec 039 Slice 2). Defaults to {@link nullFormCtrl}
+   * so a form-less `ngModel` needs no null-check; `ngModel`'s link
+   * re-points it to the resolved `require: '?^^form'` form and registers
+   * this control with it. Every per-rule `$setValidity` bubbles up to the
+   * form so the form's aggregate reflects this control's validity; the
+   * first user change bubbles `$setDirty`.
+   *
+   * @internal
+   */
+  $$parentForm: FormController = nullFormCtrl;
+
   private readonly scope: Scope;
   private readonly element: Element;
 
@@ -264,6 +277,11 @@ export class NgModelControllerImpl implements NgModelController {
     this.$valid = !anyInvalid;
     this.$invalid = anyInvalid;
     setValidClass(this.element, this.$valid);
+
+    // Bubble this control's per-key validity into the enclosing form so
+    // the form's aggregate `$error` / `$valid` reflects it. A form-less
+    // control's `$$parentForm` is `nullFormCtrl` (no-op).
+    this.$$parentForm.$setValidity(key, isValid, this);
   }
 
   $setPristine(): void {
@@ -276,6 +294,9 @@ export class NgModelControllerImpl implements NgModelController {
     this.$dirty = true;
     this.$pristine = false;
     setPristineClass(this.element, false);
+    // The first user change bubbles up so the enclosing form (and its
+    // ancestors) become dirty too.
+    this.$$parentForm.$setDirty();
   }
 
   $setTouched(): void {

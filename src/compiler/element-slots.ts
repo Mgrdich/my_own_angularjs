@@ -141,3 +141,35 @@ export function isNgManagedElement(el: Element): el is NgManagedElement {
 export function isNgManagedComment(el: Comment): el is NgManagedComment {
   return NG_CLEANUP_QUEUE in el || NG_BOUND_TRANSCLUDE in el;
 }
+
+/**
+ * Stash a controller instance under `name` in the element's
+ * `$$ngControllers` map, creating the (non-enumerable) map lazily on
+ * first use — the same write the compiler's per-element controller seam
+ * performs, exposed so a directive can publish a controller under an
+ * ADDITIONAL key beyond its own directive name.
+ *
+ * The motivating case (spec 039 Slice 2) is `form` / `ngForm`: both
+ * directives share one `FormController`, and `ngModel` / nested forms
+ * resolve the enclosing form via `require: '?^^form'`. The controller
+ * seam stashes each directive's controller under its own directive name
+ * (`form` for `<form>`, `ngForm` for `<ng-form>`), so the `ngForm`
+ * variant additionally stashes itself under `'form'` here to make the
+ * single `'form'` require key resolve for BOTH element shapes.
+ */
+export function stashController(element: Element, name: string, instance: unknown): void {
+  let map: Map<string, unknown> | undefined;
+  if (isNgManagedElement(element)) {
+    map = element[NG_CONTROLLERS];
+  }
+  if (map === undefined) {
+    map = new Map<string, unknown>();
+    Object.defineProperty(element, NG_CONTROLLERS, {
+      value: map,
+      writable: true,
+      configurable: true,
+      enumerable: false,
+    });
+  }
+  map.set(name, instance);
+}

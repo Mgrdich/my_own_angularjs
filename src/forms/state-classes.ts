@@ -38,6 +38,7 @@ const UNTOUCHED_CLASS = 'ng-untouched';
 const TOUCHED_CLASS = 'ng-touched';
 const EMPTY_CLASS = 'ng-empty';
 const NOT_EMPTY_CLASS = 'ng-not-empty';
+const SUBMITTED_CLASS = 'ng-submitted';
 
 /**
  * Add `addClass` and remove `removeClass` on the element. Both arguments
@@ -84,6 +85,16 @@ export function setTouchedClass(element: Element, isUntouched: boolean): void {
  */
 export function setEmptyClass(element: Element, isEmpty: boolean): void {
   applyClasses(element, isEmpty ? EMPTY_CLASS : NOT_EMPTY_CLASS, isEmpty ? NOT_EMPTY_CLASS : EMPTY_CLASS);
+}
+
+/**
+ * Reflect the submitted state on a FORM element: add `ng-submitted`
+ * once a submit has been attempted; remove it on `$setPristine`. There
+ * is no mutually-exclusive partner class (AngularJS parity — a form is
+ * simply either submitted or not), so this toggles the single class.
+ */
+export function setSubmittedClass(element: Element, isSubmitted: boolean): void {
+  applyClasses(element, isSubmitted ? SUBMITTED_CLASS : null, isSubmitted ? null : SUBMITTED_CLASS);
 }
 
 /**

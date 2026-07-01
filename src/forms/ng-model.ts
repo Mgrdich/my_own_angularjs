@@ -43,6 +43,8 @@ import type { ControllerInvokable } from '@controller/controller-types';
 import { invokeExceptionHandler, type ExceptionHandler } from '@exception-handler/index';
 import { parse } from '@parser/index';
 
+import { FormControllerImpl, nullFormCtrl, type FormController } from './form-controller';
+import { publishNamedControlOnForm, unpublishNamedControlOnForm } from './form';
 import { NgModelControllerImpl } from './ng-model-controller';
 
 export const NG_MODEL_NAME = 'ngModel';
@@ -62,13 +64,33 @@ export class NgModelNonAssignableError extends Error {
 }
 
 /**
- * Type-narrowing view of the controller seam's 4th link argument. For
- * `require: 'ngModel'` (string form) the resolved value is the single
- * controller instance (or `null` for an optional miss). We only treat it
- * as our controller when it is a live {@link NgModelControllerImpl}.
+ * Type-narrowing view of the controller seam's 4th link argument. The
+ * `ngModel` directive declares `require: ['ngModel', '?^^form']`, so the
+ * resolved value is a 2-tuple `[ngModelController, formControllerOrNull]`.
+ * `ngChange` still declares the string form (`require: 'ngModel'`), so it
+ * receives the single controller — both shapes are handled here.
  */
 function asNgModelController(controllers: unknown): NgModelControllerImpl | null {
-  return controllers instanceof NgModelControllerImpl ? controllers : null;
+  if (controllers instanceof NgModelControllerImpl) {
+    return controllers;
+  }
+  if (Array.isArray(controllers) && controllers[0] instanceof NgModelControllerImpl) {
+    return controllers[0];
+  }
+  return null;
+}
+
+/**
+ * Read the enclosing form from the `ngModel` require tuple's 2nd slot.
+ * `require: '?^^form'` yields `null` when there is no ancestor form; a
+ * non-form value falls back to {@link nullFormCtrl} so registration is a
+ * safe no-op for a form-less control.
+ */
+function readEnclosingForm(controllers: unknown): FormController {
+  if (Array.isArray(controllers) && controllers[1] instanceof FormControllerImpl) {
+    return controllers[1];
+  }
+  return nullFormCtrl;
 }
 
 function ngModelFactory($exceptionHandler: ExceptionHandler): DirectiveFactoryReturn {
@@ -89,6 +111,26 @@ function ngModelFactory($exceptionHandler: ExceptionHandler): DirectiveFactoryRe
     if (ctrl === null) {
       return;
     }
+
+    // Register with the enclosing form (spec 039 Slice 2). Re-point the
+    // control's `$$parentForm` so its `$setValidity` / `$setDirty` bubble
+    // up, and seed the form's aggregate with this control's current
+    // validity (it starts valid, so this is a no-op failure-wise but
+    // records the control in the form's control list). A named control
+    // additionally publishes onto the FORM INSTANCE so
+    // `myForm.email.$invalid` reads in expressions.
+    const form = readEnclosingForm(controllers);
+    ctrl.$$parentForm = form;
+    form.$addControl(ctrl);
+    if (ctrl.$name !== undefined) {
+      publishNamedControlOnForm(form, ctrl.$name, ctrl);
+    }
+    scope.$on('$destroy', () => {
+      form.$removeControl(ctrl);
+      if (ctrl.$name !== undefined) {
+        unpublishNamedControlOnForm(form, ctrl.$name);
+      }
+    });
 
     const expr = attrs[NG_MODEL_NAME];
     if (typeof expr !== 'string') {
@@ -136,7 +178,11 @@ function ngModelFactory($exceptionHandler: ExceptionHandler): DirectiveFactoryRe
 
   return {
     restrict: 'A',
-    require: NG_MODEL_NAME,
+    // `['ngModel', '?^^form']` — own controller + optional enclosing form
+    // (spec 039 Slice 2). `?^^form` walks ancestors only for the shared
+    // `'form'` controller key both `form` / `ngForm` publish under; a
+    // form-less control resolves `null` and falls back to `nullFormCtrl`.
+    require: [NG_MODEL_NAME, '?^^form'],
     controller,
     link,
   };

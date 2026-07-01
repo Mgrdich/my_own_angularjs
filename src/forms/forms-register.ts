@@ -17,6 +17,7 @@
 
 import type { $CompileProvider } from '@compiler/compile-provider';
 
+import { formDirective, ngFormDirective, FORM_NAME, NG_FORM_NAME } from './form';
 import { inputDirective, textareaDirective } from './input';
 import { ngChangeDirective, ngModelDirective, NG_CHANGE_NAME, NG_MODEL_NAME } from './ng-model';
 
@@ -33,4 +34,9 @@ export function registerForms($compileProvider: $CompileProvider): void {
   $compileProvider.directive('input', inputDirective);
   $compileProvider.directive('textarea', textareaDirective);
   $compileProvider.directive(NG_CHANGE_NAME, ngChangeDirective);
+  // Slice 2 — form aggregation. Both `form` and `ngForm` publish a
+  // `FormController`; `ngModel` / nested forms resolve the enclosing form
+  // via `require: '?^^form'`.
+  $compileProvider.directive(FORM_NAME, formDirective);
+  $compileProvider.directive(NG_FORM_NAME, ngFormDirective);
 }

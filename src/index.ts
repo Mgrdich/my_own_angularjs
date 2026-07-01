@@ -232,5 +232,11 @@ export type {
   ResponseTransform,
 } from './http/index';
 
-export { NgModelControllerImpl, NgModelNonAssignableError, registerForms } from './forms/index';
-export type { NgModelController, ModelParser, ModelFormatter } from './forms/index';
+export {
+  FormControllerImpl,
+  NgModelControllerImpl,
+  NgModelNonAssignableError,
+  nullFormCtrl,
+  registerForms,
+} from './forms/index';
+export type { FormController, FormControlLike, NgModelController, ModelParser, ModelFormatter } from './forms/index';
