@@ -132,13 +132,13 @@ _High-level services that enable real application development._
   - [x] **$http Service:** Implement request methods (`GET`, `POST`, `PUT`, `DELETE`), default headers, and parameter serialization.
   - [x] **Interceptors:** Support request/response interceptors and transformations.
 
-- [ ] **Forms & Validation**
-  - [ ] **ngModel:** Implement two-way data binding for form elements with `$viewValue` / `$modelValue` pipeline.
-  - [ ] **Form-element directives:** Implement `form` and `ng-form` (nested-form support), `input` (with every HTML5 type: `text`, `number`, `email`, `url`, `date`, `datetime-local`, `time`, `week`, `month`, `radio`, `checkbox`, `range`, `hidden`, `button`, `submit`, `reset`), `select`, `textarea`. Each form element registers itself with the enclosing `FormController`.
-  - [ ] **ngModel helpers:** Implement `ng-model-options` (debounce, `updateOn`, `getterSetter`, timezone, etc.), `ng-options` (typed `<option>` generation for `<select>`), `ng-list` (comma-separated-list viewValue ↔ array modelValue transformation), `ng-change` (on-`$viewValue`-change callback).
-  - [ ] **Form & NgModelController:** Implement `$dirty`, `$pristine`, `$valid`, `$invalid`, `$touched`, `$untouched` state tracking.
-  - [ ] **Built-in Validators:** Implement `required` (also available as the `ng-required` attribute directive), `minlength`, `maxlength`, `pattern`, `email`, `number`, `url`.
-  - [ ] **Custom Validators:** Support `$validators` and `$asyncValidators` pipeline.
+- [x] **Forms & Validation** _(spec 039 — shipped.)_
+  - [x] **ngModel:** Implement two-way data binding for form elements with `$viewValue` / `$modelValue` pipeline. _(spec 039 — model write-back via `buildParentWriter` (non-assignable `ng-model` routes `'$compile'`); the `$parsers` (forward) / `$formatters` (reverse) transform lists + `$render` + the model→view feedback guard.)_
+  - [x] **Form-element directives:** Implement `form` and `ng-form` (nested-form support), `input` (with every HTML5 type: `text`, `number`, `email`, `url`, `date`, `datetime-local`, `time`, `week`, `month`, `radio`, `checkbox`, `range`, `hidden`, `button`, `submit`, `reset`), `select`, `textarea`. Each form element registers itself with the enclosing `FormController`. _(spec 039 — a SINGLE `input` directive dispatches on `type` into an internal handler registry (parity — not one directive per type); `textarea` delegates to `text`; a `<form>` with no `action` now suppresses native submit by default.)_
+  - [x] **ngModel helpers:** Implement `ng-model-options` (debounce, `updateOn`, `getterSetter`, timezone, etc.), `ng-options` (typed `<option>` generation for `<select>`), `ng-list` (comma-separated-list viewValue ↔ array modelValue transformation), `ng-change` (on-`$viewValue`-change callback). _(spec 039 — `ngModelOptions` resolved via a `$$ngControllers` stash walk (a parity departure from `^^?ngModelOptions`); `debounce` backed by `$timeout`.)_
+  - [x] **Form & NgModelController:** Implement `$dirty`, `$pristine`, `$valid`, `$invalid`, `$touched`, `$untouched` state tracking. _(spec 039 — full state-class surface incl. per-rule `ng-valid-<rule>` / `ng-invalid-<rule>` + `ng-pending`, toggled synchronously / append-only; `$animate` deferred to Phase 4. The form aggregates per-key control-failure sets so control removal is correct for free.)_
+  - [x] **Built-in Validators:** Implement `required` (also available as the `ng-required` attribute directive), `minlength`, `maxlength`, `pattern`, `email`, `number`, `url`. _(spec 039 — plus `min` / `max` on number / range / date; each re-validates when its bound parameter changes.)_
+  - [x] **Custom Validators:** Support `$validators` and `$asyncValidators` pipeline. _(spec 039 — sync-before-async ordering, tri-state `$setValidity`, `$pending` + `ng-pending`, and a generation-counter that cancels stale async passes.)_
 
 ---
 
