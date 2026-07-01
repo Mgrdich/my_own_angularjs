@@ -97,6 +97,7 @@ import { NG_TRANSCLUDE_NAME, ngTranscludeDirective } from '@compiler/ng-transclu
 import { $ControllerProvider } from '@controller/controller-provider';
 import type { ControllerService } from '@controller/controller-types';
 import { createModule } from '@di/module';
+import { registerForms } from '@forms/forms-register';
 import { Scope } from './scope';
 import { consoleErrorExceptionHandler, type ExceptionHandler } from '@exception-handler/index';
 import { lowercaseFilterFactory, uppercaseFilterFactory } from '@filter/case';
@@ -662,5 +663,14 @@ export const ngModule = createModule('ng', [])
       $compileProvider.directive(NG_SWITCH_NAME, ngSwitchDirective);
       $compileProvider.directive(NG_SWITCH_DEFAULT_NAME, ngSwitchDefaultDirective);
       $compileProvider.directive(NG_SWITCH_WHEN_NAME, ngSwitchWhenDirective);
+      // Spec 039 Slice 1 — forms & validation. `ngModel` two-way binding
+      // (publishing the `NgModelController` so `require: 'ngModel'`
+      // resolves it), the single `input` directive dispatching on `type`
+      // (default → text), `textarea` (delegates to the `text` handler),
+      // and `ngChange` (fires on committed view change only). All four are
+      // DI-only core `ng` directives — their factories stay file-local in
+      // `src/forms/`; only the `NgModelController` contract type is
+      // exported from `@forms`. See `src/forms/forms-register.ts`.
+      registerForms($compileProvider);
     },
   ]);

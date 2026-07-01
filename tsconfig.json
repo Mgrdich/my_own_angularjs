@@ -26,7 +26,8 @@
       "@bootstrap/*": ["./src/bootstrap/*"],
       "@async/*": ["./src/async/*"],
       "@cache/*": ["./src/cache/*"],
-      "@http/*": ["./src/http/*"]
+      "@http/*": ["./src/http/*"],
+      "@forms/*": ["./src/forms/*"]
     }
   },
   "include": ["src"],
